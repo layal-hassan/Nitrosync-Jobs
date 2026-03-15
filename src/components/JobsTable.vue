@@ -1,12 +1,34 @@
 <script setup>
 import { computed, ref } from 'vue'
+import FilterModal from './FilterModal.vue'
+import GetCandidateModal from './modals/GetCandidateModal.vue'
+import ShareJobModal from './modals/ShareJobModal.vue'
 
 const props = defineProps({
   jobs: Array,
 })
 
 const openMenuIndex = ref(0)
+const isFilterOpen = ref(false)
+const isGetCandidateModalOpen = ref(false)
+const isShareModalOpen = ref(false)
+const selectedShareJob = ref(null)
+const selectedCandidateJob = ref(null)
 
+const createDefaultFilters = () => ({
+  job_title: '',
+  address: '',
+  country: '',
+  job_id: '',
+  hiring_stage: '',
+  rating: '',
+  created_date: '',
+  recruiter: '',
+  tags: [],
+  positions: [],
+})
+
+const filterForm = ref(createDefaultFilters())
 const defaultStageColors = ['#ea4f8d', '#f0d9e3', '#f0d9e3', '#f0d9e3', '#f0d9e3']
 
 const headers = [
@@ -100,6 +122,39 @@ const normalizedJobs = computed(() =>
 const toggleMenu = (index) => {
   openMenuIndex.value = openMenuIndex.value === index ? null : index
 }
+
+const openFilter = () => {
+  isFilterOpen.value = true
+  openMenuIndex.value = null
+}
+
+const closeFilter = () => {
+  isFilterOpen.value = false
+}
+
+const updateFilters = (nextFilters) => {
+  filterForm.value = nextFilters
+}
+
+const openShareModal = (job) => {
+  selectedShareJob.value = job
+  isShareModalOpen.value = true
+  openMenuIndex.value = null
+}
+
+const closeShareModal = () => {
+  isShareModalOpen.value = false
+}
+
+const openGetCandidateModal = (job) => {
+  selectedCandidateJob.value = job
+  isGetCandidateModalOpen.value = true
+  openMenuIndex.value = null
+}
+
+const closeGetCandidateModal = () => {
+  isGetCandidateModalOpen.value = false
+}
 </script>
 
 <template>
@@ -115,7 +170,7 @@ const toggleMenu = (index) => {
           <button class="jobs-controls__view-btn jobs-controls__view-btn--grid"></button>
           <button class="jobs-controls__view-btn jobs-controls__view-btn--list is-active"></button>
         </div>
-        <button class="jobs-controls__filter">
+        <button class="jobs-controls__filter" @click="openFilter">
           <span class="jobs-controls__filter-icon"></span>
           Filter
         </button>
@@ -188,8 +243,8 @@ const toggleMenu = (index) => {
           <div v-if="openMenuIndex === index" class="jobs-action__menu">
             <button>View</button>
             <button>Edit</button>
-            <button>Get Candidates</button>
-            <button>Share</button>
+            <button @click="openGetCandidateModal(job)">Get Candidates</button>
+            <button @click="openShareModal(job)">Share</button>
           </div>
         </div>
       </div>
@@ -206,6 +261,25 @@ const toggleMenu = (index) => {
       </button>
       <button class="jobs-pagination__next" aria-label="Next page"></button>
     </div>
+
+    <FilterModal
+      :open="isFilterOpen"
+      :filters="filterForm"
+      @close="closeFilter"
+      @update:filters="updateFilters"
+    />
+
+    <GetCandidateModal
+      :open="isGetCandidateModalOpen"
+      :job="selectedCandidateJob"
+      @close="closeGetCandidateModal"
+    />
+
+    <ShareJobModal
+      :open="isShareModalOpen"
+      :job="selectedShareJob"
+      @close="closeShareModal"
+    />
   </section>
 </template>
 
