@@ -203,18 +203,17 @@ watch(
 
 .dropdown__trigger {
   width: 100%;
-  height: 48px;
-  padding: 0 40px 0 16px;
-  border: 1px solid #e6dde2;
-  border-radius: 11px;
-  background: #ffffff;
-  color: #645962;
+  height: var(--control-height);
+  padding: 0 40px 0 var(--control-padding-x);
+  border: 1px solid #e4dbe0;
+  border-radius: var(--control-radius);
+  background: #f8f8f8;
+  color: #85757d;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   text-align: left;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
 }
 
@@ -229,7 +228,7 @@ watch(
 }
 
 .dropdown__trigger--placeholder {
-  color: #b6a7af;
+  color: #cfc3c9;
 }
 
 .dropdown__value {
@@ -237,7 +236,7 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: var(--font-body);
   line-height: 1;
 }
 
@@ -246,8 +245,8 @@ watch(
   right: 16px;
   width: 8px;
   height: 8px;
-  border-right: 1.5px solid #a7929d;
-  border-bottom: 1.5px solid #a7929d;
+  border-right: 1px solid #a46a82;
+  border-bottom: 1px solid #a46a82;
   transform: rotate(45deg);
   transition: transform 0.18s ease;
 }
@@ -258,16 +257,16 @@ watch(
 
 .dropdown__menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
   max-height: 240px;
   overflow-y: auto;
   background: #ffffff;
   border: 1px solid #ece1e6;
-  border-radius: 14px;
-  box-shadow: 0 14px 28px rgba(58, 39, 48, 0.14);
-  padding: 8px;
+  border-radius: 10px;
+  box-shadow: 0 10px 20px rgba(58, 39, 48, 0.12);
+  padding: 6px;
   z-index: 20;
 }
 
@@ -282,10 +281,10 @@ watch(
 
 .dropdown__option {
   width: 100%;
-  min-height: 38px;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 0 10px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: #5f555c;
   display: flex;
@@ -293,7 +292,7 @@ watch(
   justify-content: space-between;
   gap: 12px;
   text-align: left;
-  font-size: 14px;
+  font-size: var(--font-body);
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 

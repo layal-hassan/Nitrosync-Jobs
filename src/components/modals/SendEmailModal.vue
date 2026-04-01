@@ -26,6 +26,7 @@ import {
 import Dropdown from '../ui/Dropdown.vue'
 import ChooseCandidatesModal from './ChooseCandidatesModal.vue'
 import FullscreenEmailEditor from './FullscreenEmailEditor.vue'
+import { sendNitroSyncEmail, emailTimeoutMs } from '../../composables/useNitroSyncEmail'
 
 const props = defineProps({
   open: {
@@ -41,13 +42,17 @@ const showCandidateMenu = ref(false)
 const isChooseCandidatesOpen = ref(false)
 const isFullscreenOpen = ref(false)
 const selectedCandidates = ref([])
+const emailSubject = ref('')
 const editorContent = ref('<p></p>')
+const sendingEmail = ref(false)
+const sendMessage = ref('')
+const sendError = ref('')
 
 const allCandidates = [
-  { id: 1, name: 'Carlos Mahovia', accent: 'pink', tags: 'Finance', position: 'Accountant', country: 'Jordan', rating: '5' },
-  { id: 2, name: 'Nora Salem', accent: 'blue', tags: 'Tech', position: 'Engineer', country: 'UAE', rating: '4' },
-  { id: 3, name: 'Omar Hadi', accent: 'purple', tags: 'Backend', position: 'Developer', country: 'Saudi', rating: '5' },
-  { id: 4, name: 'Lina Adib', accent: 'gold', tags: 'Design', position: 'Designer', country: 'Jordan', rating: '3' },
+  { id: 1, name: 'Carlos Mahovia', email: 'carlos.mahovia@example.com', accent: 'pink', tags: 'Finance', position: 'Accountant', country: 'Jordan', rating: '5' },
+  { id: 2, name: 'Nora Salem', email: 'nora.salem@example.com', accent: 'blue', tags: 'Tech', position: 'Engineer', country: 'UAE', rating: '4' },
+  { id: 3, name: 'Omar Hadi', email: 'omar.hadi@example.com', accent: 'purple', tags: 'Backend', position: 'Developer', country: 'Saudi', rating: '5' },
+  { id: 4, name: 'Lina Adib', email: 'lina.adib@example.com', accent: 'gold', tags: 'Design', position: 'Designer', country: 'Jordan', rating: '3' },
 ]
 
 const emailTemplates = ['Custom Email', 'Referral Intro', 'Short Follow Up']
@@ -86,7 +91,38 @@ const availableCandidates = computed(() =>
     (candidate) => !selectedCandidates.value.some((item) => item.id === candidate.id),
   ),
 )
-const canSend = computed(() => selectedCandidates.value.length > 0)
+const canSend = computed(() =>
+  selectedCandidates.value.length > 0
+  && selectedCandidates.value.every((candidate) => String(candidate.email || '').trim())
+  && String(emailSubject.value || '').trim()
+  && String(editorContent.value || '').replace(/<[^>]*>/g, '').trim(),
+)
+
+const handleSendEmail = async () => {
+  if (!canSend.value || sendingEmail.value) return
+
+  sendingEmail.value = true
+  sendMessage.value = ''
+  sendError.value = ''
+
+  try {
+    const result = await sendNitroSyncEmail({
+      subject: emailSubject.value,
+      body: editorContent.value,
+      to: selectedCandidates.value.map((candidate) => candidate.email),
+    })
+
+    sendMessage.value = result.message || 'Email sent successfully.'
+    emit('close')
+  } catch (error) {
+    const isTimeoutError = error?.code === 'ECONNABORTED' || String(error?.message || '').includes('timeout')
+    sendError.value = isTimeoutError
+      ? `The email request took longer than ${emailTimeoutMs / 1000} seconds. Please try again.`
+      : error?.response?.data?.message || error?.message || 'Failed to send email.'
+  } finally {
+    sendingEmail.value = false
+  }
+}
 
 const addCandidate = (candidate) => {
   if (selectedCandidates.value.some((item) => item.id === candidate.id)) return
@@ -197,12 +233,16 @@ watch(
       isFullscreenOpen.value = false
       savedEmail.value = 'Custom Email'
       selectedCandidates.value = []
+      emailSubject.value = ''
       editor.value?.commands.clearContent()
       editorContent.value = '<p></p>'
+      sendMessage.value = ''
+      sendError.value = ''
       return
     }
 
     selectedCandidates.value = [allCandidates[0]]
+    emailSubject.value = 'Job opportunity from NitroSync'
   },
   { immediate: true },
 )
@@ -297,6 +337,11 @@ onBeforeUnmount(() => {
             <label class="send-email-modal__label">Saved Emails</label>
             <Dropdown v-model="savedEmail" :options="emailTemplates" placeholder="Custom Email" />
           </div>
+
+          <div class="send-email-modal__field">
+            <label class="send-email-modal__label">Subject</label>
+            <input v-model="emailSubject" class="send-email-modal__text-input" type="text" placeholder="Enter email subject" />
+          </div>
         </section>
 
         <section class="send-email-modal__section">
@@ -327,14 +372,16 @@ onBeforeUnmount(() => {
       </div>
 
       <footer class="send-email-modal__footer">
+        <p v-if="sendMessage" class="send-email-modal__feedback send-email-modal__feedback--success">{{ sendMessage }}</p>
+        <p v-if="sendError" class="send-email-modal__feedback send-email-modal__feedback--error">{{ sendError }}</p>
         <button
           type="button"
           class="send-email-modal__send"
-          :class="{ 'send-email-modal__send--disabled': !canSend }"
-          :disabled="!canSend"
-          @click="$emit('close')"
+          :class="{ 'send-email-modal__send--disabled': !canSend || sendingEmail }"
+          :disabled="!canSend || sendingEmail"
+          @click="handleSendEmail"
         >
-          <span>Send Email</span>
+          <span>{{ sendingEmail ? 'Sending...' : 'Send Email' }}</span>
           <span class="send-email-modal__send-caret"></span>
         </button>
       </footer>
@@ -583,6 +630,18 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 
+.send-email-modal__text-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #ebe5e8;
+  border-radius: 10px;
+  background: #fff;
+  color: #1f171b;
+  font: inherit;
+  font-size: 13px;
+}
+
 .send-email-modal__candidate-input {
   min-height: 44px;
   border: 1px solid #ebe5e8;
@@ -747,8 +806,26 @@ onBeforeUnmount(() => {
 
 .send-email-modal__footer {
   display: flex;
+  flex-direction: column;
   justify-content: flex-end;
+  align-items: flex-end;
+  gap: 10px;
   padding: 8px 20px 18px;
+}
+
+.send-email-modal__feedback {
+  width: 100%;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.send-email-modal__feedback--success {
+  color: #1d8f46;
+}
+
+.send-email-modal__feedback--error {
+  color: #d1497b;
 }
 
 .send-email-modal__send {

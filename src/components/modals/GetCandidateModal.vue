@@ -5,7 +5,7 @@ import RecommendedChannelsModal from './RecommendedChannelsModal.vue'
 import SendEmailModal from './SendEmailModal.vue'
 import SocialShareModal from './SocialShareModal.vue'
 
-defineProps({
+const props = defineProps({
   open: {
     type: Boolean,
     default: false,
@@ -50,7 +50,7 @@ const sourcingOptions = [
 ]
 
 watch(
-  () => open,
+  () => props.open,
   (isOpen) => {
     if (!isOpen) {
       selectedOption.value = 'Recommended channels'
@@ -81,7 +81,7 @@ const handleEmployeeReferralNext = () => {
 </script>
 
 <template>
-  <div v-if="open" class="candidate-modal">
+  <div v-if="props.open" class="candidate-modal">
     <button
       v-if="activeModal === 'root'"
       class="candidate-modal__overlay"
@@ -141,7 +141,7 @@ const handleEmployeeReferralNext = () => {
 
     <SocialShareModal
       :open="activeModal === 'socialShare'"
-      :job="job"
+      :job="props.job"
       @close="activeModal = 'root'"
     />
 
@@ -290,5 +290,58 @@ const handleEmployeeReferralNext = () => {
   color: #ffffff;
   font-size: 12px;
   box-shadow: 0 10px 16px rgba(234, 79, 141, 0.18);
+}
+
+@media (max-width: 640px) {
+  .candidate-modal {
+    padding: 12px;
+    align-items: end;
+  }
+
+  .candidate-modal__panel {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 18px 18px 0 0;
+  }
+
+  .candidate-modal__header {
+    padding: 16px 14px 12px;
+  }
+
+  .candidate-modal__title {
+    font-size: 24px;
+    line-height: 1.1;
+  }
+
+  .candidate-modal__body {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .candidate-modal__card {
+    grid-template-columns: 36px 1fr;
+    align-items: start;
+    padding: 12px 10px;
+    gap: 10px;
+  }
+
+  .candidate-modal__card-title {
+    font-size: 14px;
+  }
+
+  .candidate-modal__card-description {
+    font-size: 12px;
+  }
+
+  .candidate-modal__footer {
+    padding: 10px 12px 14px;
+  }
+
+  .candidate-modal__confirm {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 12px;
+    font-size: 13px;
+  }
 }
 </style>

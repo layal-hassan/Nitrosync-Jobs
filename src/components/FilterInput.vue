@@ -50,9 +50,9 @@ defineProps({
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 50px;
+  min-height: var(--control-height);
   border: 1px solid #e6dde2;
-  border-radius: 11px;
+  border-radius: var(--control-radius);
   background: #ffffff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
@@ -70,13 +70,13 @@ defineProps({
 .filter-input__control {
   width: 100%;
   min-width: 0;
-  height: 48px;
-  padding: 0 42px 0 16px;
+  height: var(--control-height);
+  padding: 0 42px 0 var(--control-padding-x);
   border: 0;
   outline: 0;
   background: transparent;
   color: #645962;
-  font-size: 14px;
+  font-size: var(--font-body);
   line-height: 1;
 }
 

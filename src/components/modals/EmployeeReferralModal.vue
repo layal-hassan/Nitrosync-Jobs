@@ -1,8 +1,9 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
+import { getNitroSyncEmployees } from '../../composables/useNitroSyncEmployees'
 import AddEmployeeModal from './AddEmployeeModal.vue'
 
-defineProps({
+const props = defineProps({
   open: {
     type: Boolean,
     default: false,
@@ -12,51 +13,107 @@ defineProps({
 const emit = defineEmits(['close', 'next'])
 
 const isAddEmployeeOpen = ref(false)
+const employees = ref([])
+const employeesLoading = ref(false)
+const employeesError = ref('')
+const hasLoadedEmployees = ref(false)
 
-const employees = ref([
-  {
-    firstName: 'Tareq',
-    lastName: 'Ahmad',
-    joiningDate: 'Dec 2nd,2024',
-    status: 'Active',
-    location: 'Street 22,',
-    vacancyDeadline: 'Dec 28th,2024',
-    accent: 'pink',
-  },
-  {
-    firstName: 'Lama',
-    lastName: 'Ahmad',
-    joiningDate: 'Dec 2nd,2024',
-    status: 'Active',
-    location: 'Street 22,',
-    vacancyDeadline: 'Dec 28th,2024',
-    accent: 'blue',
-  },
-  {
-    firstName: 'Reki',
-    lastName: 'Ahmad',
-    joiningDate: 'Dec 2nd,2024',
-    status: 'Active',
-    location: 'Street 22,',
-    vacancyDeadline: 'Dec 28th,2024',
-    accent: 'green',
-  },
-])
+const companyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
+const accents = ['pink', 'blue', 'green']
+
+const normalizeLabel = (value, fallback = '-') => {
+  const normalized = String(value ?? '').trim()
+  return normalized || fallback
+}
+
+const toDisplayDate = (value) => {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return String(value)
+
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+const mapEmployeeRow = (employee, index) => {
+  const firstName = normalizeLabel(employee?.first_name ?? employee?.firstName, '')
+  const lastName = normalizeLabel(employee?.last_name ?? employee?.lastName, '')
+  const fullName = normalizeLabel(
+    employee?.full_name ?? employee?.fullName ?? employee?.employee_name ?? employee?.employeeName ?? employee?.name,
+    '',
+  )
+  const [derivedFirstName = '', ...restName] = fullName ? fullName.split(' ') : []
+  const derivedLastName = restName.join(' ')
+
+  return {
+    id: employee?.id ?? employee?._id ?? `${fullName || `${firstName}-${lastName}`}-${index}`,
+    firstName: firstName || derivedFirstName || '-',
+    lastName: lastName || derivedLastName || '-',
+    joiningDate: toDisplayDate(
+      employee?.joining_date ?? employee?.joiningDate ?? employee?.created_at ?? employee?.createdAt,
+    ),
+    status: normalizeLabel(employee?.status, 'Active'),
+    location: normalizeLabel(
+      employee?.location ??
+        employee?.address ??
+        employee?.city ??
+        employee?.country ??
+        employee?.department_name ??
+        employee?.departmentName,
+    ),
+    vacancyDeadline: toDisplayDate(
+      employee?.vacancy_deadline ?? employee?.vacancyDeadline ?? employee?.deadline ?? employee?.due_date,
+    ),
+    accent: accents[index % accents.length],
+  }
+}
+
+const fetchEmployees = async () => {
+  employeesLoading.value = true
+  employeesError.value = ''
+
+  try {
+    const response = await getNitroSyncEmployees(companyId)
+    const rows = Array.isArray(response?.data) ? response.data : []
+
+    employees.value = rows.map(mapEmployeeRow)
+    hasLoadedEmployees.value = true
+  } catch (error) {
+    console.error('Failed to fetch employee referral list', error)
+    employeesError.value = 'Could not load employee list from API.'
+    employees.value = []
+  } finally {
+    employeesLoading.value = false
+  }
+}
 
 const addEmployee = (employee) => {
-  const accents = ['pink', 'blue', 'green']
   employees.value = [
     ...employees.value,
     {
+      id: `${employee.firstName}-${employee.lastName}-${employees.value.length}`,
       ...employee,
       accent: accents[employees.value.length % accents.length],
     },
   ]
 }
+
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (isOpen && !hasLoadedEmployees.value) {
+      fetchEmployees()
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
-  <div v-if="open" class="employee-modal">
+  <div v-if="props.open" class="employee-modal">
     <button class="employee-modal__overlay" aria-label="Close employee referral modal" @click="$emit('close')"></button>
 
     <section class="employee-modal__panel" role="dialog" aria-modal="true" aria-label="Employee Referral">
@@ -90,9 +147,21 @@ const addEmployee = (employee) => {
             <div>Vacancy Deadline</div>
           </div>
 
+          <div v-if="employeesLoading" class="employee-modal__state">
+            Loading employees...
+          </div>
+
+          <div v-else-if="employeesError" class="employee-modal__state employee-modal__state--error">
+            {{ employeesError }}
+          </div>
+
+          <div v-else-if="!employees.length" class="employee-modal__state">
+            No employees were returned by the API.
+          </div>
+
           <div
             v-for="employee in employees"
-            :key="`${employee.firstName}-${employee.lastName}`"
+            :key="employee.id"
             class="employee-modal__table employee-modal__table--row"
           >
             <div class="employee-modal__radio"></div>
@@ -226,6 +295,20 @@ const addEmployee = (employee) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.employee-modal__state {
+  min-height: 88px;
+  border-radius: 8px;
+  background: #faf8f9;
+  color: #a6969f;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+}
+
+.employee-modal__state--error {
+  color: #e15b8f;
 }
 
 .employee-modal__table {
