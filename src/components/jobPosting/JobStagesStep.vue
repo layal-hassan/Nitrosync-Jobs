@@ -242,13 +242,13 @@ const finishFlow = () => {
 }
 
 const closeOverlayToBoard = () => {
-  screen.value = 1
+  screen.value = 0
   props.form.screen = screen.value
 }
 
 const openBuilder = async () => {
   if (!newStageName.value.trim()) {
-    screen.value = 2
+    stageActionError.value = 'Enter a stage name before adding a new stage.'
     return
   }
 
@@ -265,7 +265,7 @@ const openBuilder = async () => {
     await fetchStages()
     stageActionMessage.value = result.message || 'Stage created successfully.'
     newStageName.value = ''
-    screen.value = 1
+    screen.value = 0
     props.form.newStageName = newStageName.value
     props.form.screen = screen.value
   } catch (error) {

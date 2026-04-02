@@ -1,5 +1,13 @@
 <script setup>
 import Dropdown from '../ui/Dropdown.vue'
+import {
+  careerLevelOptions,
+  contractOptions,
+  currencyOptions,
+  degreeOptions,
+  industryOptions,
+  salaryOptions,
+} from '../../data/jobPostingOptions'
 
 defineProps({
   form: {
@@ -11,12 +19,6 @@ defineProps({
     default: () => ({}),
   },
 })
-
-const degreeOptions = ['Bachelor', 'Master', 'PhD']
-const industryOptions = ['Banking', 'Technology', 'Healthcare']
-const contractOptions = ['Full time', 'Part time', 'Contract']
-const currencyOptions = ['USD', 'EUR', 'SAR']
-const salaryOptions = ['0', '10000', '20000']
 </script>
 
 <template>
@@ -32,7 +34,9 @@ const salaryOptions = ['0', '10000', '20000']
     <div class="step-form__grid step-form__grid--two">
       <div class="step-form__field">
         <label class="step-form__label">Career Level</label>
-        <input v-model="form.careerLevel" class="step-form__input" :class="{ 'step-form__input--error': errors.careerLevel }" type="text" placeholder="Ex 0F2144" />
+        <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.careerLevel }">
+          <Dropdown v-model="form.careerLevel" :options="careerLevelOptions" placeholder="select one of the list..." />
+        </div>
         <p v-if="errors.careerLevel" class="step-form__error">{{ errors.careerLevel }}</p>
       </div>
 
@@ -65,7 +69,7 @@ const salaryOptions = ['0', '10000', '20000']
       <div class="step-form__field">
         <label class="step-form__label">Start from</label>
         <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.salaryFrom }">
-          <Dropdown v-model="form.salaryFrom" :options="salaryOptions" placeholder="00000" />
+          <Dropdown v-model="form.salaryFrom" :options="salaryOptions" placeholder="$0" />
         </div>
         <p v-if="errors.salaryFrom" class="step-form__error">{{ errors.salaryFrom }}</p>
       </div>
@@ -73,7 +77,7 @@ const salaryOptions = ['0', '10000', '20000']
       <div class="step-form__field">
         <label class="step-form__label">to</label>
         <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.salaryTo }">
-          <Dropdown v-model="form.salaryTo" :options="salaryOptions" placeholder="00000" />
+          <Dropdown v-model="form.salaryTo" :options="salaryOptions" placeholder="$0" />
         </div>
         <p v-if="errors.salaryTo" class="step-form__error">{{ errors.salaryTo }}</p>
       </div>

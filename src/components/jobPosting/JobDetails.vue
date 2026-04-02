@@ -1,6 +1,7 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { sendNitroSyncAiCommand, aiTaskTimeoutMs } from '../../composables/useNitroSyncAi'
+import { countryCityOptions, countryOptions, departmentOptions } from '../../data/jobPostingOptions'
 import Dropdown from '../ui/Dropdown.vue'
 
 const props = defineProps({
@@ -18,12 +19,22 @@ const props = defineProps({
   },
 })
 
-const departmentOptions = ['Finance', 'Engineering', 'Marketing']
-const countryOptions = ['Jordan', 'Saudi Arabia', 'United Arab Emirates']
-const cityOptions = ['Amman', 'Riyadh', 'Dubai']
 const aiLoading = ref(false)
 const aiMessage = ref('')
 const aiError = ref('')
+const cityOptions = computed(() => countryCityOptions[props.form.country] || [])
+
+watch(
+  () => props.form.country,
+  (country) => {
+    const nextCityOptions = countryCityOptions[country] || []
+
+    if (props.form.city && !nextCityOptions.includes(props.form.city)) {
+      props.form.city = ''
+    }
+  },
+  { immediate: true },
+)
 
 const generateDescriptionWithAi = async () => {
   if (!String(props.aiCommand || '').trim()) {
@@ -87,7 +98,11 @@ const generateDescriptionWithAi = async () => {
       <div class="step-form__field">
         <label class="step-form__label">City</label>
         <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.city }">
-          <Dropdown v-model="form.city" :options="cityOptions" placeholder="Select one of the list..." />
+          <Dropdown
+            v-model="form.city"
+            :options="cityOptions"
+            :placeholder="form.country ? 'Select one of the list...' : 'Select country first...'"
+          />
         </div>
         <p v-if="errors.city" class="step-form__error">{{ errors.city }}</p>
       </div>

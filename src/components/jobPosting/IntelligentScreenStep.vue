@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { sendNitroSyncAiCommand, aiTaskTimeoutMs, aiTaskEndpoint } from '../../composables/useNitroSyncAi'
 import { getNitroSyncIntelligentScreenQuestions } from '../../composables/useNitroSyncIntelligentScreenQuestions'
+import { fetchNitroSyncJobStages } from '../../composables/useNitroSyncJobStages'
 import Dropdown from '../ui/Dropdown.vue'
 
 const props = defineProps({
@@ -31,14 +32,14 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['update:selectedTypes', 'request-add-question'])
+const emit = defineEmits(['update:selectedTypes', 'request-add-question', 'select-question-type'])
 
 const classificationItems = [
-  { label: 'bonus', value: '20%', color: '#f25793' },
-  { label: 'Advantageous', value: '25%', color: '#3f6fff' },
-  { label: 'significant', value: '30%', color: '#6b21d8' },
-  { label: 'essential', value: '10%', color: '#ffb84d' },
-  { label: 'Deal breaker', value: '50%', color: '#41d66b' },
+  { label: 'Bonus', value: '0 - 5%', color: '#f25793' },
+  { label: 'Advantagous', value: '6 - 10%', color: '#3f6fff' },
+  { label: 'Significant', value: '11 - 20%', color: '#6b21d8' },
+  { label: 'Essential', value: '21 - 30%', color: '#ffb84d' },
+  { label: 'Deal Breaker', value: '31 - 100%', color: '#41d66b' },
 ]
 
 const selectedType = ref('')
@@ -59,12 +60,18 @@ const scoreRangeOptions = [
   { id: 'greater_than_or_equal', label: 'If the score is totally more than or equal', fields: ['lower'] },
   { id: 'greater_than', label: 'If the score is totally more than', fields: ['lower'] },
 ]
-const candidateMoveOptions = ['Select Position', 'now', 'screen', 'shortlisted', 'interview', 'testing']
+const candidateMoveOptions = ref([{ label: 'Select Position', value: '' }])
 
 const questionStageStart = 2
 const questionStageEnd = computed(() => questionStageStart + props.selectedTypes.length - 1)
 const activeQuestionType = computed(() => props.selectedTypes[props.stage - questionStageStart] ?? null)
 const moveCriteriaStage = computed(() => questionStageEnd.value + 1)
+const selectedQuestionTypeOptions = computed(() =>
+  props.selectedTypes.map((typeId) => ({
+    label: typeLabel(typeId),
+    value: typeId,
+  })),
+)
 
 const questionDrafts = reactive(props.form.questionDrafts)
 const aiRequestLoading = ref(false)
@@ -78,6 +85,8 @@ const questionsLoading = ref(false)
 const questionsMessage = ref('')
 const questionsError = ref('')
 const lastFetchedJobId = ref('')
+const moveStagesLoading = ref(false)
+const moveStagesError = ref('')
 
 let nextCriteriaId = 2
 
@@ -157,6 +166,9 @@ const ensureDraft = (typeId) => {
             : [],
       startDate: '',
       endDate: '',
+      classificationLabel: '',
+      classificationValue: '',
+      classificationColor: '',
     }
   }
 
@@ -188,6 +200,23 @@ const normalizeQuestionOptions = (question) => {
 const updateDraftTitle = (value) => {
   if (!activeQuestionType.value) return
   ensureDraft(activeQuestionType.value).title = value
+}
+
+const updateDraftClassification = (typeId, label) => {
+  if (!typeId) return
+
+  const draft = ensureDraft(typeId)
+  const selectedClassification = classificationItems.find((item) => item.label === label)
+
+  draft.classificationLabel = selectedClassification?.label || ''
+  draft.classificationValue = selectedClassification?.value || ''
+  draft.classificationColor = selectedClassification?.color || ''
+}
+
+const jumpToQuestionType = (typeId) => {
+  const nextIndex = props.selectedTypes.findIndex((item) => item === typeId)
+  if (nextIndex < 0) return
+  emit('select-question-type', questionStageStart + nextIndex)
 }
 
 const updateDraftOption = (index, value) => {
@@ -324,6 +353,32 @@ const applyFetchedQuestions = (questions = []) => {
       options,
       startDate: String(question?.start_date ?? question?.startDate ?? '').trim(),
       endDate: String(question?.end_date ?? question?.endDate ?? '').trim(),
+      classificationLabel: String(
+        question?.classification_label ??
+        question?.weight_label ??
+        question?.question_color ??
+        '',
+      ).trim(),
+      classificationValue: String(
+        question?.classification_value ??
+        question?.weight_range ??
+        question?.weight ??
+        '',
+      ).trim(),
+      classificationColor: String(
+        question?.classification_color ??
+        question?.color ??
+        '',
+      ).trim(),
+    }
+
+    if (nextDrafts[typeId].classificationLabel) {
+      const matchingClassification = classificationItems.find((item) => item.label === nextDrafts[typeId].classificationLabel)
+
+      if (matchingClassification) {
+        nextDrafts[typeId].classificationValue = nextDrafts[typeId].classificationValue || matchingClassification.value
+        nextDrafts[typeId].classificationColor = nextDrafts[typeId].classificationColor || matchingClassification.color
+      }
     }
   })
 
@@ -333,6 +388,54 @@ const applyFetchedQuestions = (questions = []) => {
   })
   Object.assign(questionDrafts, nextDrafts)
   props.form.questionDrafts = questionDrafts
+}
+
+const syncCandidateMoveOptions = (rows = []) => {
+  const stageOptions = rows
+    .map((item) => ({
+      label: String(item?.label || '').trim(),
+      value: String(item?.label || '').trim(),
+    }))
+    .filter((item) => item.label)
+
+  const existingSelections = criteriaList.value
+    .map((item) => String(item?.moveTo || '').trim())
+    .filter(Boolean)
+    .filter((value, index, list) => list.indexOf(value) === index)
+    .filter((value) => !stageOptions.some((option) => option.value === value))
+    .map((value) => ({ label: value, value }))
+
+  candidateMoveOptions.value = [
+    { label: 'Select Position', value: '' },
+    ...stageOptions,
+    ...existingSelections,
+  ]
+}
+
+const fetchMoveStages = async () => {
+  const relatedCompany = String(props.relatedCompany || '').trim()
+
+  if (!relatedCompany) {
+    syncCandidateMoveOptions()
+    return
+  }
+
+  moveStagesLoading.value = true
+  moveStagesError.value = ''
+
+  try {
+    const rows = await fetchNitroSyncJobStages(relatedCompany)
+    syncCandidateMoveOptions(rows)
+  } catch (error) {
+    moveStagesError.value =
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      error?.message ||
+      'Failed to load job stages for move criteria.'
+    syncCandidateMoveOptions()
+  } finally {
+    moveStagesLoading.value = false
+  }
 }
 
 const fetchQuestions = async () => {
@@ -392,6 +495,14 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => props.relatedCompany,
+  () => {
+    fetchMoveStages()
+  },
+  { immediate: true },
+)
+
 const sendAiCommand = async () => {
   lastSentCommand.value = trimmedAiCommand.value
 
@@ -400,7 +511,6 @@ const sendAiCommand = async () => {
     lastResponseCode.value = ''
     aiRequestMessage.value = ''
     aiRequestError.value = 'Add at least the job title or description before sending the AI command.'
-    window.alert(aiRequestError.value)
     return
   }
 
@@ -421,7 +531,6 @@ const sendAiCommand = async () => {
     lastResponseCode.value = response?.code || ''
     aiAnswer.value = response?.answer || ''
     aiRequestStatus.value = 'success'
-    window.alert(aiRequestMessage.value)
   } catch (error) {
     const responseStatus = error?.response?.status
     const isTimeoutError = error?.code === 'ECONNABORTED' || String(error?.message || '').includes('timeout')
@@ -440,7 +549,6 @@ const sendAiCommand = async () => {
       error?.code ||
       ''
     aiRequestStatus.value = 'error'
-    window.alert(aiRequestError.value)
 
     console.error('Failed to send AI command', {
       endpoint: aiTaskEndpoint,
@@ -491,16 +599,12 @@ const sendAiCommand = async () => {
         <article v-for="item in classificationItems" :key="item.label" class="criteria-card" :style="{ '--item-color': item.color }">
           <div class="criteria-card__top">
             <strong>{{ item.label }}</strong>
-            <span>from 0 to {{ item.value }}</span>
+            <span>{{ item.value }}</span>
           </div>
           <div class="criteria-card__bar" aria-hidden="true"></div>
           <p>
             Make smarter hiring decisions, our intelligent screening and advancement system automates evaluations based on your criteria, ensuring efficient and fair assessments for every candidate.
           </p>
-          <button type="button" class="criteria-card__action">
-            <span class="criteria-card__action-icon">+</span>
-            <span>Add acceptance value</span>
-          </button>
         </article>
       </div>
     </template>
@@ -527,21 +631,48 @@ const sendAiCommand = async () => {
 
     <template v-else-if="activeQuestionType && stage >= questionStageStart && stage <= questionStageEnd">
       <div class="question-builder">
-        <div class="question-builder__card">
+          <div class="question-builder__card">
           <div class="question-builder__header">
             <input
               class="question-builder__title-input"
-              :value="activeDraft?.title || defaultQuestionTitle"
+              :value="activeDraft?.title || ''"
               type="text"
               :placeholder="defaultQuestionTitle"
               @input="updateDraftTitle($event.target.value)"
             />
             <div class="question-builder__type">
               <Dropdown
-                :model-value="activeTypeLabel"
-                :options="typeOptions.slice(1)"
+                :model-value="activeQuestionType"
+                :options="selectedQuestionTypeOptions"
                 :placeholder="typeOptions[0]"
+                @update:model-value="jumpToQuestionType"
               />
+            </div>
+          </div>
+
+          <div class="question-builder__meta">
+            <div class="question-builder__meta-field">
+              <label class="question-builder__meta-label">Question color</label>
+              <div class="question-builder__colors">
+                <button
+                  v-for="item in classificationItems"
+                  :key="item.label"
+                  type="button"
+                  class="question-builder__color-chip"
+                  :class="{ 'question-builder__color-chip--active': activeDraft?.classificationLabel === item.label }"
+                  :style="{ '--chip-color': item.color }"
+                  @click="updateDraftClassification(activeQuestionType, item.label)"
+                >
+                  <span class="question-builder__color-dot" aria-hidden="true"></span>
+                  <span>{{ item.label }}</span>
+                </button>
+              </div>
+            </div>
+            <div class="question-builder__meta-field question-builder__meta-field--weight">
+              <label class="question-builder__meta-label">Weight</label>
+              <div class="question-builder__weight" :style="{ '--weight-color': activeDraft?.classificationColor || '#efe4e8' }">
+                {{ activeDraft?.classificationValue || 'Choose a color to set the weight' }}
+              </div>
             </div>
           </div>
 
@@ -626,6 +757,8 @@ const sendAiCommand = async () => {
       <div class="move-criteria">
         <h4>Move Criteria</h4>
         <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc vulputate libero et velit interdum.</p>
+        <p v-if="moveStagesLoading" class="move-criteria__feedback">Loading job stages...</p>
+        <p v-else-if="moveStagesError" class="move-criteria__feedback move-criteria__feedback--error">{{ moveStagesError }}</p>
 
         <div
           v-for="criteria in criteriaList"
@@ -824,7 +957,7 @@ const sendAiCommand = async () => {
   border-radius: 18px;
   padding: 18px 18px 20px;
   background: #f7fbff;
-  min-height: 236px;
+  min-height: 196px;
 }
 
 .criteria-card__top {
@@ -855,32 +988,11 @@ const sendAiCommand = async () => {
 }
 
 .criteria-card p {
-  margin: 0 0 28px;
+  margin: 0;
   max-width: 430px;
   font-size: var(--font-body);
   line-height: 1.25;
   color: #c3c8ce;
-}
-
-.criteria-card__action {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #8a4d52;
-  font-size: var(--font-button);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.criteria-card__action-icon {
-  width: 26px;
-  height: 26px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  display: inline-grid;
-  place-items: center;
-  font-size: 20px;
-  line-height: 1;
 }
 
 .type-chooser__list,
@@ -951,6 +1063,75 @@ const sendAiCommand = async () => {
 
 .question-builder__body {
   padding: 20px 0;
+}
+
+.question-builder__meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 16px;
+  padding-top: 18px;
+}
+
+.question-builder__meta-field {
+  min-width: 0;
+}
+
+.question-builder__meta-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: var(--ui-small-font);
+  color: #17111b;
+}
+
+.question-builder__colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.question-builder__color-chip {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #eadbe3;
+  border-radius: 999px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #5f555c;
+  font-size: var(--font-small);
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+
+.question-builder__color-chip--active {
+  border-color: var(--chip-color);
+  background: #fff7fa;
+  color: #17111b;
+}
+
+.question-builder__color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--chip-color);
+  flex: 0 0 auto;
+}
+
+.question-builder__meta-field--weight {
+  display: flex;
+  flex-direction: column;
+}
+
+.question-builder__weight {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--weight-color);
+  border-radius: 12px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  color: #5f555c;
+  font-size: var(--font-small);
 }
 
 .question-builder__desc {
@@ -1290,6 +1471,10 @@ const sendAiCommand = async () => {
   }
 
   .question-builder__header {
+    grid-template-columns: 1fr;
+  }
+
+  .question-builder__meta {
     grid-template-columns: 1fr;
   }
 }

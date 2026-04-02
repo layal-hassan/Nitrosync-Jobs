@@ -28,9 +28,9 @@ const selectedRecruiterObjects = computed(() =>
     .filter(Boolean),
 )
 
-const addRecruiter = (name) => {
-  if (!name || props.selectedRecruiters.includes(name)) return
-  emit('update:selectedRecruiters', [...props.selectedRecruiters, name])
+const selectRecruiter = (name) => {
+  if (!name) return
+  emit('update:selectedRecruiters', [name])
 }
 
 const removeRecruiter = (name) => {
@@ -40,22 +40,29 @@ const removeRecruiter = (name) => {
 
 <template>
   <div class="recruiter-step">
-    <p class="recruiter-step__hint"><span>Recruiter:</span> Select your prefered tags from menu</p>
+    <p class="recruiter-step__hint"><span>Recruiter:</span> One recruiter must be selected</p>
 
-    <div class="recruiter-step__title">Top recruiters here</div>
+    <div class="recruiter-step__title">Choose one recruiter</div>
 
     <div class="recruiter-step__grid">
-      <div v-for="item in availableRecruiters" :key="item.name" class="recruiter-step__card">
+      <button
+        v-for="item in recruiterOptions"
+        :key="item.name"
+        type="button"
+        class="recruiter-step__card"
+        :class="{ 'recruiter-step__card--selected': selectedRecruiters.includes(item.name) }"
+        @click="selectRecruiter(item.name)"
+      >
         <div class="recruiter-step__avatar" :style="{ '--avatar-color': item.color }">{{ item.initials }}</div>
         <div class="recruiter-step__meta">
           <div class="recruiter-step__name">{{ item.name }}</div>
           <div class="recruiter-step__type" :style="{ color: item.color }">{{ item.type }}</div>
         </div>
-        <button type="button" class="recruiter-step__plus" @click="addRecruiter(item.name)">+</button>
-      </div>
+        <span class="recruiter-step__selector" :class="{ 'recruiter-step__selector--active': selectedRecruiters.includes(item.name) }"></span>
+      </button>
     </div>
 
-    <div class="recruiter-step__selected-title">Recruiter Selected</div>
+    <div class="recruiter-step__selected-title">Selected Recruiter</div>
 
     <div class="recruiter-step__selected">
       <div class="recruiter-step__selected-chips">
@@ -65,17 +72,11 @@ const removeRecruiter = (name) => {
           <button type="button" class="recruiter-step__close" @click="removeRecruiter(item.name)">x</button>
         </div>
       </div>
-      <button
-        type="button"
-        class="recruiter-step__add"
-        :disabled="!availableRecruiters.length"
-        @click="addRecruiter(availableRecruiters[0]?.name)"
-      >
-        Add
-      </button>
     </div>
 
-    <p class="recruiter-step__count">{{ selectedRecruiters.length }} recruiter{{ selectedRecruiters.length === 1 ? '' : 's' }} selected</p>
+    <p class="recruiter-step__count">
+      {{ selectedRecruiters.length ? `Selected: ${selectedRecruiters[0]}` : 'No recruiter selected yet' }}
+    </p>
   </div>
 </template>
 
@@ -114,6 +115,14 @@ const removeRecruiter = (name) => {
   display: flex;
   align-items: center;
   gap: 8px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+
+.recruiter-step__card--selected {
+  border-color: #f3bdd1;
+  background: #fff5f9;
 }
 
 .recruiter-step__avatar,
@@ -146,14 +155,27 @@ const removeRecruiter = (name) => {
   color: #1d171f;
 }
 
-.recruiter-step__plus {
+.recruiter-step__selector {
   width: 20px;
   height: 20px;
   border-radius: 999px;
-  border: 1px solid #ffb6cd;
-  color: #ff6a9d;
-  font-size: 13px;
-  line-height: 1;
+  border: 1.5px solid #dcb9c6;
+  background: #ffffff;
+  display: inline-block;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.recruiter-step__selector--active {
+  border-color: #ff6a9d;
+}
+
+.recruiter-step__selector--active::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  background: #ff6a9d;
 }
 
 .recruiter-step__selected {
@@ -164,7 +186,6 @@ const removeRecruiter = (name) => {
   background: #faf9fa;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
 }
@@ -195,19 +216,6 @@ const removeRecruiter = (name) => {
 
 .recruiter-step__close {
   color: #cfa2b3;
-}
-
-.recruiter-step__add {
-  min-width: 56px;
-  height: 28px;
-  border-radius: 999px;
-  background: #ffd8e7;
-  color: #f06a9a;
-  font-size: var(--font-small);
-}
-
-.recruiter-step__add:disabled {
-  opacity: 0.45;
 }
 
 .recruiter-step__count {

@@ -182,12 +182,81 @@ const appForm = ref({
   applicationQuestionsLoaded: false,
 })
 
-const fallbackTemplates = [
-  { label: 'Marketing template', value: 'marketing' },
-  { label: 'Engineering template', value: 'engineering' },
-  { label: 'Sales template', value: 'sales' },
+const fallbackTemplateDrafts = [
+  {
+    label: 'Marketing template',
+    value: 'marketing',
+    draft: {
+      job_title: 'Marketing Manager',
+      job_code: 'MKT-204',
+      department: 'Marketing',
+      country: 'Saudi Arabia',
+      city: 'Riyadh',
+      description: 'Lead campaign planning, brand growth, and performance reporting across digital and offline channels.',
+      degree_level: 'Bachelor',
+      career_level: 'Mid-Senior level',
+      industry: 'Technology',
+      contract_type: 'Full time',
+      currency: 'SAR',
+      start_from: '$1000',
+      end_to: '$2000',
+      tags: ['Marketing', 'Leadership', 'Analytics'],
+      recruiter: 'Manal Oraby',
+      team: 'Marketing Team',
+      job_title_seo: 'Marketing Manager Job Opening',
+      job_description_seo: 'Marketing Manager role focused on campaigns, growth, and team leadership.',
+    },
+  },
+  {
+    label: 'Engineering template',
+    value: 'engineering',
+    draft: {
+      job_title: 'Civil Engineer',
+      job_code: 'ENG-112',
+      department: 'Engineering',
+      country: 'Jordan',
+      city: 'Amman',
+      description: 'Plan, review, and supervise civil engineering works with strong coordination across project teams.',
+      degree_level: 'Bachelor',
+      career_level: 'Senior level',
+      industry: 'Technology',
+      contract_type: 'Full time',
+      currency: 'USD',
+      start_from: '$1000',
+      end_to: '$2000',
+      tags: ['Engineering', 'Site', 'Projects'],
+      recruiter: 'Tareq Ahmad',
+      team: 'Product Team',
+      job_title_seo: 'Civil Engineer Career Opportunity',
+      job_description_seo: 'Civil Engineer opening for project delivery, design review, and site coordination.',
+    },
+  },
+  {
+    label: 'Sales template',
+    value: 'sales',
+    draft: {
+      job_title: 'Sales Executive',
+      job_code: 'SAL-318',
+      department: 'Sales',
+      country: 'UAE',
+      city: 'Dubai',
+      description: 'Drive pipeline growth, manage key accounts, and close new business opportunities.',
+      degree_level: 'Bachelor',
+      career_level: 'Mid level',
+      industry: 'Banking',
+      contract_type: 'Full time',
+      currency: 'EUR',
+      start_from: '$1000',
+      end_to: '$2000',
+      tags: ['Sales', 'B2B', 'Revenue'],
+      recruiter: 'Lina Saleh',
+      team: 'Marketing Team',
+      job_title_seo: 'Sales Executive Hiring',
+      job_description_seo: 'Sales Executive role focused on client acquisition, pipeline growth, and closing.',
+    },
+  },
 ]
-const templates = ref([...fallbackTemplates])
+const templates = ref([...fallbackTemplateDrafts])
 
 const defaultCompanyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
 let companyId = defaultCompanyId
@@ -213,6 +282,92 @@ const postingTabs = [
   { label: 'Appearance', accent: '#48d873' },
   { label: 'Meta data', accent: '#ffcde0' },
 ]
+
+const normalizeTemplateText = (value) => String(value ?? '').trim()
+const normalizeTemplateArray = (value) =>
+  Array.isArray(value)
+    ? value.map((item) =>
+        typeof item === 'object'
+          ? normalizeTemplateText(item?.name ?? item?.label ?? item?.value ?? item?.tag_name)
+          : normalizeTemplateText(item),
+      ).filter(Boolean)
+    : []
+
+const createTemplateDraft = (item = {}) => ({
+  job_title: normalizeTemplateText(item?.job_title ?? item?.title),
+  job_code: normalizeTemplateText(item?.job_code ?? item?.code),
+  department: normalizeTemplateText(item?.department?.department_name ?? item?.department_name ?? item?.department),
+  country: normalizeTemplateText(item?.country?.name ?? item?.country_name ?? item?.country),
+  city: normalizeTemplateText(item?.city?.name ?? item?.city_name ?? item?.city),
+  description: normalizeTemplateText(item?.description),
+  degree_level: normalizeTemplateText(item?.degree_level),
+  career_level: normalizeTemplateText(item?.career_level),
+  industry: normalizeTemplateText(item?.industry?.industry_name ?? item?.industry_name ?? item?.industry),
+  contract_type: normalizeTemplateText(
+    item?.contract_type?.contract_type_name ?? item?.contract_type_name ?? item?.contract_type,
+  ),
+  currency: normalizeTemplateText(item?.currency?.currency_name ?? item?.currency_name ?? item?.currency),
+  start_from: normalizeTemplateText(item?.start_from),
+  end_to: normalizeTemplateText(item?.end_to),
+  tags: normalizeTemplateArray(item?.tags),
+  recruiter: normalizeTemplateText(item?.recruiter_name ?? item?.recruiter),
+  team: normalizeTemplateText(item?.team_name ?? item?.team ?? item?.department_name ?? item?.department),
+  job_title_seo: normalizeTemplateText(item?.job_title_seo ?? item?.seo_title),
+  job_description_seo: normalizeTemplateText(item?.job_description_seo ?? item?.seo_description),
+})
+
+const getSelectedTemplateDraft = () => {
+  const selectedValue = String(selectedTemplate.value || '').trim()
+  if (!selectedValue) return null
+
+  const selectedOption = templates.value.find((item) => String(item.value || '').trim() === selectedValue)
+  return selectedOption?.draft || null
+}
+
+const applyTemplateDraft = (draft) => {
+  if (!draft) return
+
+  jobDetailsForm.value = {
+    ...jobDetailsForm.value,
+    jobTitle: draft.job_title || '',
+    jobCode: draft.job_code || '',
+    department: draft.department || '',
+    country: draft.country || '',
+    city: draft.city || '',
+    description: draft.description || '',
+  }
+
+  additionalInfoForm.value = {
+    ...additionalInfoForm.value,
+    degreeLevel: draft.degree_level || '',
+    careerLevel: draft.career_level || '',
+    industry: draft.industry || '',
+    contractType: draft.contract_type || '',
+    currency: draft.currency || '',
+    salaryFrom: draft.start_from || '',
+    salaryTo: draft.end_to || '',
+  }
+
+  tagsForm.value = {
+    selectedTags: Array.isArray(draft.tags) ? draft.tags : [],
+  }
+
+  recruiterForm.value = {
+    selectedRecruiters: draft.recruiter ? [draft.recruiter] : [],
+  }
+
+  hiringTeamForm.value = {
+    team: draft.team || draft.department || '',
+    recruiter: draft.recruiter || '',
+    additionalUsers: draft.recruiter ? [draft.recruiter] : [],
+  }
+
+  metaDataForm.value = {
+    seoTitle: draft.job_title_seo || draft.job_title || '',
+    seoDescription: draft.job_description_seo || draft.description || '',
+    seoPhoto: null,
+  }
+}
 
 const fetchTemplates = async () => {
   templatesLoading.value = true
@@ -256,14 +411,18 @@ const fetchTemplates = async () => {
 
         if (!label || !value) return null
 
-        return { label, value }
+        return {
+          label,
+          value,
+          draft: createTemplateDraft(item),
+        }
       })
       .filter(Boolean)
 
-    templates.value = mappedTemplates.length ? mappedTemplates : [...fallbackTemplates]
+    templates.value = mappedTemplates.length ? mappedTemplates : [...fallbackTemplateDrafts]
   } catch (error) {
     console.error('Failed to fetch job templates', error)
-    templates.value = [...fallbackTemplates]
+    templates.value = [...fallbackTemplateDrafts]
   } finally {
     templatesLoading.value = false
   }
@@ -377,6 +536,8 @@ const startWizard = () => {
   hiringTeamErrors.value = {}
   validationMessage.value = ''
   submissionMessage.value = ''
+
+  applyTemplateDraft(getSelectedTemplateDraft())
 }
 
 const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
@@ -770,11 +931,14 @@ const buildIntelligentScreenCommand = () => {
     ? intelligentQuestionTypes.value.map((typeId, index) => {
       const draft = intelligentScreenForm.value.questionDrafts[typeId] || {}
       const title = draft.title?.trim() || questionTypeLabelMap[typeId] || typeId
+      const weight = draft.classificationLabel && draft.classificationValue
+        ? ` | weight: ${draft.classificationLabel} (${draft.classificationValue})`
+        : ''
       const options = Array.isArray(draft.options) && draft.options.length
         ? ` | options: ${draft.options.filter(Boolean).join(', ')}`
         : ''
 
-      return `${index + 1}. ${title} (${questionTypeLabelMap[typeId] || typeId})${options}`
+      return `${index + 1}. ${title} (${questionTypeLabelMap[typeId] || typeId})${weight}${options}`
     }).join('\n')
     : 'none'
 
@@ -856,6 +1020,9 @@ const buildIntelligentScreenQuestionsPayload = () =>
       question: questionLabel,
       question_type: questionTypeLabelMap[typeId] || typeId,
       options_details: Array.isArray(draft.options) ? draft.options.filter(Boolean) : [],
+      classification_label: draft.classificationLabel || '',
+      classification_value: draft.classificationValue || '',
+      classification_color: draft.classificationColor || '',
     }
   })
 
@@ -1424,6 +1591,7 @@ const handlePreviewAction = async (action) => {
                 :job-details="jobDetailsForm"
                 :additional-info="additionalInfoForm"
                 :recruiters="recruiterForm.selectedRecruiters"
+                company-name="NitroSync"
                 :form="appearanceForm"
               />
               <MetaDataStep
@@ -1450,6 +1618,7 @@ const handlePreviewAction = async (action) => {
               :job-id="editingJobUuid || route.query.job_uuid || ''"
               v-model:selected-types="intelligentQuestionTypes"
               @request-add-question="intelligentStage = 1"
+              @select-question-type="intelligentStage = $event"
             />
 
             <JobStagesStep
@@ -1680,7 +1849,11 @@ const handlePreviewAction = async (action) => {
   box-shadow: 0 2px 8px rgba(83, 57, 69, 0.03);
 }
 
-.wizard-card--app-form,
+.wizard-card--app-form {
+  max-width: 860px;
+  padding: 28px;
+}
+
 .wizard-card--intelligent {
   max-width: var(--wizard-shell-max);
   padding: 24px;

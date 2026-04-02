@@ -1,6 +1,6 @@
 <script setup>
 import axios from 'axios'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   deleteNitroSyncApplicationForm,
@@ -20,11 +20,15 @@ const props = defineProps({
 })
 
 const openMenuIndex = ref(null)
+const openStageTooltip = ref('')
 const isFilterOpen = ref(false)
 const isGetCandidateModalOpen = ref(false)
 const isShareModalOpen = ref(false)
+const isDeleteDialogOpen = ref(false)
 const selectedShareJob = ref(null)
 const selectedCandidateJob = ref(null)
+const selectedDeleteJob = ref(null)
+const deleteDialogError = ref('')
 const viewMode = ref('list')
 const pageSize = ref(15)
 const currentPage = ref(1)
@@ -50,6 +54,13 @@ const createDefaultFilters = () => ({
 
 const filterForm = ref(createDefaultFilters())
 const defaultStageColors = ['#ea4f8d', '#f0d9e3', '#f0d9e3', '#f0d9e3', '#f0d9e3']
+const stageDefinitions = [
+  { key: 'new', label: 'New', color: '#ea4f8d', mutedColor: '#f8d4e3' },
+  { key: 'screen', label: 'Screen', color: '#3f6fff', mutedColor: '#dbe4ff' },
+  { key: 'testing', label: 'Testing', color: '#2fc98f', mutedColor: '#d9f5ea' },
+  { key: 'interview', label: 'Interview', color: '#b58cff', mutedColor: '#eadfff' },
+  { key: 'shortlisted', label: 'Shortlisted', color: '#f1d7e6', mutedColor: '#f1d7e6' },
+]
 
 const headers = [
   { key: 'id', label: 'Job ID', width: 'jobs-col--id' },
@@ -67,6 +78,7 @@ const pageSizeOptions = [15, 25, 50]
 const normalizeString = (value) => String(value ?? '').trim().toLowerCase()
 const includesNormalized = (source, query) => normalizeString(source).includes(normalizeString(query))
 const toArray = (value) => (Array.isArray(value) ? value : [])
+const slugifyStage = (value) => normalizeString(value).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 
 const formatDate = (value) => {
   if (!value) return '--'
@@ -142,11 +154,19 @@ const normalizedJobs = computed(() =>
       job.role ?? '',
     ].filter(Boolean)
 
+    const activeStageKey = slugifyStage(hiringStage)
+    const stages = stageDefinitions.map((stage) => ({
+      ...stage,
+      isActive: stage.key === activeStageKey,
+      displayColor: stage.key === activeStageKey ? stage.color : stage.mutedColor,
+    }))
+
     return {
       id: job.id ?? '--',
       title: typeof job.job_title === 'string' ? job.job_title : '--',
       date: formatDate(job.created_at),
       stageColors: defaultStageColors,
+      stages,
       tags,
       department: department.label,
       departmentClass: department.className,
@@ -274,6 +294,25 @@ const toggleMenu = (index) => {
   openMenuIndex.value = openMenuIndex.value === index ? null : index
 }
 
+const toggleStageTooltip = (job, stage) => {
+  const tooltipKey = `${job.jobUuid || job.id}-${stage.key}`
+  openStageTooltip.value = openStageTooltip.value === tooltipKey ? '' : tooltipKey
+}
+
+const handleDocumentClick = (event) => {
+  const target = event.target
+
+  if (!(target instanceof Element)) return
+
+  if (!target.closest('.jobs-action')) {
+    openMenuIndex.value = null
+  }
+
+  if (!target.closest('.jobs-stages__dot')) {
+    openStageTooltip.value = ''
+  }
+}
+
 const openFilter = () => {
   isFilterOpen.value = true
   openMenuIndex.value = null
@@ -296,6 +335,20 @@ const openShareModal = (job) => {
 
 const closeShareModal = () => {
   isShareModalOpen.value = false
+}
+
+const openDeleteDialog = (job) => {
+  selectedDeleteJob.value = job
+  deleteDialogError.value = ''
+  isDeleteDialogOpen.value = true
+  openMenuIndex.value = null
+}
+
+const closeDeleteDialog = () => {
+  if (deletingJobUuid.value) return
+  isDeleteDialogOpen.value = false
+  selectedDeleteJob.value = null
+  deleteDialogError.value = ''
 }
 
 const openGetCandidateModal = (job) => {
@@ -452,14 +505,12 @@ const openViewJob = async (job) => {
 
 const deleteJob = async (job) => {
   if (!job.jobUuid) {
-    window.alert('This job is missing job_uuid, so delete cannot be sent.')
+    deleteDialogError.value = 'This job is missing job_uuid, so delete cannot be sent.'
     return
   }
 
-  const confirmed = window.confirm(`Delete "${job.title}"?`)
-  if (!confirmed) return
-
   deletingJobUuid.value = job.jobUuid
+  deleteDialogError.value = ''
 
   try {
     try {
@@ -489,6 +540,8 @@ const deleteJob = async (job) => {
 
     deletedJobUuids.value = [...deletedJobUuids.value, job.jobUuid]
     openMenuIndex.value = null
+    isDeleteDialogOpen.value = false
+    selectedDeleteJob.value = null
   } catch (error) {
     console.error('Failed to delete job', {
       endpoint: deleteJobEndpoint,
@@ -496,12 +549,11 @@ const deleteJob = async (job) => {
       error,
     })
 
-    window.alert(
+    deleteDialogError.value =
       error?.response?.data?.message
-        || error?.response?.data?.detail
-        || error?.response?.data?.msg
-        || 'Failed to delete the job.',
-    )
+      || error?.response?.data?.detail
+      || error?.response?.data?.msg
+      || 'Failed to delete the job.'
   } finally {
     deletingJobUuid.value = ''
   }
@@ -530,6 +582,14 @@ watch(totalPages, (value) => {
   if (currentPage.value > value) {
     currentPage.value = value
   }
+})
+
+onMounted(() => {
+  document.addEventListener('mousedown', handleDocumentClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', handleDocumentClick)
 })
 </script>
 
@@ -599,12 +659,22 @@ watch(totalPages, (value) => {
 
         <div class="jobs-col jobs-col--stages">
           <div class="jobs-stages">
-            <span
-              v-for="(color, stageIndex) in job.stageColors"
-              :key="`${job.id}-${stageIndex}`"
+            <button
+              v-for="stage in job.stages"
+              :key="`${job.id}-${stage.key}`"
+              type="button"
               class="jobs-stages__dot"
-              :style="{ backgroundColor: color }"
-            ></span>
+              :class="{ 'jobs-stages__dot--active': stage.isActive }"
+              :style="{ backgroundColor: stage.displayColor }"
+              @click.stop="toggleStageTooltip(job, stage)"
+            >
+              <span
+                v-if="openStageTooltip === `${job.jobUuid || job.id}-${stage.key}`"
+                class="jobs-stages__tooltip"
+              >
+                {{ stage.label }}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -633,7 +703,7 @@ watch(totalPages, (value) => {
           <div v-if="openMenuIndex === index" class="jobs-action__menu">
             <button type="button" :disabled="viewingJobUuid === job.jobUuid" @click.stop="openViewJob(job)">View</button>
             <button type="button" @click.stop="openEditJob(job)">Edit</button>
-            <button type="button" :disabled="deletingJobUuid === job.jobUuid" @click.stop="deleteJob(job)">Delete</button>
+            <button type="button" :disabled="deletingJobUuid === job.jobUuid" @click.stop="openDeleteDialog(job)">Delete</button>
             <button type="button" @click.stop="openGetCandidateModal(job)">Get Candidates</button>
             <button type="button" @click.stop="openShareModal(job)">Share</button>
           </div>
@@ -661,7 +731,7 @@ watch(totalPages, (value) => {
             <div v-if="openMenuIndex === index" class="jobs-action__menu">
               <button type="button" :disabled="viewingJobUuid === job.jobUuid" @click.stop="openViewJob(job)">View</button>
               <button type="button" @click.stop="openEditJob(job)">Edit</button>
-              <button type="button" :disabled="deletingJobUuid === job.jobUuid" @click.stop="deleteJob(job)">Delete</button>
+              <button type="button" :disabled="deletingJobUuid === job.jobUuid" @click.stop="openDeleteDialog(job)">Delete</button>
               <button type="button" @click.stop="openGetCandidateModal(job)">Get Candidates</button>
               <button type="button" @click.stop="openShareModal(job)">Share</button>
             </div>
@@ -684,12 +754,22 @@ watch(totalPages, (value) => {
         <div class="jobs-grid-card__section">
           <span class="jobs-grid-card__label">Stages</span>
           <div class="jobs-stages jobs-stages--grid">
-            <span
-              v-for="(color, stageIndex) in job.stageColors"
-              :key="`grid-stage-${job.id}-${stageIndex}`"
+            <button
+              v-for="stage in job.stages"
+              :key="`grid-stage-${job.id}-${stage.key}`"
+              type="button"
               class="jobs-stages__dot"
-              :style="{ backgroundColor: color }"
-            ></span>
+              :class="{ 'jobs-stages__dot--active': stage.isActive }"
+              :style="{ backgroundColor: stage.displayColor }"
+              @click.stop="toggleStageTooltip(job, stage)"
+            >
+              <span
+                v-if="openStageTooltip === `${job.jobUuid || job.id}-${stage.key}`"
+                class="jobs-stages__tooltip"
+              >
+                {{ stage.label }}
+              </span>
+            </button>
           </div>
         </div>
 
@@ -739,6 +819,33 @@ watch(totalPages, (value) => {
       :job="selectedShareJob"
       @close="closeShareModal"
     />
+
+    <div v-if="isDeleteDialogOpen" class="jobs-dialog">
+      <button class="jobs-dialog__overlay" type="button" aria-label="Close delete dialog" @click="closeDeleteDialog"></button>
+      <section class="jobs-dialog__panel" role="dialog" aria-modal="true" aria-label="Delete job confirmation">
+        <div class="jobs-dialog__badge">!</div>
+        <h3 class="jobs-dialog__title">Delete Job?</h3>
+        <p class="jobs-dialog__text">
+          You are about to delete
+          <strong>{{ selectedDeleteJob?.title || 'this job' }}</strong>.
+          This action cannot be undone.
+        </p>
+        <p v-if="deleteDialogError" class="jobs-dialog__error">{{ deleteDialogError }}</p>
+        <div class="jobs-dialog__actions">
+          <button type="button" class="jobs-dialog__button jobs-dialog__button--secondary" :disabled="Boolean(deletingJobUuid)" @click="closeDeleteDialog">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="jobs-dialog__button jobs-dialog__button--danger"
+            :disabled="Boolean(deletingJobUuid)"
+            @click="deleteJob(selectedDeleteJob)"
+          >
+            {{ deletingJobUuid ? 'Deleting...' : 'Delete' }}
+          </button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -747,40 +854,139 @@ watch(totalPages, (value) => {
   width: 100%;
 }
 
+.jobs-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.jobs-dialog__overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(28, 20, 24, 0.22);
+  backdrop-filter: blur(5px);
+}
+
+.jobs-dialog__panel {
+  position: relative;
+  width: min(460px, calc(100vw - 32px));
+  padding: 28px 28px 24px;
+  border: 1px solid #f0dde5;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 26px 54px rgba(61, 38, 48, 0.2);
+}
+
+.jobs-dialog__badge {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  background: #fff1f6;
+  color: #ea4f8d;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.jobs-dialog__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #17111b;
+}
+
+.jobs-dialog__text {
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #6a5c64;
+}
+
+.jobs-dialog__error {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff3f6;
+  color: #cf4f80;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.jobs-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.jobs-dialog__button {
+  min-width: 112px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.jobs-dialog__button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.jobs-dialog__button--secondary {
+  border: 1px solid #e7d8df;
+  background: #ffffff;
+  color: #6f5c66;
+}
+
+.jobs-dialog__button--danger {
+  border: 1px solid #ea4f8d;
+  background: #ea4f8d;
+  color: #ffffff;
+  box-shadow: 0 14px 24px rgba(234, 79, 141, 0.18);
+}
+
 .jobs-section__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  margin-bottom: var(--space-sections);
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
 .jobs-section__title {
   margin: 0;
-  font-size: var(--font-page-title);
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0;
   color: #111827;
-  margin-top: 8px;
-  margin-bottom: 16px;
+  margin-top: 2px;
+  margin-bottom: 6px;
 }
 
 .jobs-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .jobs-controls__show {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: #8d6977;
-  font-size: var(--font-small);
+  font-size: 14px;
+  line-height: 1;
 }
 
 .jobs-controls__show-select {
-  width: 90px;
+  width: 68px;
 }
 
 .jobs-controls__select,
@@ -813,24 +1019,26 @@ watch(totalPages, (value) => {
 }
 
 .jobs-controls__show-select :deep(.dropdown__trigger) {
-  min-width: 72px;
-  height: var(--control-height);
-  padding: 0 32px 0 14px;
+  min-width: 68px;
+  height: 36px;
+  padding: 0 26px 0 12px;
   border: 0;
-  background: #f5d9e4;
-  color: #ea4f8d;
-  border-radius: 12px;
+  background: #f8d8e7;
+  color: #ee5a96;
+  border-radius: 11px;
   box-shadow: none;
 }
 
 .jobs-controls__show-select :deep(.dropdown__value) {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
 }
 
 .jobs-controls__show-select :deep(.dropdown__arrow) {
-  right: 14px;
-  border-color: #ea4f8d;
+  right: 12px;
+  width: 6px;
+  height: 6px;
+  border-color: #ee5a96;
 }
 
 .jobs-controls__show-select :deep(.dropdown__menu) {
@@ -838,21 +1046,21 @@ watch(totalPages, (value) => {
 }
 
 .jobs-controls__view {
-  min-width: 118px;
-  height: 48px;
-  padding: 6px;
-  background: #f6d3df;
-  border-radius: 16px;
+  min-width: 92px;
+  height: 36px;
+  padding: 5px;
+  background: #f8d8e7;
+  border-radius: 12px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
 .jobs-controls__view-btn {
-  width: 48px;
-  height: 36px;
+  width: 38px;
+  height: 26px;
   border: 0;
-  border-radius: 13px;
+  border-radius: 9px;
   background: transparent;
   position: relative;
   display: grid;
@@ -861,78 +1069,81 @@ watch(totalPages, (value) => {
 }
 
 .jobs-controls__view-btn.is-active {
-  background: #efb9ce;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  background: #f4b8cc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .jobs-controls__view-btn--grid::before {
   content: '';
   position: absolute;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
   background:
-    linear-gradient(#f28cb0, #f28cb0) left top/9px 9px no-repeat,
-    linear-gradient(#e0458b, #e0458b) right top/9px 9px no-repeat,
-    linear-gradient(#e0458b, #e0458b) left bottom/9px 9px no-repeat,
-    linear-gradient(#f28cb0, #f28cb0) right bottom/9px 9px no-repeat;
+    linear-gradient(#ea4f8d, #ea4f8d) left top/6px 6px no-repeat,
+    linear-gradient(#f7a7c3, #f7a7c3) right top/6px 6px no-repeat,
+    linear-gradient(#f7a7c3, #f7a7c3) left bottom/6px 6px no-repeat,
+    linear-gradient(#ea4f8d, #ea4f8d) right bottom/6px 6px no-repeat;
 }
 
 .jobs-controls__view-btn--list::before {
   content: '';
   position: absolute;
-  left: 12px;
-  right: 12px;
-  top: 11px;
-  height: 7px;
+  left: 9px;
+  right: 9px;
+  top: 7px;
+  height: 5px;
   border-radius: 4px;
   background: #ffffff;
-  box-shadow: 0 10px 0 #ffffff;
+  box-shadow: 0 8px 0 #ffffff;
 }
 
 .jobs-controls__view-btn--list::after {
   content: '';
   position: absolute;
-  top: 17px;
-  left: 12px;
-  width: 8px;
+  top: 12px;
+  left: 9px;
+  width: 6px;
   height: 2px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.82);
 }
 
 .jobs-controls__filter {
-  height: var(--button-height);
-  padding: 0 var(--button-padding-x);
+  height: 36px;
+  padding: 0 18px;
   border: 0;
-  background: #f5d9e4;
+  background: #f3bfd2;
   color: #ea4f8d;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  font-size: 14px;
+  border-radius: 11px;
 }
 
 .jobs-controls__filter-icon {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   background: currentColor;
   clip-path: polygon(0 0, 100% 0, 64% 42%, 64% 100%, 36% 100%, 36% 42%);
 }
 
 .jobs-controls__post {
-  height: var(--button-height);
-  padding: 0 var(--button-padding-x);
-  border: 1px solid #ea4f8d;
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid #ee6a9c;
   background: transparent;
-  color: #ea4f8d;
-  font-size: var(--font-button);
-  border-radius: var(--button-radius);
+  color: #ee5a96;
+  font-size: 14px;
+  border-radius: 11px;
+  line-height: 1;
 }
 
 .jobs-card {
   background: #f6f7fb;
   border-radius: 16px;
-  padding: 20px;
+  padding: 12px 10px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   overflow: visible;
 }
@@ -1018,27 +1229,27 @@ watch(totalPages, (value) => {
 .jobs-header {
   background: #f4f5f8;
   border-radius: var(--surface-radius);
-  padding: var(--surface-pad);
+  padding: 14px 18px;
   font-weight: 500;
   margin-bottom: 6px;
 }
 
 .jobs-header__cell {
   color: #6b7280;
-  font-size: var(--font-small);
+  font-size: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   text-align: center;
 }
 
 .jobs-row--body {
-  padding: var(--surface-pad);
+  padding: 14px 18px;
   border-bottom: 1px solid #f1f1f4;
   background: #ffffff;
   transition: background-color 0.18s ease;
-  font-size: var(--font-body);
+  font-size: 10px;
 }
 
 .jobs-row--body:hover {
@@ -1059,46 +1270,46 @@ watch(totalPages, (value) => {
 }
 
 .jobs-col--select {
-  width: 40px;
+  width: 34px;
   display: flex;
   justify-content: center;
 }
 
 .jobs-col--id {
-  width: 80px;
+  width: 84px;
 }
 
 .jobs-col--title {
-  width: 200px;
+  width: 182px;
 }
 
 .jobs-col--date {
-  width: 140px;
+  width: 132px;
 }
 
 .jobs-col--stages {
-  width: 120px;
+  width: 118px;
 }
 
 .jobs-col--tags {
-  width: 110px;
+  width: 112px;
 }
 
 .jobs-col--department {
-  width: 160px;
+  width: 170px;
 }
 
 .jobs-col--recruiter {
-  width: 160px;
+  width: 154px;
 }
 
 .jobs-col--action {
-  width: 70px;
+  width: 76px;
 }
 
 .jobs-radio {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 999px;
   border: 1px solid #efadc4;
   display: inline-block;
@@ -1110,8 +1321,8 @@ watch(totalPages, (value) => {
 }
 
 .jobs-sort {
-  width: 8px;
-  height: 10px;
+  width: 7px;
+  height: 8px;
   position: relative;
   flex: 0 0 auto;
 }
@@ -1145,32 +1356,71 @@ watch(totalPages, (value) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 5px;
 }
 
 .jobs-stages__dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.jobs-stages__dot--active {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95);
+}
+
+.jobs-stages__tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  min-width: max-content;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #eddbe3;
+  box-shadow: 0 12px 24px rgba(63, 37, 49, 0.12);
+  color: #7d5f6d;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  z-index: 12;
+}
+
+.jobs-stages__tooltip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  background: #ffffff;
+  border-right: 1px solid #eddbe3;
+  border-bottom: 1px solid #eddbe3;
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .jobs-tags {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .jobs-tag {
   background: #f4e8ec;
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 20px;
-  font-size: var(--font-small);
+  font-size: 9px;
   color: #7f6874;
 }
 
 :deep(.department) {
-  font-size: var(--font-small);
+  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -1183,11 +1433,11 @@ watch(totalPages, (value) => {
 :deep(.recruiter) {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: #f7f7f9;
   border-radius: 20px;
-  padding: 6px 12px 6px 6px;
-  font-size: var(--font-small);
+  padding: 4px 10px 4px 4px;
+  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -1199,13 +1449,13 @@ watch(totalPages, (value) => {
 :deep(.recruiter--cyan) { color: #06a8cb; background: #e7f8fb; }
 
 :deep(.avatar) {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
   display: inline-grid;
   place-items: center;
   color: #ffffff;
-  font-size: 12px;
+  font-size: 9px;
   font-weight: 700;
 }
 
@@ -1228,12 +1478,12 @@ watch(totalPages, (value) => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .jobs-action__trigger span {
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
   border-radius: 999px;
   background: #ea4f8d;
 }

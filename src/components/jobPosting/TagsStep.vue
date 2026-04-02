@@ -39,11 +39,30 @@ const addTag = (label) => {
 const removeTag = (label) => {
   emit('update:selectedTags', props.selectedTags.filter((item) => item !== label))
 }
+
+const addPendingTag = () => {
+  addTag(pendingTag.value)
+}
 </script>
 
 <template>
   <div class="tags-step">
-    <p class="tags-step__hint"><span>Tags:</span> Select your prefered tags from menu</p>
+    <p class="tags-step__hint"><span>Tags:</span> Write your own tag or pick from suggestions</p>
+
+    <div class="tags-step__input-row">
+      <input
+        v-model="pendingTag"
+        type="text"
+        class="tags-step__input"
+        placeholder="Write tag name and press Enter"
+        @keyup.enter="addPendingTag"
+      />
+      <button type="button" class="tags-step__input-add" :disabled="!pendingTag.trim()" @click="addPendingTag">
+        Add Tag
+      </button>
+    </div>
+
+    <div class="tags-step__section-title">Suggested Tags</div>
 
     <div class="tags-step__picker">
       <button
@@ -57,6 +76,7 @@ const removeTag = (label) => {
         <span>{{ tag.label }}</span>
         <span>+</span>
       </button>
+      <span v-if="!availableTagOptions.length" class="tags-step__empty">All suggested tags are already selected</span>
     </div>
 
     <div class="tags-step__section-title">Tags Selected</div>
@@ -72,15 +92,8 @@ const removeTag = (label) => {
           <span>{{ tag.label }}</span>
           <button type="button" @click="removeTag(tag.label)">x</button>
         </span>
+        <span v-if="!selectedTagObjects.length" class="tags-step__empty">No tags selected yet</span>
       </div>
-      <button
-        type="button"
-        class="tags-step__add"
-        :disabled="!availableTagOptions.length"
-        @click="addTag(availableTagOptions[0]?.label)"
-      >
-        Add
-      </button>
     </div>
 
     <p class="tags-step__count">{{ selectedTags.length }} tags have been selected</p>
@@ -107,6 +120,43 @@ const removeTag = (label) => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.tags-step__input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tags-step__input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid #e7dde2;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #40363c;
+  font: inherit;
+  font-size: var(--font-body);
+}
+
+.tags-step__input::placeholder {
+  color: #b8aab2;
+}
+
+.tags-step__input-add {
+  min-width: 96px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
+  color: #ffffff;
+  font-size: var(--font-small);
+}
+
+.tags-step__input-add:disabled {
+  opacity: 0.45;
 }
 
 .tags-step__picker-chip,
@@ -167,22 +217,20 @@ const removeTag = (label) => {
   color: #ffffff;
 }
 
-.tags-step__add {
-  min-width: 56px;
-  height: 28px;
-  border-radius: 999px;
-  background: #ffd8e7;
-  color: #f06a9a;
+.tags-step__empty {
   font-size: var(--font-small);
-}
-
-.tags-step__add:disabled {
-  opacity: 0.45;
+  color: #b49faa;
 }
 
 .tags-step__count {
   margin: 6px 0 0;
   font-size: var(--font-small);
   color: #ff6a9d;
+}
+
+@media (max-width: 700px) {
+  .tags-step__input-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -217,6 +217,9 @@ watch(
 .employee-modal__panel {
   position: relative;
   width: min(872px, calc(100vw - 28px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
   border-radius: 18px;
   box-shadow: 0 24px 50px rgba(32, 19, 26, 0.24);
@@ -265,7 +268,10 @@ watch(
 }
 
 .employee-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 16px 20px 8px;
+  overflow: auto;
 }
 
 .employee-modal__toolbar {
@@ -295,6 +301,9 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: 100%;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .employee-modal__state {
@@ -398,9 +407,33 @@ watch(
 }
 
 .employee-modal__footer {
+  flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
   padding: 26px 28px 34px;
+}
+
+@media (max-width: 900px) {
+  .employee-modal {
+    padding: 12px;
+  }
+
+  .employee-modal__panel {
+    width: min(100vw - 24px, 872px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .employee-modal__header {
+    padding: 18px 18px 16px;
+  }
+
+  .employee-modal__body {
+    padding: 14px 14px 8px;
+  }
+
+  .employee-modal__footer {
+    padding: 18px 14px 18px;
+  }
 }
 
 .employee-modal__next {

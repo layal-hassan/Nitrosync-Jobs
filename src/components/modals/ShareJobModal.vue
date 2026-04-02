@@ -1,5 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { sendNitroSyncEmail } from '../../composables/useNitroSyncEmail'
+import {
+  fetchNitroSyncJobStageCandidates,
+  fetchNitroSyncJobStages,
+} from '../../composables/useNitroSyncJobStages'
 
 const props = defineProps({
   open: {
@@ -16,11 +21,14 @@ const emit = defineEmits(['close'])
 
 const specificCandidate = ref(false)
 const copied = ref(false)
-const selectedCandidate = ref({
-  name: 'Carlos Mahovious',
-  role: 'Accountant',
-  email: 'carlosmoh3@nitrosync.com',
-})
+const candidateQuery = ref('')
+const selectedCandidate = ref(null)
+const availableCandidates = ref([])
+const loadingCandidates = ref(false)
+const sendingShare = ref(false)
+const loadError = ref('')
+const shareError = ref('')
+const shareSuccess = ref('')
 
 const jobUrl = computed(() => {
   const base =
@@ -31,12 +39,45 @@ const jobUrl = computed(() => {
   return props.job?.id ? `${base}/jobs/${props.job.id}` : `${base}/jobs`
 })
 
+const normalizedQuery = computed(() => String(candidateQuery.value || '').trim().toLowerCase())
+
+const filteredCandidates = computed(() => {
+  if (!normalizedQuery.value) return availableCandidates.value
+
+  return availableCandidates.value.filter((candidate) =>
+    [candidate.name, candidate.role, candidate.email]
+      .some((value) => String(value || '').toLowerCase().includes(normalizedQuery.value)),
+  )
+})
+
+const selectedCandidateInitials = computed(() =>
+  String(selectedCandidate.value?.name || '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'C',
+)
+
+const resetState = () => {
+  copied.value = false
+  specificCandidate.value = false
+  candidateQuery.value = ''
+  selectedCandidate.value = null
+  availableCandidates.value = []
+  loadingCandidates.value = false
+  sendingShare.value = false
+  loadError.value = ''
+  shareError.value = ''
+  shareSuccess.value = ''
+}
+
 watch(
   () => props.open,
   (isOpen) => {
     if (!isOpen) {
-      copied.value = false
-      specificCandidate.value = false
+      resetState()
     }
   },
 )
@@ -52,6 +93,132 @@ const copyUrl = async () => {
 
 const clearCandidate = () => {
   selectedCandidate.value = null
+  candidateQuery.value = ''
+  shareError.value = ''
+  shareSuccess.value = ''
+}
+
+const dedupeCandidates = (rows) => {
+  const seen = new Set()
+
+  return rows.filter((candidate) => {
+    const key =
+      String(candidate.candidate_uuid || '').trim()
+      || String(candidate.email || '').trim().toLowerCase()
+      || String(candidate.name || '').trim().toLowerCase()
+
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+const getStageJobUuid = (row) =>
+  String(
+    row?.raw?.job_uuid
+    ?? row?.raw?.job?.job_uuid
+    ?? row?.raw?.job?.uuid
+    ?? row?.raw?.related_job_uuid
+    ?? '',
+  ).trim()
+
+const loadCandidates = async () => {
+  if (!props.job?.relatedCompany) {
+    loadError.value = 'This job is missing related company, so candidates cannot be loaded.'
+    return
+  }
+
+  loadingCandidates.value = true
+  loadError.value = ''
+
+  try {
+    const stages = await fetchNitroSyncJobStages(props.job.relatedCompany)
+    const matchingStages = stages.filter((stage) => {
+      if (!props.job?.jobUuid) return Boolean(stage.jobStageUuid)
+      const stageJobUuid = getStageJobUuid(stage)
+      return !stageJobUuid || stageJobUuid === String(props.job.jobUuid).trim()
+    })
+
+    const stageCandidates = await Promise.all(
+      matchingStages
+        .filter((stage) => stage.jobStageUuid)
+        .map((stage) => fetchNitroSyncJobStageCandidates(stage.jobStageUuid)),
+    )
+
+    availableCandidates.value = dedupeCandidates(stageCandidates.flat())
+
+    if (!availableCandidates.value.length) {
+      loadError.value = 'No candidates were found for this job yet.'
+    }
+  } catch (error) {
+    console.error('Failed to load candidates for share modal', error)
+    loadError.value =
+      error?.response?.data?.message
+      || error?.response?.data?.detail
+      || error?.response?.data?.msg
+      || error?.message
+      || 'Failed to load candidates.'
+  } finally {
+    loadingCandidates.value = false
+  }
+}
+
+watch(specificCandidate, async (enabled) => {
+  shareError.value = ''
+  shareSuccess.value = ''
+
+  if (!enabled) return
+  if (availableCandidates.value.length || loadingCandidates.value) return
+
+  await loadCandidates()
+})
+
+const selectCandidate = (candidate) => {
+  selectedCandidate.value = candidate
+  candidateQuery.value = candidate.name || ''
+  shareError.value = ''
+  shareSuccess.value = ''
+}
+
+const shareJobWithCandidate = async () => {
+  if (!selectedCandidate.value) {
+    shareError.value = 'Select a candidate first.'
+    return
+  }
+
+  if (!String(selectedCandidate.value.email || '').trim()) {
+    shareError.value = 'The selected candidate does not have an email address.'
+    return
+  }
+
+  sendingShare.value = true
+  shareError.value = ''
+  shareSuccess.value = ''
+
+  try {
+    await sendNitroSyncEmail({
+      subject: `Job opportunity: ${props.job?.title || 'Open role'}`,
+      body: `
+        <p>Hello ${selectedCandidate.value.name || 'Candidate'},</p>
+        <p>We would like to share this job opportunity with you:</p>
+        <p><strong>${props.job?.title || 'Open role'}</strong></p>
+        <p><a href="${jobUrl.value}">${jobUrl.value}</a></p>
+      `.trim(),
+      to: [selectedCandidate.value.email],
+    })
+
+    shareSuccess.value = 'Job shared successfully.'
+  } catch (error) {
+    console.error('Failed to share job with candidate', error)
+    shareError.value =
+      error?.response?.data?.message
+      || error?.response?.data?.detail
+      || error?.response?.data?.msg
+      || error?.message
+      || 'Failed to share the job.'
+  } finally {
+    sendingShare.value = false
+  }
 }
 </script>
 
@@ -99,11 +266,10 @@ const clearCandidate = () => {
 
             <div class="share-modal__candidate-input-wrap">
               <input
-                :value="selectedCandidate?.name || ''"
+                v-model="candidateQuery"
                 class="share-modal__candidate-input"
                 type="text"
                 placeholder="Search candidate"
-                readonly
               />
               <button
                 v-if="selectedCandidate"
@@ -115,21 +281,57 @@ const clearCandidate = () => {
               </button>
             </div>
 
+            <p v-if="loadingCandidates" class="share-modal__info">Loading candidates...</p>
+            <p v-else-if="loadError" class="share-modal__info share-modal__info--error">{{ loadError }}</p>
+
+            <div v-else-if="filteredCandidates.length" class="share-modal__candidate-list">
+              <button
+                v-for="candidate in filteredCandidates"
+                :key="candidate.candidate_uuid || candidate.email || candidate.name"
+                type="button"
+                class="share-modal__candidate-option"
+                :class="{ 'is-active': selectedCandidate?.candidate_uuid === candidate.candidate_uuid }"
+                @click="selectCandidate(candidate)"
+              >
+                <span class="share-modal__candidate-option-avatar">
+                  {{ String(candidate.name || 'C').slice(0, 1).toUpperCase() }}
+                </span>
+                <span class="share-modal__candidate-option-meta">
+                  <span class="share-modal__candidate-name">{{ candidate.name }}</span>
+                  <span class="share-modal__candidate-role">{{ candidate.role }}</span>
+                  <span class="share-modal__candidate-email">{{ candidate.email || 'No email' }}</span>
+                </span>
+              </button>
+            </div>
+
+            <p v-else class="share-modal__info">No candidates match your search.</p>
+
             <div v-if="selectedCandidate" class="share-modal__candidate-card">
-              <div class="share-modal__candidate-avatar"></div>
+              <div class="share-modal__candidate-avatar">{{ selectedCandidateInitials }}</div>
               <div class="share-modal__candidate-meta">
                 <div class="share-modal__candidate-name">{{ selectedCandidate.name }}</div>
                 <div class="share-modal__candidate-role">{{ selectedCandidate.role }}</div>
-                <div class="share-modal__candidate-email">{{ selectedCandidate.email }}</div>
+                <div class="share-modal__candidate-email">{{ selectedCandidate.email || 'No email address' }}</div>
               </div>
-              <button type="button" class="share-modal__candidate-add" aria-label="Add candidate">+</button>
             </div>
+
+            <p v-if="shareError" class="share-modal__info share-modal__info--error">{{ shareError }}</p>
+            <p v-if="shareSuccess" class="share-modal__info share-modal__info--success">{{ shareSuccess }}</p>
           </div>
         </transition>
       </div>
 
       <footer class="share-modal__footer">
-        <button type="button" class="share-modal__confirm" @click="$emit('close')">GOT IT</button>
+        <button
+          v-if="specificCandidate"
+          type="button"
+          class="share-modal__confirm"
+          :disabled="sendingShare || loadingCandidates"
+          @click="shareJobWithCandidate"
+        >
+          {{ sendingShare ? 'Sharing...' : 'Share Job' }}
+        </button>
+        <button v-else type="button" class="share-modal__confirm" @click="$emit('close')">GOT IT</button>
       </footer>
     </section>
   </div>
@@ -153,7 +355,7 @@ const clearCandidate = () => {
 
 .share-modal__panel {
   position: relative;
-  width: min(440px, calc(100vw - 32px));
+  width: min(460px, calc(100vw - 32px));
   background: #ffffff;
   border-radius: 18px;
   box-shadow: 0 24px 50px rgba(32, 19, 26, 0.22);
@@ -269,10 +471,23 @@ const clearCandidate = () => {
   inset: 0 4px 3px 0;
 }
 
-.share-modal__copied {
+.share-modal__copied,
+.share-modal__info {
   color: #54a36a;
   font-size: 12px;
-  line-height: 1;
+  line-height: 1.45;
+}
+
+.share-modal__info {
+  margin: 10px 0 0;
+}
+
+.share-modal__info--error {
+  color: #d25585;
+}
+
+.share-modal__info--success {
+  color: #37905d;
 }
 
 .share-modal__toggle-row {
@@ -325,7 +540,7 @@ const clearCandidate = () => {
 
 .share-modal__candidate-input {
   width: 100%;
-  height: 38px;
+  height: 40px;
   padding: 0 52px 0 12px;
   border: 1px solid #ebe5e8;
   border-radius: 9px;
@@ -349,27 +564,55 @@ const clearCandidate = () => {
   text-transform: lowercase;
 }
 
+.share-modal__candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  margin-top: 10px;
+  overflow-y: auto;
+}
+
+.share-modal__candidate-option,
 .share-modal__candidate-card {
   display: grid;
-  grid-template-columns: 30px 1fr auto;
+  grid-template-columns: 32px 1fr;
   align-items: center;
   gap: 10px;
-  margin-top: 10px;
   padding: 12px 10px;
   border: 1px solid #eee7ea;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #faf9fb;
 }
 
-.share-modal__candidate-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 11px;
-  background: #d8d8da;
+.share-modal__candidate-option {
+  text-align: left;
 }
 
-.share-modal__candidate-meta {
+.share-modal__candidate-option.is-active {
+  border-color: #f3a5c4;
+  background: #fff4f8;
+}
+
+.share-modal__candidate-avatar,
+.share-modal__candidate-option-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: #f1d9e3;
+  color: #f04f92;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.share-modal__candidate-meta,
+.share-modal__candidate-option-meta {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .share-modal__candidate-name {
@@ -391,16 +634,8 @@ const clearCandidate = () => {
   word-break: break-word;
 }
 
-.share-modal__candidate-add {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: #f04f92;
-  color: #ffffff;
-  font-size: 14px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
+.share-modal__candidate-card {
+  margin-top: 12px;
 }
 
 .share-modal__footer {
@@ -410,8 +645,9 @@ const clearCandidate = () => {
 }
 
 .share-modal__confirm {
-  min-width: 82px;
-  height: 29px;
+  min-width: 96px;
+  height: 32px;
+  padding: 0 16px;
   border-radius: 9px;
   background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
   color: #ffffff;
@@ -419,14 +655,18 @@ const clearCandidate = () => {
   box-shadow: 0 10px 16px rgba(234, 79, 141, 0.18);
 }
 
+.share-modal__confirm:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .share-modal-fade-enter-active,
 .share-modal-fade-leave-active {
-  transition: opacity 0.18s ease, transform 0.18s ease;
+  transition: opacity 0.18s ease;
 }
 
 .share-modal-fade-enter-from,
 .share-modal-fade-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
 }
 </style>

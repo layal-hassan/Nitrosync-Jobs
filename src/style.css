@@ -12,7 +12,7 @@
   --pink-line: #f0dde5;
   --white: #ffffff;
   --container-max: 1240px;
-  --page-pad-x: 24px;
+  --page-pad-x: 14px;
   --page-pad-y: 20px;
   --space-fields: 16px;
   --space-sections: 24px;
@@ -96,7 +96,7 @@ a {
   display: grid;
   grid-template-columns: 140px 1fr auto;
   align-items: center;
-  column-gap: 42px;
+  column-gap: 26px;
 }
 
 .brand {
@@ -120,7 +120,7 @@ a {
 
 .brand__title {
   color: var(--pink);
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1;
 }
@@ -128,7 +128,7 @@ a {
 .brand__subtitle {
   margin-top: 2px;
   color: #d3a4b8;
-  font-size: 9px;
+  font-size: 6px;
   line-height: 1.1;
 }
 
@@ -170,13 +170,13 @@ a {
 .nav-tabs {
   display: flex;
   align-items: center;
-  gap: 34px;
+  gap: 14px;
 }
 
 .nav-tabs__item {
-  padding: 12px 20px;
+  padding: 10px 16px;
   border-radius: 8px;
-  font-size: var(--font-body);
+  font-size: 11px;
   color: #17111d;
 }
 
@@ -188,21 +188,21 @@ a {
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
 }
 
 .quick-icons {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 14px;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 18px;
   background: #f8edf2;
 }
 
 .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   display: grid;
   place-items: center;
   color: var(--pink);
@@ -210,7 +210,7 @@ a {
 }
 
 .icon-btn--chip {
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .icon-btn--chip:hover {
@@ -220,38 +220,38 @@ a {
 }
 
 .icon-svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: block;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .icon-svg--search {
-  width: 19px;
-  height: 19px;
+  width: 21px;
+  height: 21px;
 }
 
 .profile-chip {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
 }
 
 .profile-chip__avatar {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: linear-gradient(135deg, #efc171, #ea8250);
   color: #fff;
   display: grid;
   place-items: center;
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 700;
 }
 
 .profile-chip__name {
-  font-size: var(--font-small);
+  font-size: 11px;
   line-height: 1.1;
   font-weight: 600;
   color: var(--pink);
@@ -259,7 +259,7 @@ a {
 
 .profile-chip__mail {
   margin-top: 1px;
-  font-size: 12px;
+  font-size: 10px;
   color: #2d2531;
 }
 

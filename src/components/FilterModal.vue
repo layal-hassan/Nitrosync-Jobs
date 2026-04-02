@@ -92,12 +92,6 @@ const normalizedFilters = computed(() => ({
   positions: localFilters.value.positions,
 }))
 
-const syncFilters = () => {
-  emit('update:filters', normalizedFilters.value)
-}
-
-watch(localFilters, syncFilters, { deep: true })
-
 const togglePosition = (label) => {
   const positions = new Set(localFilters.value.positions)
 
@@ -115,10 +109,13 @@ const togglePosition = (label) => {
 
 const clearAll = () => {
   localFilters.value = createLocalFilters()
+  emit('update:filters', normalizedFilters.value)
+  emit('apply', normalizedFilters.value)
+  emit('close')
 }
 
 const applyFilters = () => {
-  syncFilters()
+  emit('update:filters', normalizedFilters.value)
   emit('apply', normalizedFilters.value)
   emit('close')
 }

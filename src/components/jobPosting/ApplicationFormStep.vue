@@ -1,10 +1,9 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import {
   createNitroSyncApplicationQuestion,
   fetchNitroSyncApplicationQuestions,
 } from '../../composables/useNitroSyncApplicationForms'
-import Dropdown from '../ui/Dropdown.vue'
 
 const props = defineProps({
   stage: {
@@ -22,6 +21,39 @@ const props = defineProps({
 })
 
 const statusCycle = ['off', 'optional', 'mandatory']
+const fieldStatusOptions = [
+  { value: 'off', label: 'Off' },
+  { value: 'mandatory', label: 'Mandatory' },
+  { value: 'optional', label: 'Optional' },
+]
+const fieldGroups = [
+  [
+    { key: 'firstName', label: 'First Name' },
+    { key: 'lastName', label: 'Last Name' },
+  ],
+  [
+    { key: 'email', label: 'Email Address' },
+  ],
+  [
+    { key: 'gender', label: 'Gender' },
+    { key: 'country', label: 'Country' },
+  ],
+  [
+    { key: 'address', label: 'Full Address' },
+  ],
+  [
+    { key: 'jobTitle', label: 'Current Job Title' },
+    { key: 'company', label: 'Company' },
+  ],
+  [
+    { key: 'ethnicity', label: 'Ethnicity' },
+    { key: 'disability', label: 'Disability' },
+  ],
+  [
+    { key: 'cvStatus', label: 'Upload Your CV' },
+    { key: 'coverLetterStatus', label: 'Upload Your Cover Letter' },
+  ],
+]
 
 const createQuestion = (text, status = 'off') => ({
   text,
@@ -75,14 +107,6 @@ const sections = reactive(
     : cloneSections(defaultSections),
 )
 
-const genderOptions = ['Select one of the list..', 'Male', 'Female']
-const countryOptions = ['Select one of the list..', 'Jordan', 'Saudi Arabia', 'UAE']
-const ethnicityOptions = ['Please select', 'Arab', 'Asian', 'European']
-const disabilityOptions = ['Please select', 'No', 'Yes']
-const cvInputRef = ref(null)
-const coverLetterInputRef = ref(null)
-const cvFileName = computed(() => props.form.cvFile?.name || '')
-const coverLetterFileName = computed(() => props.form.coverLetterFile?.name || '')
 const applicationQuestionsLoading = ref(false)
 const applicationQuestionsError = ref('')
 const createQuestionLoadingBySection = ref({})
@@ -112,10 +136,8 @@ const cycleStatus = (question) => {
   syncSectionsToForm()
 }
 
-const cycleFieldStatus = (fieldKey) => {
-  const currentStatus = props.form[fieldKey] || 'off'
-  const currentIndex = statusCycle.indexOf(currentStatus)
-  props.form[fieldKey] = statusCycle[(currentIndex + 1) % statusCycle.length]
+const setFieldStatus = (fieldKey, status) => {
+  props.form[fieldKey] = status
 }
 
 const fieldClass = (fieldKey) => `app-field--${props.form[fieldKey] || 'off'}`
@@ -142,18 +164,6 @@ const iconPath = (type) => {
     default:
       return 'M12 5.4a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Zm0 7c3 0 5.5 1.8 5.5 4v.4H6.5V16c0-2.2 2.5-4 5.5-4Z'
   }
-}
-
-const openCvPicker = () => {
-  cvInputRef.value?.click()
-}
-
-const openCoverLetterPicker = () => {
-  coverLetterInputRef.value?.click()
-}
-
-const updateFile = (field, event) => {
-  props.form[field] = event.target.files?.[0] || null
 }
 
 const mergeApiQuestions = (rows) => {
@@ -277,102 +287,38 @@ syncSectionsToForm()
     </div>
 
     <div v-if="stage === 0" class="app-form-fields">
-      <div class="app-form-fields__grid">
-        <div class="app-field" :class="fieldClass('firstName')">
-          <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('firstName')"><span class="dot"></span> First Name</button>
-          <input class="app-field__control" :class="{ 'app-field__control--error': errors.firstName }" type="text" placeholder="Ex John" readonly />
-          <p v-if="errors.firstName" class="app-field__error">{{ errors.firstName }}</p>
-        </div>
-
-        <div class="app-field" :class="fieldClass('lastName')">
-          <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('lastName')"><span class="dot"></span> Last Name</button>
-          <input class="app-field__control" :class="{ 'app-field__control--error': errors.lastName }" type="text" placeholder="Ex Smith" readonly />
-          <p v-if="errors.lastName" class="app-field__error">{{ errors.lastName }}</p>
-        </div>
-      </div>
-
-      <div class="app-field" :class="fieldClass('email')">
-        <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('email')"><span class="dot"></span> Email Address</button>
-        <input class="app-field__control" :class="{ 'app-field__control--error': errors.email }" type="email" placeholder="Ex johnsmith@nitrosync.com" readonly />
-        <p v-if="errors.email" class="app-field__error">{{ errors.email }}</p>
-      </div>
-
-      <div class="app-form-fields__grid">
-        <div class="app-field" :class="fieldClass('gender')">
-          <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('gender')"><span class="dot"></span> gender</button>
-          <div class="app-field__dropdown app-field__dropdown--static" :class="{ 'app-field__dropdown--error': errors.gender }">
-            <Dropdown model-value="" :options="genderOptions" placeholder="select one of the list.." />
+      <div
+        v-for="(group, groupIndex) in fieldGroups"
+        :key="`group-${groupIndex}`"
+        class="app-form-fields__grid"
+        :class="{ 'app-form-fields__grid--single': group.length === 1 }"
+      >
+        <div
+          v-for="field in group"
+          :key="field.key"
+          class="app-field"
+          :class="fieldClass(field.key)"
+        >
+          <div class="app-field__header">
+            <div class="app-field__title">
+              <span class="dot"></span>
+              <span>{{ field.label }}</span>
+            </div>
+            <div class="app-field__status-group" role="radiogroup" :aria-label="`${field.label} status`">
+              <label v-for="option in fieldStatusOptions" :key="`${field.key}-${option.value}`" class="app-field__status-option">
+                <input
+                  :checked="form[field.key] === option.value"
+                  type="radio"
+                  :name="`field-status-${field.key}`"
+                  :value="option.value"
+                  @change="setFieldStatus(field.key, option.value)"
+                />
+                <span>{{ option.label }}</span>
+              </label>
+            </div>
           </div>
-          <p v-if="errors.gender" class="app-field__error">{{ errors.gender }}</p>
+          <p v-if="errors[field.key]" class="app-field__error">{{ errors[field.key] }}</p>
         </div>
-
-        <div class="app-field" :class="fieldClass('country')">
-          <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('country')"><span class="dot"></span> country</button>
-          <div class="app-field__dropdown app-field__dropdown--static" :class="{ 'app-field__dropdown--error': errors.country }">
-            <Dropdown model-value="" :options="countryOptions" placeholder="select one of the list.." />
-          </div>
-          <p v-if="errors.country" class="app-field__error">{{ errors.country }}</p>
-        </div>
-      </div>
-
-      <div class="app-field" :class="fieldClass('address')">
-        <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('address')"><span class="dot"></span> Full Address</button>
-        <input class="app-field__control" :class="{ 'app-field__control--error': errors.address }" type="text" placeholder="Ex Accountant In he Bank" readonly />
-        <p v-if="errors.address" class="app-field__error">{{ errors.address }}</p>
-      </div>
-
-      <div class="app-form-fields__grid">
-        <div class="app-field" :class="fieldClass('jobTitle')">
-          <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('jobTitle')"><span class="dot"></span> Current Job Title</button>
-          <input class="app-field__control" :class="{ 'app-field__control--error': errors.jobTitle }" type="text" placeholder="Ex 0F2144" readonly />
-          <p v-if="errors.jobTitle" class="app-field__error">{{ errors.jobTitle }}</p>
-        </div>
-
-        <div class="app-field" :class="fieldClass('company')">
-          <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('company')"><span class="dot"></span> Company</button>
-          <input class="app-field__control" :class="{ 'app-field__control--error': errors.company }" type="text" placeholder="Ex 0F2144" readonly />
-          <p v-if="errors.company" class="app-field__error">{{ errors.company }}</p>
-        </div>
-      </div>
-
-      <div class="app-form-fields__grid">
-        <div class="app-field" :class="fieldClass('ethnicity')">
-          <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('ethnicity')"><span class="dot"></span> Ethnicity</button>
-          <div class="app-field__dropdown app-field__dropdown--static" :class="{ 'app-field__dropdown--error': errors.ethnicity }">
-            <Dropdown model-value="" :options="ethnicityOptions" placeholder="Please select" />
-          </div>
-          <p v-if="errors.ethnicity" class="app-field__error">{{ errors.ethnicity }}</p>
-        </div>
-
-        <div class="app-field" :class="fieldClass('disability')">
-          <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('disability')"><span class="dot"></span> Disability</button>
-          <div class="app-field__dropdown app-field__dropdown--static" :class="{ 'app-field__dropdown--error': errors.disability }">
-            <Dropdown model-value="" :options="disabilityOptions" placeholder="Please select" />
-          </div>
-          <p v-if="errors.disability" class="app-field__error">{{ errors.disability }}</p>
-        </div>
-      </div>
-
-      <div class="app-upload">
-        <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('cvStatus')"><span class="dot" :class="`dot--${form.cvStatus}`"></span> upload your CV</button>
-        <div class="app-upload__row">
-          <button type="button" class="app-upload__button" @click="openCvPicker">
-            {{ cvFileName || 'Browse files' }}
-          </button>
-          <span class="app-upload__note">Maximum file size: 5MB</span>
-        </div>
-        <input ref="cvInputRef" class="app-upload__input" type="file" @change="updateFile('cvFile', $event)" />
-      </div>
-
-      <div class="app-upload">
-        <button type="button" class="app-field__label app-field__label--toggle" @click="cycleFieldStatus('coverLetterStatus')"><span class="dot" :class="`dot--${form.coverLetterStatus}`"></span> upload your Cover Letter</button>
-        <div class="app-upload__row">
-          <button type="button" class="app-upload__button" @click="openCoverLetterPicker">
-            {{ coverLetterFileName || 'Browse files' }}
-          </button>
-          <span class="app-upload__note">Maximum file size: 5MB</span>
-        </div>
-        <input ref="coverLetterInputRef" class="app-upload__input" type="file" @change="updateFile('coverLetterFile', $event)" />
       </div>
     </div>
 
@@ -506,125 +452,110 @@ syncSectionsToForm()
 .app-form-fields {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .app-form-fields__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 20px;
 }
 
-.app-field__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: var(--ui-small-font);
-  color: #17111b;
-}
-
-.app-field__label--toggle {
-  width: fit-content;
-  text-align: left;
+.app-form-fields__grid--single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .app-field {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  padding: 20px 22px;
+  border: 1px solid #eee1e7;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fffefe 0%, #fff9fb 100%);
+}
+
+.app-field__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 176px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: #17111b;
+}
+
+.app-field__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.app-field__status-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  max-width: 360px;
+}
+
+.app-field__status-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 1px solid #e8dce2;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  color: #5f5360;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.app-field__status-option input {
+  margin: 0;
+  accent-color: #ea4f8d;
 }
 
 .app-field__error {
-  margin: 6px 0 0;
+  margin: 10px 0 0;
   font-size: var(--ui-small-font);
   color: #e15b8f;
 }
 
-.app-field__control--error {
-  border-color: #e15b8f !important;
-  box-shadow: 0 0 0 3px rgba(225, 91, 143, 0.08);
-}
-
-.app-field__dropdown--error :deep(.dropdown__trigger) {
-  border-color: #e15b8f !important;
-  box-shadow: 0 0 0 3px rgba(225, 91, 143, 0.08);
-}
-
-.app-field__dropdown--static {
-  pointer-events: none;
-}
-
 .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  flex: 0 0 12px;
+  border: 3px solid rgba(217, 209, 214, 0.28);
+  border-radius: 50%;
+  box-sizing: border-box;
   background: #d9d1d6;
 }
 
-.app-field--mandatory .dot,
-.dot--mandatory {
+.app-field--mandatory {
+  border-color: #f4bfd3;
+  background: linear-gradient(180deg, #fffefe 0%, #fff5f9 100%);
+}
+
+.app-field--mandatory .dot {
   background: #ea4f8d;
+  border-color: rgba(234, 79, 141, 0.16);
+}
+
+.app-field--optional {
+  border-color: #bdecc0;
+  background: linear-gradient(180deg, #ffffff 0%, #f7fff8 100%);
 }
 
 .app-field--optional .dot {
   background: #67d766;
-}
-
-.dot--optional {
-  background: #67d766;
-}
-
-.dot--off {
-  background: #d9d1d6;
-}
-
-.app-field__control {
-  display: block;
-  width: 100%;
-  background: #f8f8f8;
-  border: 1px solid #ece1e6;
-}
-
-.app-field--mandatory .app-field__control {
-  border-color: #f39dbf;
-}
-
-.app-field--optional .app-field__control {
-  border-color: #9ae59d;
-}
-
-.app-upload {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.app-upload__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.app-upload__button {
-  min-width: 136px;
-  height: var(--ui-control-sm-height);
-  padding: 0 18px;
-  border: 1px solid #f39dbf;
-  border-radius: 10px;
-  color: #ea4f8d;
-  background: #ffffff;
-  font-size: var(--ui-small-font);
-}
-
-.app-upload__note {
-  font-size: var(--ui-small-font);
-  color: #d3c5cb;
-}
-
-.app-upload__input {
-  display: none;
+  border-color: rgba(103, 215, 102, 0.16);
 }
 
 .accordion-card {
@@ -793,5 +724,26 @@ syncSectionsToForm()
 .accordion-card__save:disabled {
   opacity: 0.7;
   cursor: wait;
+}
+
+@media (max-width: 900px) {
+  .app-form-fields__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-field__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .app-field__title,
+  .app-field__status-group {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .app-field__status-group {
+    justify-content: flex-start;
+  }
 }
 </style>
