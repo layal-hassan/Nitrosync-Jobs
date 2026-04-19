@@ -135,6 +135,7 @@ const handleEmployeeReferralNext = () => {
 
     <EmployeeReferralModal
       :open="activeModal === 'employeeReferral'"
+      :job="props.job"
       @close="activeModal = 'root'"
       @next="handleEmployeeReferralNext"
     />

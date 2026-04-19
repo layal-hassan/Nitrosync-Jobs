@@ -151,19 +151,46 @@ const selectedConditionLabel = (conditionId) => scoreRangeOptions.find((option) 
 const defaultQuestionTitle = computed(() =>
   'Enter your question',
 )
+const defaultClassification = classificationItems[0]
+const classificationLabelOptions = classificationItems.map((item) => item.label)
+
+const createDefaultOptionClassification = () => ({
+  label: defaultClassification.label,
+  value: defaultClassification.value,
+  color: defaultClassification.color,
+})
+
+const normalizeOptionClassifications = (classifications = [], options = []) =>
+  options.map((_, index) => {
+    const current = classifications[index]
+    const matched = classificationItems.find((item) => item.label === current?.label)
+
+    if (matched) {
+      return {
+        label: matched.label,
+        value: current?.value || matched.value,
+        color: current?.color || matched.color,
+      }
+    }
+
+    return createDefaultOptionClassification()
+  })
 
 const ensureDraft = (typeId) => {
   if (!typeId) return null
 
   if (!questionDrafts[typeId]) {
+    const options =
+      typeId === 'record_video'
+        ? ['']
+        : typeId === 'multiple_choice' || typeId === 'checkboxes'
+          ? ['', '']
+          : []
+
     questionDrafts[typeId] = {
       title: '',
-      options:
-        typeId === 'record_video'
-          ? ['']
-          : typeId === 'multiple_choice' || typeId === 'checkboxes'
-            ? ['', '']
-            : [],
+      options,
+      optionClassifications: normalizeOptionClassifications([], options),
       startDate: '',
       endDate: '',
       classificationLabel: '',
@@ -224,9 +251,33 @@ const updateDraftOption = (index, value) => {
   ensureDraft(activeQuestionType.value).options[index] = value
 }
 
+const updateDraftOptionClassification = (index, label) => {
+  if (!activeQuestionType.value) return
+
+  const draft = ensureDraft(activeQuestionType.value)
+  if (!draft) return
+
+  const selectedClassification = classificationItems.find((item) => item.label === label) || defaultClassification
+  draft.optionClassifications = normalizeOptionClassifications(draft.optionClassifications, draft.options)
+  draft.optionClassifications[index] = {
+    label: selectedClassification.label,
+    value: selectedClassification.value,
+    color: selectedClassification.color,
+  }
+}
+
+const getDraftOptionClassification = (index) => {
+  const draft = activeDraft.value
+  if (!draft) return createDefaultOptionClassification()
+  draft.optionClassifications = normalizeOptionClassifications(draft.optionClassifications, draft.options)
+  return draft.optionClassifications[index] || createDefaultOptionClassification()
+}
+
 const addDraftOption = () => {
   if (!activeQuestionType.value) return
-  ensureDraft(activeQuestionType.value).options.push('')
+  const draft = ensureDraft(activeQuestionType.value)
+  draft.options.push('')
+  draft.optionClassifications = normalizeOptionClassifications(draft.optionClassifications, draft.options)
 }
 
 const removeDraftOption = (index) => {
@@ -237,10 +288,13 @@ const removeDraftOption = (index) => {
 
   if (draft.options.length <= 1) {
     draft.options = ['']
+    draft.optionClassifications = normalizeOptionClassifications([], draft.options)
     return
   }
 
   draft.options.splice(index, 1)
+  draft.optionClassifications.splice(index, 1)
+  draft.optionClassifications = normalizeOptionClassifications(draft.optionClassifications, draft.options)
 }
 
 const requestAddQuestion = () => {
@@ -351,6 +405,13 @@ const applyFetchedQuestions = (questions = []) => {
     nextDrafts[typeId] = {
       title: title || `${typeLabel(typeId)} ${index + 1}`,
       options,
+      optionClassifications: normalizeOptionClassifications(
+        question?.option_classifications ??
+        question?.answer_classifications ??
+        question?.options_meta ??
+        [],
+        options,
+      ),
       startDate: String(question?.start_date ?? question?.startDate ?? '').trim(),
       endDate: String(question?.end_date ?? question?.endDate ?? '').trim(),
       classificationLabel: String(
@@ -651,67 +712,84 @@ const sendAiCommand = async () => {
           </div>
 
           <div class="question-builder__meta">
-            <div class="question-builder__meta-field">
-              <label class="question-builder__meta-label">Question color</label>
-              <div class="question-builder__colors">
-                <button
-                  v-for="item in classificationItems"
-                  :key="item.label"
-                  type="button"
-                  class="question-builder__color-chip"
-                  :class="{ 'question-builder__color-chip--active': activeDraft?.classificationLabel === item.label }"
-                  :style="{ '--chip-color': item.color }"
-                  @click="updateDraftClassification(activeQuestionType, item.label)"
-                >
-                  <span class="question-builder__color-dot" aria-hidden="true"></span>
-                  <span>{{ item.label }}</span>
-                </button>
-              </div>
-            </div>
             <div class="question-builder__meta-field question-builder__meta-field--weight">
-              <label class="question-builder__meta-label">Weight</label>
-              <div class="question-builder__weight" :style="{ '--weight-color': activeDraft?.classificationColor || '#efe4e8' }">
-                {{ activeDraft?.classificationValue || 'Choose a color to set the weight' }}
+              <label class="question-builder__meta-label">Question</label>
+              <div class="question-builder__weight question-builder__weight--muted">
+                Answer weights are set per answer below.
               </div>
             </div>
           </div>
 
           <div v-if="activeQuestionType === 'record_video'" class="question-builder__body">
             <p class="question-builder__desc">Add the question, then enter the answers you want to show to the candidate.</p>
-            <label v-for="(option, index) in activeDraft?.options || []" :key="`record-${index}`" class="question-builder__option">
-              <input type="radio" :checked="index === 0" />
-              <input
-                class="question-builder__option-input"
-                :value="option"
-                type="text"
-                placeholder="Enter answer"
-                @input="updateDraftOption(index, $event.target.value)"
-              />
-              <button type="button" class="question-builder__option-remove" @click="removeDraftOption(index)">
-                Delete
-              </button>
-            </label>
+            <div v-for="(option, index) in activeDraft?.options || []" :key="`record-${index}`" class="question-builder__option-card">
+              <label class="question-builder__option">
+                <input type="radio" :checked="index === 0" />
+                <input
+                  class="question-builder__option-input"
+                  :value="option"
+                  type="text"
+                  placeholder="Enter answer"
+                  @input="updateDraftOption(index, $event.target.value)"
+                />
+                <div class="question-builder__option-side">
+                  <Dropdown
+                    :model-value="getDraftOptionClassification(index).label"
+                    :options="classificationLabelOptions"
+                    placeholder="Select weight"
+                    @update:model-value="updateDraftOptionClassification(index, $event)"
+                  />
+                  <button type="button" class="question-builder__option-remove" @click="removeDraftOption(index)">
+                    Delete
+                  </button>
+                </div>
+              </label>
+              <div
+                class="question-builder__answer-weight"
+                :style="{ '--answer-color': getDraftOptionClassification(index).color }"
+              >
+                <span>{{ getDraftOptionClassification(index).label }}</span>
+                <strong>{{ getDraftOptionClassification(index).value }}</strong>
+              </div>
+            </div>
             <button type="button" class="question-builder__link" @click="addDraftOption">+ Add answer</button>
           </div>
 
           <div v-else-if="activeQuestionType === 'multiple_choice' || activeQuestionType === 'checkboxes'" class="question-builder__body">
-            <label
+            <div
               v-for="(option, index) in activeDraft?.options || []"
               :key="`choice-${index}`"
-              class="question-builder__option"
+              class="question-builder__option-card"
             >
-              <input :type="activeQuestionType === 'checkboxes' ? 'checkbox' : 'radio'" />
-              <input
-                class="question-builder__option-input"
-                :value="option"
-                type="text"
-                placeholder="Enter answer"
-                @input="updateDraftOption(index, $event.target.value)"
-              />
-              <button type="button" class="question-builder__option-remove" @click="removeDraftOption(index)">
-                Delete
-              </button>
-            </label>
+              <label class="question-builder__option">
+                <input :type="activeQuestionType === 'checkboxes' ? 'checkbox' : 'radio'" />
+                <input
+                  class="question-builder__option-input"
+                  :value="option"
+                  type="text"
+                  placeholder="Enter answer"
+                  @input="updateDraftOption(index, $event.target.value)"
+                />
+                <div class="question-builder__option-side">
+                  <Dropdown
+                    :model-value="getDraftOptionClassification(index).label"
+                    :options="classificationLabelOptions"
+                    placeholder="Select weight"
+                    @update:model-value="updateDraftOptionClassification(index, $event)"
+                  />
+                  <button type="button" class="question-builder__option-remove" @click="removeDraftOption(index)">
+                    Delete
+                  </button>
+                </div>
+              </label>
+              <div
+                class="question-builder__answer-weight"
+                :style="{ '--answer-color': getDraftOptionClassification(index).color }"
+              >
+                <span>{{ getDraftOptionClassification(index).label }}</span>
+                <strong>{{ getDraftOptionClassification(index).value }}</strong>
+              </div>
+            </div>
             <button type="button" class="question-builder__link" @click="addDraftOption">+ Add answer</button>
           </div>
 
@@ -1083,40 +1161,6 @@ const sendAiCommand = async () => {
   color: #17111b;
 }
 
-.question-builder__colors {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.question-builder__color-chip {
-  min-height: 40px;
-  padding: 0 14px;
-  border: 1px solid #eadbe3;
-  border-radius: 999px;
-  background: #fff;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #5f555c;
-  font-size: var(--font-small);
-  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
-}
-
-.question-builder__color-chip--active {
-  border-color: var(--chip-color);
-  background: #fff7fa;
-  color: #17111b;
-}
-
-.question-builder__color-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--chip-color);
-  flex: 0 0 auto;
-}
-
 .question-builder__meta-field--weight {
   display: flex;
   flex-direction: column;
@@ -1134,6 +1178,11 @@ const sendAiCommand = async () => {
   font-size: var(--font-small);
 }
 
+.question-builder__weight--muted {
+  border-color: #efe4e8;
+  color: #9f9097;
+}
+
 .question-builder__desc {
   margin: 0 0 16px;
   color: #b3a5ad;
@@ -1141,11 +1190,14 @@ const sendAiCommand = async () => {
   line-height: 1.4;
 }
 
+.question-builder__option-card {
+  margin-bottom: 14px;
+}
+
 .question-builder__option {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  margin-bottom: 14px;
   font-size: var(--font-body);
   line-height: 1.35;
   color: #17111b;
@@ -1154,6 +1206,7 @@ const sendAiCommand = async () => {
 .question-builder__option-input {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 40px;
   border: 0;
   border-bottom: 1px solid #ecdbe3;
   background: transparent;
@@ -1161,11 +1214,55 @@ const sendAiCommand = async () => {
   font-size: var(--font-body);
 }
 
+.question-builder__option-side {
+  width: 220px;
+  flex: 0 0 220px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.question-builder__option-side :deep(.dropdown) {
+  width: 100%;
+}
+
+.question-builder__option-side :deep(.dropdown__trigger) {
+  min-height: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #fff;
+}
+
 .question-builder__option-remove {
   flex: 0 0 auto;
   color: #ea6f9b;
   font-size: var(--ui-small-font);
   white-space: nowrap;
+}
+
+.question-builder__answer-weight {
+  width: calc(100% - 38px);
+  min-height: 42px;
+  margin-top: 8px;
+  margin-left: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--answer-color) 18%, #ffffff);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #3b2d35;
+  font-size: var(--font-small);
+}
+
+.question-builder__answer-weight span {
+  font-weight: 500;
+}
+
+.question-builder__answer-weight strong {
+  color: var(--answer-color);
+  font-weight: 600;
 }
 
 .question-builder__link,

@@ -4,7 +4,7 @@ import {
   nitroSyncRequestTimeoutMs,
 } from './nitroSyncApi'
 
-const getEmployeesEndpoint = buildNitroSyncEndpoint('/v1/employees/getAll')
+const getEmployeesEndpoint = buildNitroSyncEndpoint('/v1/employees/get-all')
 
 const normalizeEmployeesResponse = (response) => {
   const responseData = response?.data
@@ -21,18 +21,15 @@ const normalizeEmployeesResponse = (response) => {
 }
 
 export const getNitroSyncEmployees = async (relatedCompany, { timeout = nitroSyncRequestTimeoutMs } = {}) => {
-  const response = await axios.post(
-    getEmployeesEndpoint,
-    {
+  const response = await axios.get(getEmployeesEndpoint, {
+    params: {
       related_company: String(relatedCompany || '').trim(),
     },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      timeout,
+    headers: {
+      'Content-Type': 'application/json',
     },
-  )
+    timeout,
+  })
 
   return {
     code: response?.data?.code || '',

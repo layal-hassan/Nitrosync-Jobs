@@ -161,34 +161,37 @@ onMounted(() => {
         </nav>
 
         <div class="topbar-actions">
-          <button class="icon-btn" aria-label="Search">
-            <svg class="icon-svg icon-svg--search" viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="10.5" cy="10.5" r="7.25" fill="none" stroke="currentColor" stroke-width="2" />
-              <path d="M16.2 16.2 21 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-            </svg>
-          </button>
-          <div class="quick-icons">
-            <button class="icon-btn icon-btn--chip" aria-label="Settings">
-              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M10.35 3.84h3.3l.44 2.03c.38.12.74.27 1.08.46l1.86-.93 2.33 2.33-.93 1.86c.19.34.34.7.46 1.08l2.03.44v3.3l-2.03.44c-.12.38-.27.74-.46 1.08l.93 1.86-2.33 2.33-1.86-.93c-.34.19-.7.34-1.08.46l-.44 2.03h-3.3l-.44-2.03a6.86 6.86 0 0 1-1.08-.46l-1.86.93-2.33-2.33.93-1.86a6.86 6.86 0 0 1-.46-1.08l-2.03-.44v-3.3l2.03-.44c.12-.38.27-.74.46-1.08l-.93-1.86L7.7 5.4l1.86.93c.34-.19.7-.34 1.08-.46l.44-2.03Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" />
-                <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.9" />
+          <div class="topbar-actions__panel">
+            <button class="icon-btn icon-btn--surface" aria-label="Search">
+              <svg class="icon-svg icon-svg--search" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="10.5" cy="10.5" r="7.25" fill="none" stroke="currentColor" stroke-width="2" />
+                <path d="M16.2 16.2 21 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
               </svg>
             </button>
-            <button class="icon-btn icon-btn--chip" aria-label="Notifications">
-              <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M8.25 17.25h7.5c-.85-1-1.25-2.2-1.25-3.6v-1.4a2.5 2.5 0 1 0-5 0v1.4c0 1.4-.4 2.6-1.25 3.6Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" />
-                <path d="M10.35 19.15a1.95 1.95 0 0 0 3.3 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-                <path d="M12 4.2v1.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-              </svg>
-            </button>
-          </div>
-          <div class="profile-chip">
-            <div class="profile-chip__avatar">{{ profileInitials }}</div>
-            <div>
-              <div class="profile-chip__name">{{ profile.name }}</div>
-              <div class="profile-chip__mail">{{ profile.email }}</div>
+            <div class="quick-icons">
+              <button class="icon-btn icon-btn--chip" aria-label="Settings">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M10.35 3.84h3.3l.44 2.03c.38.12.74.27 1.08.46l1.86-.93 2.33 2.33-.93 1.86c.19.34.34.7.46 1.08l2.03.44v3.3l-2.03.44c-.12.38-.27.74-.46 1.08l.93 1.86-2.33 2.33-1.86-.93c-.34.19-.7.34-1.08.46l-.44 2.03h-3.3l-.44-2.03a6.86 6.86 0 0 1-1.08-.46l-1.86.93-2.33-2.33.93-1.86a6.86 6.86 0 0 1-.46-1.08l-2.03-.44v-3.3l2.03-.44c.12-.38.27-.74.46-1.08l-.93-1.86L7.7 5.4l1.86.93c.34-.19.7-.34 1.08-.46l.44-2.03Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" />
+                  <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.9" />
+                </svg>
+              </button>
+              <button class="icon-btn icon-btn--chip" aria-label="Notifications">
+                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 4.75a3.25 3.25 0 0 0-3.25 3.25v1.32c0 .85-.22 1.69-.64 2.43l-1.06 1.84a1 1 0 0 0 .87 1.5h8.16a1 1 0 0 0 .87-1.5l-1.06-1.84a4.93 4.93 0 0 1-.64-2.43V8A3.25 3.25 0 0 0 12 4.75Z" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round" />
+                  <path d="M10.2 17.5a1.8 1.8 0 0 0 3.6 0" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" />
+                  <path d="M12 3.25v1.5" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" />
+                </svg>
+              </button>
             </div>
-            <span class="profile-chip__caret"></span>
+            <div class="profile-chip">
+              <div class="profile-chip__avatar">{{ profileInitials }}</div>
+              <div class="profile-chip__meta">
+                <div class="profile-chip__eyebrow">Workspace member</div>
+                <div class="profile-chip__name">{{ profile.name }}</div>
+                <div class="profile-chip__mail">{{ profile.email }}</div>
+              </div>
+              <span class="profile-chip__caret"></span>
+            </div>
           </div>
         </div>
       </header>

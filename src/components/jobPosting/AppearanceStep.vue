@@ -20,12 +20,12 @@ const props = defineProps({
   },
   companyName: {
     type: String,
-    default: 'NitroSync',
+    default: '',
   },
 })
 
 const previewTitle = computed(() => props.jobDetails.jobTitle || 'Job title will be show here...')
-const previewMetaPrimary = computed(() => props.companyName || 'NitroSync')
+const previewMetaPrimary = computed(() => props.companyName || 'Company name')
 const previewMetaSecondary = computed(() => props.additionalInfo.contractType || 'Full-Time Job')
 const previewDescription = computed(() =>
   props.jobDetails.description

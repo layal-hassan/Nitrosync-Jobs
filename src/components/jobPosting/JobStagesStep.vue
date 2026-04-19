@@ -71,6 +71,8 @@ const stageActionMessage = ref('')
 const stageActionError = ref('')
 
 const stageRows = ref(props.form.stageRows)
+const stageManagementByStage = ref(props.form.stageManagementByStage || {})
+const currentStageKey = ref(props.form.currentStageKey || '')
 const companyId = computed(() =>
   String(props.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154').trim() || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
 )
@@ -124,6 +126,7 @@ const showInlineScoreBuilder = computed(() => screen.value <= 2)
 const showSavedScoreCard = computed(() => screen.value >= 10)
 const visibleStageRows = computed(() => Array.isArray(stageRows.value) ? stageRows.value : [])
 const primaryStage = computed(() => visibleStageRows.value[0] || null)
+const activeStageRows = computed(() => visibleStageRows.value.filter((item) => item.enabled))
 const scoreCardOptions = computed(() => [
   { label: 'Please select', value: '' },
   ...savedScorecards.value.map((item) => ({
@@ -133,6 +136,9 @@ const scoreCardOptions = computed(() => [
 ])
 const selectedScoreCardSummary = computed(() =>
   savedScorecards.value.find((item) => item.uuid === selectedScoreCard.value) || null,
+)
+const currentStageLabel = computed(() =>
+  visibleStageRows.value.find((item) => getStageKey(item) === currentStageKey.value)?.label || '',
 )
 const scoreCardQuestionsValue = computed(() =>
   selectedQuestions.value.map((item) => item.label).filter(Boolean).join('\n'),
@@ -164,6 +170,169 @@ const createUuid = () =>
       const value = char === 'x' ? random : (random & 0x3) | 0x8
       return value.toString(16)
     })
+
+const createEmptyStageManagement = () => ({
+  scoreCardUuids: [],
+  assessmentTitles: [],
+  automatedActionUuids: [],
+})
+
+const getStageKey = (item) =>
+  String(item?.jobStageUuid || item?.label || '').trim()
+
+const normalizeStageManagement = (item) => ({
+  scoreCardUuids: Array.isArray(item?.scoreCardUuids) ? [...new Set(item.scoreCardUuids.filter(Boolean))] : [],
+  assessmentTitles: Array.isArray(item?.assessmentTitles) ? [...new Set(item.assessmentTitles.filter(Boolean))] : [],
+  automatedActionUuids: Array.isArray(item?.automatedActionUuids) ? [...new Set(item.automatedActionUuids.filter(Boolean))] : [],
+})
+
+const syncStageManagement = (rows = visibleStageRows.value) => {
+  const next = {}
+
+  rows.forEach((item) => {
+    const key = getStageKey(item)
+    if (!key) return
+    next[key] = normalizeStageManagement(stageManagementByStage.value[key] || createEmptyStageManagement())
+  })
+
+  stageManagementByStage.value = next
+  props.form.stageManagementByStage = next
+
+  if (!next[currentStageKey.value]) {
+    currentStageKey.value = activeStageRows.value[0] ? getStageKey(activeStageRows.value[0]) : ''
+    props.form.currentStageKey = currentStageKey.value
+  }
+}
+
+const getStageManagement = (stageOrKey) => {
+  const key = typeof stageOrKey === 'string' ? stageOrKey : getStageKey(stageOrKey)
+  return stageManagementByStage.value[key] || createEmptyStageManagement()
+}
+
+const updateStageManagement = (stageOrKey, updater) => {
+  const key = typeof stageOrKey === 'string' ? stageOrKey : getStageKey(stageOrKey)
+  if (!key) return
+
+  const current = normalizeStageManagement(getStageManagement(key))
+  const next = normalizeStageManagement(updater(current))
+
+  stageManagementByStage.value = {
+    ...stageManagementByStage.value,
+    [key]: next,
+  }
+  props.form.stageManagementByStage = stageManagementByStage.value
+}
+
+const setCurrentStage = (stageOrKey) => {
+  currentStageKey.value = typeof stageOrKey === 'string' ? stageOrKey : getStageKey(stageOrKey)
+  props.form.currentStageKey = currentStageKey.value
+}
+
+const getStageScoreCards = (stage) => {
+  const management = getStageManagement(stage)
+  return management.scoreCardUuids
+    .map((uuid) => savedScorecards.value.find((item) => item.uuid === uuid))
+    .filter(Boolean)
+}
+
+const getStageAssessments = (stage) => {
+  const management = getStageManagement(stage)
+  return management.assessmentTitles
+    .map((title) => assessmentOptions.find((item) => item.title === title))
+    .filter(Boolean)
+}
+
+const getStageAutomatedActions = (stage) => {
+  const management = getStageManagement(stage)
+  return management.automatedActionUuids
+    .map((uuid) => savedAutomatedActions.value.find((item) => item.automatedActionUuid === uuid))
+    .filter(Boolean)
+}
+
+const hasStageScoreCard = (stageOrKey, uuid) =>
+  getStageManagement(stageOrKey).scoreCardUuids.includes(uuid)
+
+const hasStageAssessment = (stageOrKey, title) =>
+  getStageManagement(stageOrKey).assessmentTitles.includes(title)
+
+const hasStageAutomatedAction = (stageOrKey, uuid) =>
+  getStageManagement(stageOrKey).automatedActionUuids.includes(uuid)
+
+const toggleStageScoreCard = (stageOrKey, uuid) => {
+  if (!uuid) return
+
+  updateStageManagement(stageOrKey, (management) => ({
+    ...management,
+    scoreCardUuids: hasStageScoreCard(stageOrKey, uuid)
+      ? management.scoreCardUuids.filter((item) => item !== uuid)
+      : [...management.scoreCardUuids, uuid],
+  }))
+  selectedScoreCard.value = uuid
+  props.form.selectedScoreCard = selectedScoreCard.value
+}
+
+const toggleStageAssessment = (stageOrKey, title) => {
+  if (!title) return
+
+  updateStageManagement(stageOrKey, (management) => ({
+    ...management,
+    assessmentTitles: hasStageAssessment(stageOrKey, title)
+      ? management.assessmentTitles.filter((item) => item !== title)
+      : [...management.assessmentTitles, title],
+  }))
+}
+
+const toggleStageAutomatedAction = (stageOrKey, uuid) => {
+  if (!uuid) return
+
+  updateStageManagement(stageOrKey, (management) => ({
+    ...management,
+    automatedActionUuids: hasStageAutomatedAction(stageOrKey, uuid)
+      ? management.automatedActionUuids.filter((item) => item !== uuid)
+      : [...management.automatedActionUuids, uuid],
+  }))
+}
+
+const removeScoreCardAssignments = (uuid) => {
+  Object.keys(stageManagementByStage.value).forEach((key) => {
+    updateStageManagement(key, (management) => ({
+      ...management,
+      scoreCardUuids: management.scoreCardUuids.filter((item) => item !== uuid),
+    }))
+  })
+}
+
+const removeAutomatedActionAssignments = (uuid) => {
+  Object.keys(stageManagementByStage.value).forEach((key) => {
+    updateStageManagement(key, (management) => ({
+      ...management,
+      automatedActionUuids: management.automatedActionUuids.filter((item) => item !== uuid),
+    }))
+  })
+}
+
+const openStageScoreCardManager = (stage) => {
+  setCurrentStage(stage)
+  resetScoreCardFeedback()
+  screen.value = 3
+}
+
+const openStageScoreCardBuilder = (stage) => {
+  setCurrentStage(stage)
+  resetScoreCardFeedback()
+  screen.value = 4
+}
+
+const openStageAssessments = (stage) => {
+  setCurrentStage(stage)
+  screen.value = 12
+}
+
+const openStageAutomatedActions = (stage) => {
+  setCurrentStage(stage)
+  resetAutomatedActionFeedback()
+  screen.value = 13
+}
 
 const fetchScoreCards = async () => {
   scoreCardsLoading.value = true
@@ -242,7 +411,7 @@ const finishFlow = () => {
 }
 
 const closeOverlayToBoard = () => {
-  screen.value = 0
+  screen.value = activeStageRows.value.length ? 1 : 0
   props.form.screen = screen.value
 }
 
@@ -277,12 +446,17 @@ const openBuilder = async () => {
 }
 
 const toggleStage = (jobStageUuid, label) => {
-  stageRows.value = stageRows.value.map((item) =>
+  const nextRows = stageRows.value.map((item) =>
     (item.jobStageUuid && item.jobStageUuid === jobStageUuid) || (!item.jobStageUuid && item.label === label)
       ? { ...item, enabled: !item.enabled }
       : item,
   )
+  stageRows.value = nextRows
   props.form.stageRows = stageRows.value
+  const nextActiveStage = nextRows.find((item) => item.enabled)
+  if (!nextRows.some((item) => getStageKey(item) === currentStageKey.value && item.enabled)) {
+    setCurrentStage(nextActiveStage || '')
+  }
 }
 
 const syncStageRowsFromWorkflow = (rows) => {
@@ -373,7 +547,7 @@ const fetchAutomatedActions = async () => {
   resetAutomatedActionFeedback()
 
   try {
-    const rows = await fetchNitroSyncAutomatedActions(companyId)
+    const rows = await fetchNitroSyncAutomatedActions(companyId.value)
     savedAutomatedActions.value = rows.map(createAutomatedActionSummary)
     props.form.savedAutomatedActions = savedAutomatedActions.value
   } catch (error) {
@@ -488,6 +662,12 @@ const saveAutomatedAction = async () => {
     automatedActionError.value = ''
     await fetchAutomatedActions()
     automatedActionDraft.value.automatedActionUuid = payload.automated_action_uuid
+    if (currentStageKey.value) {
+      updateStageManagement(currentStageKey.value, (management) => ({
+        ...management,
+        automatedActionUuids: [...management.automatedActionUuids.filter((item) => item !== payload.automated_action_uuid), payload.automated_action_uuid],
+      }))
+    }
     props.form.automatedActionDraft = automatedActionDraft.value
     screen.value = 1
   } catch (error) {
@@ -519,6 +699,7 @@ const removeAutomatedAction = async (item) => {
     automatedActionMessage.value = result.message || 'Automated action deleted successfully.'
     automatedActionError.value = ''
     savedAutomatedActions.value = savedAutomatedActions.value.filter((entry) => entry.automatedActionUuid !== item.automatedActionUuid)
+    removeAutomatedActionAssignments(item.automatedActionUuid)
     props.form.savedAutomatedActions = savedAutomatedActions.value
   } catch (error) {
     console.error('Failed to delete automated action', error)
@@ -593,6 +774,12 @@ const saveScoreCard = async () => {
       },
       ...savedScorecards.value.filter((item) => item.uuid !== payload.score_card_uuid),
     ]
+    if (currentStageKey.value) {
+      updateStageManagement(currentStageKey.value, (management) => ({
+        ...management,
+        scoreCardUuids: [...management.scoreCardUuids.filter((item) => item !== payload.score_card_uuid), payload.score_card_uuid],
+      }))
+    }
     screen.value = 10
   } catch (error) {
     console.error('Failed to create score card', {
@@ -619,6 +806,7 @@ const deleteScoreCard = async (item) => {
 
   if (item.isFallback) {
     savedScorecards.value = savedScorecards.value.filter((card) => card.uuid !== item.uuid)
+    removeScoreCardAssignments(item.uuid)
     if (selectedScoreCard.value === item.uuid) {
       selectedScoreCard.value = savedScorecards.value[0]?.uuid || ''
       props.form.selectedScoreCard = selectedScoreCard.value
@@ -636,6 +824,7 @@ const deleteScoreCard = async (item) => {
     scoreCardActionMessage.value = result.message || 'Score card deleted successfully.'
     scoreCardActionError.value = ''
     savedScorecards.value = savedScorecards.value.filter((card) => card.uuid !== item.uuid)
+    removeScoreCardAssignments(item.uuid)
 
     if (selectedScoreCard.value === item.uuid) {
       selectedScoreCard.value = savedScorecards.value[0]?.uuid || ''
@@ -684,8 +873,17 @@ watch(newStageName, (value) => {
 })
 
 watch(stageRows, (value) => {
+  syncStageManagement(value)
   props.form.stageRows = value
 }, { deep: true })
+
+watch(stageManagementByStage, (value) => {
+  props.form.stageManagementByStage = value
+}, { deep: true })
+
+watch(currentStageKey, (value) => {
+  props.form.currentStageKey = value
+})
 
 watch(questionInput, (value) => {
   props.form.questionInput = value
@@ -728,6 +926,8 @@ watch(
     fetchAutomatedActions()
   },
 )
+
+syncStageManagement(visibleStageRows.value)
 </script>
 
 <template>
@@ -798,92 +998,124 @@ watch(
         </template>
 
         <template v-else>
-          <div class="stage-module">
-            <div class="stage-module__header">
-              <span class="stage-module__bullet stage-module__bullet--pink"></span>
-              <div>
-                <strong>Score Cards</strong>
-                <p>
-                  Build a reusable scorecard for this stage so interviewers evaluate candidates against the same
-                  criteria, scoring rules, and feedback areas.
-                </p>
-              </div>
-            </div>
-
-            <div v-if="showSavedScoreCard" class="scorecard-summary-card">
-              <div class="scorecard-summary-card__top">
-                <div>
-                  <strong>{{ selectedScoreCardSummary?.title || 'No score card selected' }}</strong>
-                  <p v-if="selectedScoreCardSummary?.owner" class="scorecard-summary-card__owner">{{ selectedScoreCardSummary.owner }}</p>
+          <div v-if="activeStageRows.length" class="active-stage-stack">
+            <article
+              v-for="stage in activeStageRows"
+              :key="stage.jobStageUuid || stage.label"
+              class="active-stage-card"
+            >
+              <div class="active-stage-card__head">
+                <div class="active-stage-card__identity">
+                  <span class="stage-shell__handle" aria-hidden="true"></span>
+                  <span class="active-stage-card__pill">{{ stage.label }}</span>
                 </div>
-                <button type="button" class="scorecard-summary-card__menu">...</button>
+                <span class="active-stage-card__meta">
+                  {{ getStageScoreCards(stage).length }} score cards, {{ getStageAssessments(stage).length }} assessments, {{ getStageAutomatedActions(stage).length }} actions
+                </span>
               </div>
 
-              <div class="scorecard-summary-card__tags">
-                <span v-for="(tag, index) in scoreSummaryTags" :key="`${tag}-${index}`">{{ tag }}</span>
+              <div class="stage-module">
+                <div class="stage-module__header">
+                  <span class="stage-module__bullet stage-module__bullet--pink"></span>
+                  <div>
+                    <strong>Score Cards</strong>
+                    <p>
+                      Build a reusable scorecard for this stage so interviewers evaluate candidates against the same
+                      criteria, scoring rules, and feedback areas.
+                    </p>
+                  </div>
+                </div>
+
+                <div v-if="getStageScoreCards(stage).length" class="scorecard-summary-list">
+                  <div
+                    v-for="item in getStageScoreCards(stage)"
+                    :key="item.uuid"
+                    class="scorecard-summary-card"
+                  >
+                    <div class="scorecard-summary-card__top">
+                      <div>
+                        <strong>{{ item.title }}</strong>
+                        <p v-if="item.owner" class="scorecard-summary-card__owner">{{ item.owner }}</p>
+                      </div>
+                    </div>
+
+                    <div class="scorecard-summary-card__tags">
+                      <span v-for="(tag, index) in scoreSummaryTags" :key="`${item.uuid}-${tag}-${index}`">{{ tag }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <p v-else class="stage-module__empty">No score cards assigned to this stage yet.</p>
+
+                <button type="button" class="stage-module__add" @click="openStageScoreCardManager(stage)">
+                  Manage Score Cards
+                </button>
               </div>
-            </div>
 
-            <div v-else-if="showInlineScoreBuilder" class="inline-score-builder">
-              <label>Score card</label>
-              <Dropdown
-                v-model="selectedScoreCard"
-                :options="scoreCardOptions"
-                :placeholder="scoreCardsLoading ? 'Loading score cards...' : 'Please select'"
-              />
+              <div class="stage-module">
+                <div class="stage-module__header">
+                  <span class="stage-module__bullet stage-module__bullet--slate"></span>
+                  <div>
+                    <strong>Assessments</strong>
+                    <p>
+                      Add assessments that help you verify candidate skills with structured tests, practical tasks,
+                      and stage-based evaluation requirements.
+                    </p>
+                  </div>
+                </div>
 
-              <label class="inline-score-builder__check" @click="screen = 4">
-                <span class="inline-score-builder__check-icon" aria-hidden="true"></span>
-                Add new Score Card
-              </label>
-              <p v-if="scoreCardsError" class="inline-score-builder__helper inline-score-builder__helper--warning">{{ scoreCardsError }}</p>
-            </div>
+                <div v-if="getStageAssessments(stage).length" class="assessment-summary-list">
+                  <div
+                    v-for="item in getStageAssessments(stage)"
+                    :key="item.title"
+                    class="assessment-summary-card"
+                  >
+                    <span class="assessment-summary-card__icon" :style="{ '--assessment-color': item.color }"></span>
+                    <div>
+                      <strong>{{ item.title }}</strong>
+                      <p>Assessment is active for this stage.</p>
+                    </div>
+                  </div>
+                </div>
 
-            <button type="button" class="stage-module__add" @click="screen = 4">
-              Add ScoreCard
-            </button>
+                <p v-else class="stage-module__empty">No assessments assigned to this stage yet.</p>
+
+                <button type="button" class="stage-module__add" @click="openStageAssessments(stage)">Manage Assessments</button>
+              </div>
+
+              <div class="stage-module">
+                <div class="stage-module__header">
+                  <span class="stage-module__bullet stage-module__bullet--pink"></span>
+                  <div>
+                    <strong>Automated Actions</strong>
+                    <p>
+                      Define actions that move candidates automatically, assign owners, and trigger communication at the
+                      right moment in the workflow.
+                    </p>
+                  </div>
+                </div>
+
+                <div v-if="getStageAutomatedActions(stage).length" class="automated-summary-list">
+                  <div
+                    v-for="item in getStageAutomatedActions(stage)"
+                    :key="item.automatedActionUuid"
+                    class="automated-summary-card"
+                  >
+                    <strong>{{ item.condition }}</strong>
+                    <p>{{ item.assignedRecruiter || 'No recruiter assigned' }}</p>
+                  </div>
+                </div>
+
+                <p v-else class="stage-module__empty">No automated actions assigned to this stage yet.</p>
+
+                <button type="button" class="stage-module__add" @click="openStageAutomatedActions(stage)">Manage Automated Actions</button>
+              </div>
+            </article>
           </div>
 
-          <div class="stage-module">
-            <div class="stage-module__header">
-              <span class="stage-module__bullet stage-module__bullet--slate"></span>
-              <div>
-                <strong>Assessments</strong>
-                <p>
-                  Add assessments that help you verify candidate skills with structured tests, practical tasks,
-                  and stage-based evaluation requirements.
-                </p>
-              </div>
-            </div>
-
-            <button type="button" class="stage-module__add" @click="screen = 12">Add Assessment</button>
-          </div>
-
-          <div class="stage-module">
-            <div class="stage-module__header">
-              <span class="stage-module__bullet stage-module__bullet--pink"></span>
-              <div>
-                <strong>Automated Actions</strong>
-                <p>
-                  Define actions that move candidates automatically, assign owners, and trigger communication at the
-                  right moment in the workflow.
-                </p>
-              </div>
-            </div>
-
-            <div v-if="savedAutomatedActions.length" class="automated-summary-list">
-              <div
-                v-for="item in savedAutomatedActions"
-                :key="item.automatedActionUuid"
-                class="automated-summary-card"
-              >
-                <strong>{{ item.condition }}</strong>
-                <p>{{ item.assignedRecruiter || 'No recruiter assigned' }}</p>
-              </div>
-            </div>
-
-            <button type="button" class="stage-module__add" @click="screen = 13">Add Automated Action</button>
-          </div>
+          <p v-else class="stage-module__empty stage-module__empty--board">
+            Turn on at least one stage to manage score cards, assessments, and automated actions.
+          </p>
         </template>
 
         <div class="stage-shell__append-row">
@@ -937,7 +1169,10 @@ watch(
         <template v-if="screen === 3">
           <div class="job-stages-modal__title-wrap">
             <div class="job-stages-modal__icon"></div>
-            <h4>Scores Saved</h4>
+            <div>
+              <h4>Manage Score Cards</h4>
+              <p v-if="currentStageLabel" class="job-stages-modal__context">{{ currentStageLabel }}</p>
+            </div>
           </div>
 
           <div class="saved-scorecards">
@@ -948,13 +1183,15 @@ watch(
             </div>
 
             <div v-for="item in savedScorecards" :key="item.uuid" class="saved-scorecards__row">
-              <button type="button" class="saved-scorecards__select" @click="selectedScoreCard = item.uuid">
-                <span class="saved-scorecards__radio" :class="{ 'saved-scorecards__radio--active': selectedScoreCard === item.uuid }"></span>
+              <button type="button" class="saved-scorecards__select" @click="toggleStageScoreCard(currentStageKey, item.uuid)">
+                <span class="saved-scorecards__radio" :class="{ 'saved-scorecards__radio--active': hasStageScoreCard(currentStageKey, item.uuid) }"></span>
               </button>
               <span>{{ item.title }}</span>
               <span>{{ item.owner }}</span>
               <div class="saved-scorecards__actions">
-                <button type="button" @click="selectedScoreCard = item.uuid">{{ item.action }}</button>
+                <button type="button" @click="toggleStageScoreCard(currentStageKey, item.uuid)">
+                  {{ hasStageScoreCard(currentStageKey, item.uuid) ? 'Remove' : 'Add' }}
+                </button>
                 <button
                   type="button"
                   :disabled="deletingScoreCardUuid === item.uuid"
@@ -969,13 +1206,16 @@ watch(
           <p v-if="scoreCardActionMessage" class="scorecard-api-feedback scorecard-api-feedback--success">{{ scoreCardActionMessage }}</p>
           <p v-if="scoreCardActionError" class="scorecard-api-feedback scorecard-api-feedback--error">{{ scoreCardActionError }}</p>
 
-          <button type="button" class="modal-primary" @click="screen = 4">Next</button>
+          <button type="button" class="modal-primary" @click="openStageScoreCardBuilder(currentStageKey)">Create New Score Card</button>
         </template>
 
         <template v-else-if="screen >= 4 && screen <= 9">
           <div class="job-stages-modal__title-wrap">
             <div class="job-stages-modal__icon"></div>
-            <h4>Add New Score Card</h4>
+            <div>
+              <h4>Add New Score Card</h4>
+              <p v-if="currentStageLabel" class="job-stages-modal__context">{{ currentStageLabel }}</p>
+            </div>
           </div>
 
           <div class="wizard-mini-tabs wizard-mini-tabs--scorecard">
@@ -1175,7 +1415,10 @@ watch(
         <template v-else-if="screen === 12">
           <div class="job-stages-modal__title-wrap">
             <div class="job-stages-modal__icon"></div>
-            <h4>Add Assessment</h4>
+            <div>
+              <h4>Manage Assessments</h4>
+              <p v-if="currentStageLabel" class="job-stages-modal__context">{{ currentStageLabel }}</p>
+            </div>
           </div>
 
           <div class="assessment-list">
@@ -1185,7 +1428,15 @@ watch(
                 <strong>{{ item.title }}</strong>
                 <p>A short description about the assessment and the purpose it serves for the hiring process.</p>
               </div>
-              <button type="button" :style="{ color: item.color }">Add</button>
+              <button
+                type="button"
+                class="assessment-list__action"
+                :class="{ 'assessment-list__action--active': hasStageAssessment(currentStageKey, item.title) }"
+                :style="{ color: item.color }"
+                @click="toggleStageAssessment(currentStageKey, item.title)"
+              >
+                {{ hasStageAssessment(currentStageKey, item.title) ? 'Remove' : 'Add' }}
+              </button>
             </div>
           </div>
 
@@ -1195,7 +1446,10 @@ watch(
         <template v-else-if="screen === 13 || screen === 14">
           <div class="job-stages-modal__title-wrap">
             <div class="job-stages-modal__icon"></div>
-            <h4>{{ screen === 13 ? 'Add Automated Action' : 'New Automated Action' }}</h4>
+            <div>
+              <h4>{{ screen === 13 ? 'Manage Automated Actions' : 'New Automated Action' }}</h4>
+              <p v-if="currentStageLabel" class="job-stages-modal__context">{{ currentStageLabel }}</p>
+            </div>
           </div>
 
           <div class="modal-form modal-form--automated">
@@ -1210,6 +1464,9 @@ watch(
                   <p>{{ item.actions.join(', ') || 'No actions selected' }}</p>
                 </div>
                 <div class="automated-saved-list__actions">
+                  <button type="button" @click="toggleStageAutomatedAction(currentStageKey, item.automatedActionUuid)">
+                    {{ hasStageAutomatedAction(currentStageKey, item.automatedActionUuid) ? 'Remove' : 'Attach' }}
+                  </button>
                   <button type="button" @click="editAutomatedAction(item)">Edit</button>
                   <button
                     type="button"
@@ -1460,6 +1717,49 @@ watch(
   background: #fcfbfc;
 }
 
+.active-stage-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.active-stage-card {
+  padding: 16px;
+  border: 1px solid #f2e7ec;
+  border-radius: 16px;
+  background: #fff;
+}
+
+.active-stage-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.active-stage-card__identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.active-stage-card__pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #fff1f6;
+  color: #d93f80;
+  font-size: var(--ui-small-font);
+  font-weight: 600;
+}
+
+.active-stage-card__meta {
+  font-size: var(--ui-meta-font);
+  color: #aa96a1;
+}
+
 .stage-module__header {
   display: flex;
   gap: 8px;
@@ -1495,6 +1795,20 @@ watch(
   color: #c7bcc1;
 }
 
+.stage-module__empty {
+  margin: 12px 0 0;
+  font-size: var(--ui-meta-font);
+  line-height: 1.4;
+  color: #ad9aa3;
+}
+
+.stage-module__empty--board {
+  padding: 18px;
+  border: 1px dashed #eadde3;
+  border-radius: 12px;
+  background: #fdfbfc;
+}
+
 .automated-summary-list,
 .automated-saved-list {
   display: grid;
@@ -1502,8 +1816,16 @@ watch(
   margin-top: 12px;
 }
 
+.assessment-summary-list,
+.scorecard-summary-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .automated-summary-card,
-.automated-saved-list__row {
+.automated-saved-list__row,
+.assessment-summary-card {
   padding: 10px 12px;
   border: 1px solid #efe4e8;
   border-radius: 8px;
@@ -1522,6 +1844,41 @@ watch(
   margin: 4px 0 0;
   font-size: var(--ui-tiny-font);
   color: #a4939d;
+}
+
+.assessment-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.assessment-summary-card strong {
+  display: block;
+  font-size: var(--ui-meta-font);
+  color: #3b2d35;
+}
+
+.assessment-summary-card p {
+  margin: 4px 0 0;
+  font-size: var(--ui-tiny-font);
+  color: #a4939d;
+}
+
+.assessment-summary-card__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--assessment-color) 14%, #ffffff);
+  position: relative;
+}
+
+.assessment-summary-card__icon::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border-radius: 6px;
+  background: var(--assessment-color);
 }
 
 .automated-saved-list__row {
@@ -1856,6 +2213,12 @@ watch(
   text-transform: capitalize;
 }
 
+.job-stages-modal__context {
+  margin: 4px 0 0;
+  font-size: var(--ui-meta-font);
+  color: #c18aa0;
+}
+
 .job-stages-modal__icon {
   width: 18px;
   height: 18px;
@@ -1941,6 +2304,15 @@ watch(
 .saved-scorecards__radio--active {
   background: #ea4f8d;
 }
+
+.assessment-list__action {
+  font-size: var(--ui-meta-font);
+  font-weight: 600;
+}
+
+.assessment-list__action--active {
+  opacity: 0.7;
+ }
 
 .scorecard-api-feedback {
   margin: 10px 0 0;

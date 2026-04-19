@@ -8,6 +8,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  job: {
+    type: Object,
+    default: null,
+  },
 })
 
 const emit = defineEmits(['close', 'next'])
@@ -18,7 +22,6 @@ const employeesLoading = ref(false)
 const employeesError = ref('')
 const hasLoadedEmployees = ref(false)
 
-const companyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
 const accents = ['pink', 'blue', 'green']
 
 const normalizeLabel = (value, fallback = '-') => {
@@ -72,6 +75,14 @@ const mapEmployeeRow = (employee, index) => {
 }
 
 const fetchEmployees = async () => {
+  const companyId = String(props.job?.relatedCompany || '').trim()
+
+  if (!companyId) {
+    employeesError.value = 'This job is missing related company, so employee list cannot be loaded.'
+    employees.value = []
+    return
+  }
+
   employeesLoading.value = true
   employeesError.value = ''
 

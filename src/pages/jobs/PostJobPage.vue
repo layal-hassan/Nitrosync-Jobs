@@ -324,6 +324,82 @@ const getSelectedTemplateDraft = () => {
   return selectedOption?.draft || null
 }
 
+const normalizeCompanyLabel = (value) => String(value ?? '').trim()
+const invalidCompanyLabels = new Set(['off', 'optional', 'mandatory', 'none', 'null', 'undefined'])
+const normalizeMeaningfulCompanyLabel = (value) => {
+  const normalized = normalizeCompanyLabel(value)
+  return normalized && !invalidCompanyLabels.has(normalized.toLowerCase()) ? normalized : ''
+}
+
+const getStoredCompanyName = () => {
+  const storageKeys = [
+    'nitrosync-user',
+    'nitrosync-profile',
+    'user',
+    'profile',
+    'auth-user',
+    'currentUser',
+  ]
+
+  for (const key of storageKeys) {
+    for (const storage of [globalThis.localStorage, globalThis.sessionStorage]) {
+      try {
+        const rawValue = storage?.getItem?.(key)
+        if (!rawValue) continue
+
+        const parsed = JSON.parse(rawValue)
+        const companyName = normalizeMeaningfulCompanyLabel(
+          parsed?.company_name
+          ?? parsed?.companyName
+          ?? parsed?.company?.company_name
+          ?? parsed?.company?.companyName
+          ?? parsed?.company?.name
+          ?? parsed?.organization_name
+          ?? parsed?.organizationName
+          ?? parsed?.organization?.name
+          ?? parsed?.employer_name
+          ?? parsed?.employerName
+          ?? parsed?.related_company_name,
+        )
+
+        if (companyName) {
+          return companyName
+        }
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return ''
+}
+
+const currentCompanyName = computed(() =>
+  normalizeMeaningfulCompanyLabel(
+    getStoredCompanyName()
+    || appForm.value.company
+    || '',
+  ),
+)
+
+const pageModeLabel = computed(() => {
+  if (isViewMode.value) return 'View Job'
+  if (isEditMode.value) return 'Edit Job'
+  return 'Post a Job'
+})
+
+const pageSubtitle = computed(() => {
+  if (isViewMode.value) return 'Review the saved job details and workflow configuration.'
+  if (isEditMode.value) return 'Update only the sections you need. Your existing job data is already loaded.'
+  return 'Enter information to complete entering this job'
+})
+
+const starterPrimaryLabel = computed(() => (isEditMode.value ? 'Continue editing' : 'Next step'))
+const starterScratchLabel = computed(() => (isEditMode.value ? 'Edit without template' : 'start from scratch'))
+const wizardPrimaryLabel = computed(() => (isEditMode.value ? 'Save and continue' : 'Next step'))
+const wizardSecondaryLabel = computed(() => (isEditMode.value ? 'Skip section' : 'Skip'))
+const jobPostingHeading = computed(() => (isEditMode.value ? 'Edit: Job Posting' : 'Step 1: Job Posting'))
+
 const applyTemplateDraft = (draft) => {
   if (!draft) return
 
@@ -541,15 +617,18 @@ const startWizard = () => {
 }
 
 const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
+  const requestedStep = String(route.query.step || '').trim().toLowerCase()
+  const openJobStagesStep = requestedStep === 'job-stages' || requestedStep === 'job_stages'
+  const initialMainStep = mode === 'view' ? 5 : openJobStagesStep ? 3 : 0
   companyId = String(draft.related_company || draft.company_uuid || companyId || defaultCompanyId).trim() || defaultCompanyId
   isEditMode.value = mode === 'edit'
   isViewMode.value = mode === 'view'
   editingJobUuid.value = String(draft.job_uuid || route.query.job_uuid || '').trim()
   currentJobUuid.value = editingJobUuid.value || currentJobUuid.value
   showWizard.value = true
-  mainStep.value = mode === 'view' ? 5 : 0
+  mainStep.value = initialMainStep
   currentStep.value = 0
-  furthestMainStep.value = mode === 'view' ? 5 : 0
+  furthestMainStep.value = mode === 'view' || mode === 'edit' ? wizardSteps.length - 1 : initialMainStep
   furthestPostingStep.value = postingTabs.length - 1
   appFormStage.value = 0
   intelligentStage.value = 0
@@ -931,14 +1010,22 @@ const buildIntelligentScreenCommand = () => {
     ? intelligentQuestionTypes.value.map((typeId, index) => {
       const draft = intelligentScreenForm.value.questionDrafts[typeId] || {}
       const title = draft.title?.trim() || questionTypeLabelMap[typeId] || typeId
-      const weight = draft.classificationLabel && draft.classificationValue
-        ? ` | weight: ${draft.classificationLabel} (${draft.classificationValue})`
-        : ''
       const options = Array.isArray(draft.options) && draft.options.length
-        ? ` | options: ${draft.options.filter(Boolean).join(', ')}`
+        ? ` | options: ${draft.options
+          .map((option, optionIndex) => {
+            const label = String(option || '').trim()
+            if (!label) return ''
+            const optionClassification = Array.isArray(draft.optionClassifications) ? draft.optionClassifications[optionIndex] : null
+            const optionWeight = optionClassification?.label && optionClassification?.value
+              ? ` [${optionClassification.label} ${optionClassification.value}]`
+              : ''
+            return `${label}${optionWeight}`
+          })
+          .filter(Boolean)
+          .join(', ')}`
         : ''
 
-      return `${index + 1}. ${title} (${questionTypeLabelMap[typeId] || typeId})${weight}${options}`
+      return `${index + 1}. ${title} (${questionTypeLabelMap[typeId] || typeId})${options}`
     }).join('\n')
     : 'none'
 
@@ -1020,9 +1107,18 @@ const buildIntelligentScreenQuestionsPayload = () =>
       question: questionLabel,
       question_type: questionTypeLabelMap[typeId] || typeId,
       options_details: Array.isArray(draft.options) ? draft.options.filter(Boolean) : [],
-      classification_label: draft.classificationLabel || '',
-      classification_value: draft.classificationValue || '',
-      classification_color: draft.classificationColor || '',
+      option_classifications: Array.isArray(draft.optionClassifications)
+        ? draft.optionClassifications
+          .slice(0, Array.isArray(draft.options) ? draft.options.length : 0)
+          .map((item) => ({
+            label: item?.label || '',
+            value: item?.value || '',
+            color: item?.color || '',
+          }))
+        : [],
+      classification_label: '',
+      classification_value: '',
+      classification_color: '',
     }
   })
 
@@ -1483,13 +1579,13 @@ const handlePreviewAction = async (action) => {
       <span class="breadcrumb-sep"></span>
       <RouterLink to="/jobs" class="breadcrumb-link">Jobs</RouterLink>
       <span class="breadcrumb-sep"></span>
-      <span class="breadcrumb-text breadcrumb-text--active">Post a Job</span>
+      <span class="breadcrumb-text breadcrumb-text--active">{{ pageModeLabel }}</span>
     </div>
 
     <section class="post-job-page">
       <header class="post-job-page__header">
-        <h1 class="post-job-page__title">POST A JOB</h1>
-        <p class="post-job-page__subtitle">Enter information to complete entering this job</p>
+        <h1 class="post-job-page__title">{{ pageModeLabel }}</h1>
+        <p class="post-job-page__subtitle">{{ pageSubtitle }}</p>
       </header>
 
       <section v-if="!showWizard" class="starter-card">
@@ -1505,11 +1601,11 @@ const handlePreviewAction = async (action) => {
         <div class="starter-card__divider">Or</div>
 
         <button type="button" class="starter-card__scratch" @click="startWizard">
-          start from scratch
+          {{ starterScratchLabel }}
         </button>
 
         <div class="starter-card__actions">
-          <button type="button" class="starter-card__next" @click="startWizard">NEXT STEP</button>
+          <button type="button" class="starter-card__next" @click="startWizard">{{ starterPrimaryLabel }}</button>
         </div>
       </section>
 
@@ -1543,7 +1639,7 @@ const handlePreviewAction = async (action) => {
           }"
         >
           <h2 v-if="mainStep === 0" class="wizard-card__title">
-            {{ mainStep === 0 ? 'Step 1: Job Posting' : mainStep === 1 ? 'Step 2: Application Form' : `Step ${mainStep + 1}: ${wizardSteps[mainStep].label}` }}
+            {{ jobPostingHeading }}
           </h2>
 
           <div
@@ -1591,7 +1687,7 @@ const handlePreviewAction = async (action) => {
                 :job-details="jobDetailsForm"
                 :additional-info="additionalInfoForm"
                 :recruiters="recruiterForm.selectedRecruiters"
-                company-name="NitroSync"
+                :company-name="currentCompanyName"
                 :form="appearanceForm"
               />
               <MetaDataStep
@@ -1658,8 +1754,8 @@ const handlePreviewAction = async (action) => {
           <p v-if="submissionMessage" class="wizard-submission">{{ submissionMessage }}</p>
 
           <div v-if="mainStep !== 3 && mainStep !== 5 && !isViewMode" class="wizard-actions">
-            <button type="button" class="wizard-actions__skip" @click="skipToNextTab">Skip</button>
-            <button type="button" class="wizard-actions__next" @click="submitCurrentStep">NEXT STEP</button>
+            <button type="button" class="wizard-actions__skip" @click="skipToNextTab">{{ wizardSecondaryLabel }}</button>
+            <button type="button" class="wizard-actions__next" @click="submitCurrentStep">{{ wizardPrimaryLabel }}</button>
           </div>
         </section>
       </template>

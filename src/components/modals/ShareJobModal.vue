@@ -41,12 +41,56 @@ const jobUrl = computed(() => {
 
 const normalizedQuery = computed(() => String(candidateQuery.value || '').trim().toLowerCase())
 
+const normalizeCandidateLabel = (value) => String(value || '').trim()
+const normalizeCandidate = (candidate = {}) => {
+  const raw = candidate.raw || candidate
+  const firstName = normalizeCandidateLabel(candidate.first_name || raw?.first_name || raw?.candidate?.first_name)
+  const lastName = normalizeCandidateLabel(candidate.last_name || raw?.last_name || raw?.candidate?.last_name)
+  const displayName = normalizeCandidateLabel(
+    candidate.name
+    || raw?.full_name
+    || raw?.candidate_name
+    || raw?.candidate?.full_name
+    || raw?.candidate?.name,
+  ) || [firstName, lastName].filter(Boolean).join(' ').trim() || 'Candidate'
+
+  return {
+    ...candidate,
+    candidate_uuid: normalizeCandidateLabel(candidate.candidate_uuid || raw?.candidate_uuid || raw?.candidate?.candidate_uuid || raw?.candidate?.uuid),
+    name: displayName,
+    role: normalizeCandidateLabel(
+      candidate.role
+      || raw?.current_position
+      || raw?.candidate?.current_position
+      || raw?.job_title
+      || raw?.candidate?.job_title,
+    ) || 'Candidate',
+    email: normalizeCandidateLabel(candidate.email || raw?.email || raw?.candidate?.email),
+    raw,
+    searchText: [
+      displayName,
+      firstName,
+      lastName,
+      candidate.role,
+      raw?.current_position,
+      raw?.candidate?.current_position,
+      raw?.job_title,
+      raw?.candidate?.job_title,
+      candidate.email,
+      raw?.email,
+      raw?.candidate?.email,
+    ]
+      .map((value) => normalizeCandidateLabel(value).toLowerCase())
+      .filter(Boolean)
+      .join(' '),
+  }
+}
+
 const filteredCandidates = computed(() => {
   if (!normalizedQuery.value) return availableCandidates.value
 
   return availableCandidates.value.filter((candidate) =>
-    [candidate.name, candidate.role, candidate.email]
-      .some((value) => String(value || '').toLowerCase().includes(normalizedQuery.value)),
+    String(candidate.searchText || '').includes(normalizedQuery.value),
   )
 })
 
@@ -145,7 +189,7 @@ const loadCandidates = async () => {
         .map((stage) => fetchNitroSyncJobStageCandidates(stage.jobStageUuid)),
     )
 
-    availableCandidates.value = dedupeCandidates(stageCandidates.flat())
+    availableCandidates.value = dedupeCandidates(stageCandidates.flat()).map(normalizeCandidate)
 
     if (!availableCandidates.value.length) {
       loadError.value = 'No candidates were found for this job yet.'
@@ -179,6 +223,17 @@ const selectCandidate = (candidate) => {
   shareError.value = ''
   shareSuccess.value = ''
 }
+
+watch(candidateQuery, (value) => {
+  if (!selectedCandidate.value) return
+
+  const normalizedValue = String(value || '').trim()
+  const selectedName = String(selectedCandidate.value?.name || '').trim()
+
+  if (normalizedValue && normalizedValue !== selectedName) {
+    selectedCandidate.value = null
+  }
+})
 
 const shareJobWithCandidate = async () => {
   if (!selectedCandidate.value) {

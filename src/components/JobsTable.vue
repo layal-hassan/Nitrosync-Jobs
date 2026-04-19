@@ -294,9 +294,40 @@ const toggleMenu = (index) => {
   openMenuIndex.value = openMenuIndex.value === index ? null : index
 }
 
-const toggleStageTooltip = (job, stage) => {
-  const tooltipKey = `${job.jobUuid || job.id}-${stage.key}`
-  openStageTooltip.value = openStageTooltip.value === tooltipKey ? '' : tooltipKey
+const openJobStages = (job) => {
+  const payload = {
+    job_uuid: job.jobUuid,
+    related_company: job.relatedCompany,
+    job_title: job.title === '--' ? '' : job.title,
+    job_code: job.jobCode,
+    department: job.department,
+    country: job.country,
+    city: job.city,
+    description: job.description,
+    industry: job.industry,
+    contract_type: job.contractType,
+    currency: job.currency,
+    start_from: job.startFrom,
+    end_to: job.endTo,
+    career_level: job.careerLevel,
+    degree_level: job.degreeLevel,
+    job_title_seo: job.jobTitleSeo,
+    job_description_seo: job.jobDescriptionSeo,
+    tags: [...job.tags],
+    recruiter: job.recruiter === '--' ? '' : job.recruiter,
+  }
+
+  sessionStorage.setItem('nitrosync-edit-job', JSON.stringify(payload))
+  openStageTooltip.value = ''
+  openMenuIndex.value = null
+  router.push({
+    path: '/jobs/post',
+    query: {
+      mode: 'edit',
+      job_uuid: job.jobUuid || '',
+      step: 'job-stages',
+    },
+  })
 }
 
 const handleDocumentClick = (event) => {
@@ -666,7 +697,7 @@ onBeforeUnmount(() => {
               class="jobs-stages__dot"
               :class="{ 'jobs-stages__dot--active': stage.isActive }"
               :style="{ backgroundColor: stage.displayColor }"
-              @click.stop="toggleStageTooltip(job, stage)"
+              @click.stop="openJobStages(job)"
             >
               <span
                 v-if="openStageTooltip === `${job.jobUuid || job.id}-${stage.key}`"
@@ -761,7 +792,7 @@ onBeforeUnmount(() => {
               class="jobs-stages__dot"
               :class="{ 'jobs-stages__dot--active': stage.isActive }"
               :style="{ backgroundColor: stage.displayColor }"
-              @click.stop="toggleStageTooltip(job, stage)"
+              @click.stop="openJobStages(job)"
             >
               <span
                 v-if="openStageTooltip === `${job.jobUuid || job.id}-${stage.key}`"
