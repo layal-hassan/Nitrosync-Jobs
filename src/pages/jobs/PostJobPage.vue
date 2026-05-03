@@ -1,6 +1,6 @@
 <script setup>
 import axios from 'axios'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   createNitroSyncApplicationForm,
@@ -291,6 +291,7 @@ const normalizeTemplateText = (value) => String(value ?? '').trim()
 const recruiterStorageKey = 'nitrosync-job-recruiters'
 const jobStagesStorageKeyPrefix = 'nitrosync-job-stages:'
 const wizardDraftStorageKeyPrefix = 'nitrosync-post-job-draft:'
+let wizardDraftPersistTimer = null
 
 const getJobStagesStorageKey = (jobUuid) =>
   `${jobStagesStorageKeyPrefix}${String(jobUuid || '').trim()}`
@@ -391,6 +392,17 @@ const storeWizardDraft = () => {
   } catch {
     // Ignore local storage failures and keep wizard usable.
   }
+}
+
+const scheduleWizardDraftStore = () => {
+  if (wizardDraftPersistTimer) {
+    clearTimeout(wizardDraftPersistTimer)
+  }
+
+  wizardDraftPersistTimer = setTimeout(() => {
+    wizardDraftPersistTimer = null
+    storeWizardDraft()
+  }, 150)
 }
 
 const applyStoredWizardDraft = (draft) => {
@@ -1788,10 +1800,17 @@ watch(
     currentJobUuid,
   ],
   () => {
-    storeWizardDraft()
+    scheduleWizardDraftStore()
   },
   { deep: true },
 )
+
+onBeforeUnmount(() => {
+  if (wizardDraftPersistTimer) {
+    clearTimeout(wizardDraftPersistTimer)
+    wizardDraftPersistTimer = null
+  }
+})
 
 const submitCurrentStep = () => {
   if (mainStep.value === 1) {

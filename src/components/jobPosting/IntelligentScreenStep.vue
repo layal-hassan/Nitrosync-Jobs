@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { sendNitroSyncAiCommand, aiTaskTimeoutMs, aiTaskEndpoint } from '../../composables/useNitroSyncAi'
 import { getNitroSyncIntelligentScreenQuestions } from '../../composables/useNitroSyncIntelligentScreenQuestions'
 import { fetchNitroSyncJobStages } from '../../composables/useNitroSyncJobStages'
@@ -73,7 +73,13 @@ const selectedQuestionTypeOptions = computed(() =>
   })),
 )
 
-const questionDrafts = reactive(props.form.questionDrafts)
+const getQuestionDraftStore = () => {
+  if (!props.form.questionDrafts || typeof props.form.questionDrafts !== 'object') {
+    props.form.questionDrafts = {}
+  }
+
+  return props.form.questionDrafts
+}
 const aiRequestLoading = ref(false)
 const aiRequestMessage = ref('')
 const aiRequestError = ref('')
@@ -100,7 +106,20 @@ const createCriteria = () => ({
   scoreMenuOpen: false,
 })
 
-const criteriaList = ref(props.form.criteriaList)
+const getCriteriaListStore = () => {
+  if (!Array.isArray(props.form.criteriaList)) {
+    props.form.criteriaList = [createCriteria()]
+  }
+
+  return props.form.criteriaList
+}
+
+const criteriaList = computed({
+  get: () => getCriteriaListStore(),
+  set: (value) => {
+    props.form.criteriaList = value
+  },
+})
 const questionTypeAliases = {
   checkboxes: 'checkboxes',
   checkbox: 'checkboxes',
@@ -179,6 +198,8 @@ const normalizeOptionClassifications = (classifications = [], options = []) =>
 const ensureDraft = (typeId) => {
   if (!typeId) return null
 
+  const questionDrafts = getQuestionDraftStore()
+
   if (!questionDrafts[typeId]) {
     const options =
       typeId === 'record_video'
@@ -202,7 +223,11 @@ const ensureDraft = (typeId) => {
   return questionDrafts[typeId]
 }
 
-const activeDraft = computed(() => ensureDraft(activeQuestionType.value))
+const activeDraft = computed(() => {
+  if (!activeQuestionType.value) return null
+
+  return getQuestionDraftStore()[activeQuestionType.value] ?? null
+})
 const trimmedAiCommand = computed(() => String(props.aiCommand || '').trim())
 const normalizeQuestionType = (value) => questionTypeAliases[String(value || '').trim().toLowerCase()] || ''
 const normalizeQuestionOptions = (question) => {
@@ -269,8 +294,19 @@ const updateDraftOptionClassification = (index, label) => {
 const getDraftOptionClassification = (index) => {
   const draft = activeDraft.value
   if (!draft) return createDefaultOptionClassification()
-  draft.optionClassifications = normalizeOptionClassifications(draft.optionClassifications, draft.options)
-  return draft.optionClassifications[index] || createDefaultOptionClassification()
+
+  const classification = draft.optionClassifications?.[index]
+  const matched = classificationItems.find((item) => item.label === classification?.label)
+
+  if (matched) {
+    return {
+      label: matched.label,
+      value: classification?.value || matched.value,
+      color: classification?.color || matched.color,
+    }
+  }
+
+  return createDefaultOptionClassification()
 }
 
 const addDraftOption = () => {
@@ -444,6 +480,8 @@ const applyFetchedQuestions = (questions = []) => {
   })
 
   updateSelectedTypes(nextTypes)
+  const questionDrafts = getQuestionDraftStore()
+
   Object.keys(questionDrafts).forEach((key) => {
     delete questionDrafts[key]
   })
@@ -552,6 +590,32 @@ watch(
   () => [props.relatedCompany, props.jobId],
   () => {
     fetchQuestions()
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [...props.selectedTypes],
+  (selectedTypes) => {
+    const questionDrafts = getQuestionDraftStore()
+
+    selectedTypes.forEach((typeId) => {
+      ensureDraft(typeId)
+    })
+
+    Object.keys(questionDrafts).forEach((typeId) => {
+      if (!selectedTypes.includes(typeId)) {
+        delete questionDrafts[typeId]
+      }
+    })
+  },
+  { immediate: true },
+)
+
+watch(
+  activeQuestionType,
+  (typeId) => {
+    ensureDraft(typeId)
   },
   { immediate: true },
 )
