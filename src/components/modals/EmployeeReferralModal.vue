@@ -14,7 +14,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['close', 'next'])
+const emit = defineEmits(['close', 'next', 'back'])
 
 const isAddEmployeeOpen = ref(false)
 const employees = ref([])
@@ -197,6 +197,7 @@ watch(
       </div>
 
       <footer class="employee-modal__footer">
+        <button type="button" class="employee-modal__back" @click="$emit('back')">Back</button>
         <button type="button" class="employee-modal__next" @click="$emit('next')">Next</button>
       </footer>
     </section>
@@ -421,6 +422,7 @@ watch(
   flex: 0 0 auto;
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   padding: 26px 28px 34px;
 }
 
@@ -447,13 +449,23 @@ watch(
   }
 }
 
+.employee-modal__back,
 .employee-modal__next {
   min-width: 120px;
   height: 38px;
   border-radius: 14px;
+  font-size: 14px;
+}
+
+.employee-modal__back {
+  border: 1px solid #e8dde3;
+  background: #ffffff;
+  color: #9f9098;
+}
+
+.employee-modal__next {
   background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
   color: #ffffff;
-  font-size: 14px;
   box-shadow: 0 10px 16px rgba(234, 79, 141, 0.18);
 }
 </style>

@@ -35,7 +35,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'back'])
 
 const savedEmail = ref('Custom Email')
 const showCandidateMenu = ref(false)
@@ -374,16 +374,19 @@ onBeforeUnmount(() => {
       <footer class="send-email-modal__footer">
         <p v-if="sendMessage" class="send-email-modal__feedback send-email-modal__feedback--success">{{ sendMessage }}</p>
         <p v-if="sendError" class="send-email-modal__feedback send-email-modal__feedback--error">{{ sendError }}</p>
-        <button
-          type="button"
-          class="send-email-modal__send"
-          :class="{ 'send-email-modal__send--disabled': !canSend || sendingEmail }"
-          :disabled="!canSend || sendingEmail"
-          @click="handleSendEmail"
-        >
-          <span>{{ sendingEmail ? 'Sending...' : 'Send Email' }}</span>
-          <span class="send-email-modal__send-caret"></span>
-        </button>
+        <div class="send-email-modal__actions">
+          <button type="button" class="send-email-modal__back" @click="$emit('back')">Back</button>
+          <button
+            type="button"
+            class="send-email-modal__send"
+            :class="{ 'send-email-modal__send--disabled': !canSend || sendingEmail }"
+            :disabled="!canSend || sendingEmail"
+            @click="handleSendEmail"
+          >
+            <span>{{ sendingEmail ? 'Sending...' : 'Send Email' }}</span>
+            <span class="send-email-modal__send-caret"></span>
+          </button>
+        </div>
       </footer>
     </section>
 
@@ -813,6 +816,12 @@ onBeforeUnmount(() => {
   padding: 8px 20px 18px;
 }
 
+.send-email-modal__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .send-email-modal__feedback {
   width: 100%;
   margin: 0;
@@ -828,10 +837,20 @@ onBeforeUnmount(() => {
   color: #d1497b;
 }
 
+.send-email-modal__back,
 .send-email-modal__send {
   min-width: 110px;
   height: 38px;
   border-radius: 12px;
+}
+
+.send-email-modal__back {
+  border: 1px solid #e8dde3;
+  background: #ffffff;
+  color: #9f9098;
+}
+
+.send-email-modal__send {
   background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
   color: #ffffff;
   display: inline-flex;

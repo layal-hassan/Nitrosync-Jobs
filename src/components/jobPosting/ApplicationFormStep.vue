@@ -76,15 +76,15 @@ const defaultSections = [
   createSection('Professional Information', 'user', '#d9d1d6', '', [], true),
   createSection('Experience', 'briefcase', '#ea4f8d', 'experience', [
     createQuestion('How many years of experience do you have in this or a similar role ?', 'off'),
-    createQuestion('What type of environments have you worked in ?', 'mandatory'),
+    createQuestion('What type of environments have you worked in ?', 'off'),
     createQuestion('When did you start working in your field ?', 'off'),
-    createQuestion('Have you had experience doing this kind of work regularly ,occasionally ,or just once?', 'mandatory'),
+    createQuestion('Have you had experience doing this kind of work regularly ,occasionally ,or just once?', 'off'),
   ]),
   createSection('Languages', 'language', '#ea4f8d', 'language', [
     createQuestion('Which languages do you speak ?', 'off'),
   ]),
   createSection('Education', 'book', '#52d66b', 'education', [
-    createQuestion('Highest level of education ?', 'mandatory'),
+    createQuestion('Highest level of education ?', 'off'),
     createQuestion('Name of your last school ?', 'off'),
   ]),
 ]
@@ -389,23 +389,27 @@ syncSectionsToForm()
 </template>
 
 <style scoped>
+.application-form {
+  max-width: 100%;
+}
+
 .application-form__top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 18px;
+  margin-bottom: 18px;
 }
 
 .application-form__title {
   margin: 0;
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   color: #17111b;
 }
 
 .application-form__hint {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   font-size: var(--ui-small-font);
   color: var(--hint-soft);
 }
@@ -417,7 +421,7 @@ syncSectionsToForm()
 .application-form__legend {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   color: #2d2531;
   font-size: var(--ui-small-font);
 }
@@ -429,8 +433,8 @@ syncSectionsToForm()
 }
 
 .application-form__legend i {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
   display: inline-block;
 }
@@ -452,13 +456,13 @@ syncSectionsToForm()
 .app-form-fields {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .app-form-fields__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 12px;
 }
 
 .app-form-fields__grid--single {
@@ -466,54 +470,55 @@ syncSectionsToForm()
 }
 
 .app-field {
-  display: flex;
-  flex-direction: column;
+  display: block;
   min-width: 0;
-  padding: 20px 22px;
-  border: 1px solid #eee1e7;
-  border-radius: 20px;
-  background: linear-gradient(180deg, #fffefe 0%, #fff9fb 100%);
+  padding: 14px 16px;
+  border: 1px solid #f1e6eb;
+  border-radius: 14px;
+  background: #fffefe;
+  box-shadow: 0 1px 2px rgba(38, 19, 28, 0.02);
 }
 
 .app-field__title {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  min-width: 176px;
-  font-size: 18px;
-  font-weight: 500;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.25;
   color: #17111b;
 }
 
 .app-field__header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 22px;
+  gap: 14px;
 }
 
 .app-field__status-group {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 10px;
-  max-width: 360px;
+  gap: 5px;
+  max-width: none;
 }
 
 .app-field__status-option {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 42px;
-  padding: 9px 14px;
-  border: 1px solid #e8dce2;
+  gap: 4px;
+  min-height: 29px;
+  padding: 5px 8px;
+  border: 1px solid #eadfe5;
   border-radius: 999px;
   background: #fff;
-  font-size: 13px;
-  color: #5f5360;
+  font-size: 10px;
+  font-weight: 500;
+  color: #594d56;
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 }
 
 .app-field__status-option input {
@@ -522,25 +527,25 @@ syncSectionsToForm()
 }
 
 .app-field__error {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   font-size: var(--ui-small-font);
   color: #e15b8f;
 }
 
 .dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   display: inline-block;
-  flex: 0 0 12px;
-  border: 3px solid rgba(217, 209, 214, 0.28);
+  flex: 0 0 10px;
+  border: 2px solid rgba(217, 209, 214, 0.28);
   border-radius: 50%;
   box-sizing: border-box;
   background: #d9d1d6;
 }
 
 .app-field--mandatory {
-  border-color: #f4bfd3;
-  background: linear-gradient(180deg, #fffefe 0%, #fff5f9 100%);
+  border-color: #f6c8d8;
+  background: linear-gradient(180deg, #fffefe 0%, #fff9fb 100%);
 }
 
 .app-field--mandatory .dot {
@@ -549,8 +554,8 @@ syncSectionsToForm()
 }
 
 .app-field--optional {
-  border-color: #bdecc0;
-  background: linear-gradient(180deg, #ffffff 0%, #f7fff8 100%);
+  border-color: #cdeece;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfffb 100%);
 }
 
 .app-field--optional .dot {
@@ -727,12 +732,17 @@ syncSectionsToForm()
 }
 
 @media (max-width: 900px) {
+  .application-form__top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .app-form-fields__grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .app-field__header {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     align-items: flex-start;
   }
 
@@ -744,6 +754,7 @@ syncSectionsToForm()
 
   .app-field__status-group {
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 </style>

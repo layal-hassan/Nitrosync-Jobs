@@ -2,8 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import {
   createNitroSyncScoreCard,
+  fetchNitroSyncScoreCard,
   deleteNitroSyncScoreCard,
   fetchNitroSyncScoreCards,
+  updateNitroSyncScoreCard,
 } from '../../composables/useNitroSyncScoreCards'
 import { getNitroSyncErrorMessage } from '../../composables/nitroSyncApi'
 import {
@@ -45,6 +47,7 @@ const scoreCardDraft = ref(props.form.scoreCardDraft || {
   commentsObservation: 'Use this section for final interviewer notes, decision context, and clear recommendations before the candidate advances.',
 })
 const scoreCardSubmitting = ref(false)
+const editingScoreCardUuid = ref(props.form.editingScoreCardUuid || '')
 const deletingScoreCardUuid = ref('')
 const scoreCardActionMessage = ref('')
 const scoreCardActionError = ref('')
@@ -121,12 +124,17 @@ const automatedStageOptions = ['Please select', 'Screen', 'Interview', 'Shortlis
 const automatedPrimaryActionOptions = ['Please select', 'Send email', 'Notify manager', 'Assign interviewer']
 
 const overlayVisible = computed(() => screen.value >= 3)
-const showExpandedStage = computed(() => screen.value >= 1)
+const showExpandedStage = computed(() => activeStageRows.value.length > 0)
 const showInlineScoreBuilder = computed(() => screen.value <= 2)
 const showSavedScoreCard = computed(() => screen.value >= 10)
 const visibleStageRows = computed(() => Array.isArray(stageRows.value) ? stageRows.value : [])
 const primaryStage = computed(() => visibleStageRows.value[0] || null)
 const activeStageRows = computed(() => visibleStageRows.value.filter((item) => item.enabled))
+const selectedActiveStage = computed(() =>
+  activeStageRows.value.find((item) => getStageKey(item) === currentStageKey.value)
+  || activeStageRows.value[0]
+  || null,
+)
 const scoreCardOptions = computed(() => [
   { label: 'Please select', value: '' },
   ...savedScorecards.value.map((item) => ({
@@ -320,6 +328,7 @@ const openStageScoreCardManager = (stage) => {
 const openStageScoreCardBuilder = (stage) => {
   setCurrentStage(stage)
   resetScoreCardFeedback()
+  editingScoreCardUuid.value = ''
   screen.value = 4
 }
 
@@ -415,6 +424,16 @@ const closeOverlayToBoard = () => {
   props.form.screen = screen.value
 }
 
+const returnToScoreCardManager = () => {
+  screen.value = 3
+  props.form.screen = screen.value
+}
+
+const returnToAutomatedActionsManager = () => {
+  screen.value = 13
+  props.form.screen = screen.value
+}
+
 const openBuilder = async () => {
   if (!newStageName.value.trim()) {
     stageActionError.value = 'Enter a stage name before adding a new stage.'
@@ -453,6 +472,15 @@ const toggleStage = (jobStageUuid, label) => {
   )
   stageRows.value = nextRows
   props.form.stageRows = stageRows.value
+  const toggledStage = nextRows.find((item) =>
+    (item.jobStageUuid && item.jobStageUuid === jobStageUuid) || (!item.jobStageUuid && item.label === label),
+  )
+
+  if (toggledStage?.enabled) {
+    setCurrentStage(toggledStage)
+    return
+  }
+
   const nextActiveStage = nextRows.find((item) => item.enabled)
   if (!nextRows.some((item) => getStageKey(item) === currentStageKey.value && item.enabled)) {
     setCurrentStage(nextActiveStage || '')
@@ -527,6 +555,65 @@ const openManualSkill = () => {
 const resetScoreCardFeedback = () => {
   scoreCardActionMessage.value = ''
   scoreCardActionError.value = ''
+}
+
+const parseDraftList = (value) =>
+  String(value || '')
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+const loadScoreCardIntoDraft = (item = {}) => {
+  editingScoreCardUuid.value = String(item.uuid || item.score_card_uuid || '').trim()
+  scoreCardDraft.value = {
+    name: String(item.title || item.name || '').trim(),
+    jobTitle: String(item.jobTitle || item.job_title || '').trim(),
+    interviewer: String(item.interviewer || item.owner || '').trim(),
+    tags: String(item.tags || '').trim(),
+    instructionMessage: String(item.instructionMessage || '').trim(),
+    evaluationCriteria: String(item.evaluationCriteria || '').trim(),
+    commentsObservation: String(item.commentsObservation || '').trim(),
+  }
+  selectedQuestions.value = parseDraftList(item.questions).map((label, index) => ({
+    label,
+    color: questionColors[index % questionColors.length],
+  }))
+  selectedCompetencies.value = parseDraftList(item.competenciesTraits).map((label, index) => ({
+    label,
+    color: questionColors[index % questionColors.length],
+  }))
+  manualCompetencyMode.value = false
+  manualCompetencyTitle.value = ''
+  manualSkillMode.value = false
+  manualSkillTitle.value = String(item.skills || '').trim()
+  props.form.editingScoreCardUuid = editingScoreCardUuid.value
+  props.form.scoreCardDraft = scoreCardDraft.value
+  props.form.selectedQuestions = selectedQuestions.value
+  props.form.selectedCompetencies = selectedCompetencies.value
+  props.form.manualCompetencyMode = manualCompetencyMode.value
+  props.form.manualCompetencyTitle = manualCompetencyTitle.value
+  props.form.manualSkillMode = manualSkillMode.value
+  props.form.manualSkillTitle = manualSkillTitle.value
+}
+
+const editScoreCard = async (item) => {
+  resetScoreCardFeedback()
+
+  try {
+    const scoreCard =
+      item?.raw?.score_card_uuid || item?.uuid
+        ? await fetchNitroSyncScoreCard({
+          score_card_uuid: String(item.raw?.score_card_uuid || item.uuid || '').trim(),
+          related_company: companyId.value,
+        })
+        : null
+
+    loadScoreCardIntoDraft(scoreCard || item)
+    screen.value = 4
+  } catch (error) {
+    console.error('Failed to load score card details', error)
+    scoreCardActionError.value = getNitroSyncErrorMessage(error, 'Failed to load score card details.')
+  }
 }
 
 const resetAutomatedActionFeedback = () => {
@@ -669,7 +756,7 @@ const saveAutomatedAction = async () => {
       }))
     }
     props.form.automatedActionDraft = automatedActionDraft.value
-    screen.value = 1
+    returnToAutomatedActionsManager()
   } catch (error) {
     console.error('Failed to save automated action', {
       payload,
@@ -710,7 +797,7 @@ const removeAutomatedAction = async (item) => {
 }
 
 const buildScoreCardPayload = () => {
-  const scoreCardUuid = createUuid()
+  const scoreCardUuid = editingScoreCardUuid.value || createUuid()
 
   return {
     name: scoreCardDraft.value.name.trim(),
@@ -759,8 +846,11 @@ const saveScoreCard = async () => {
   resetScoreCardFeedback()
 
   try {
-    const result = await createNitroSyncScoreCard(payload)
-    scoreCardActionMessage.value = result.message || 'Score card created successfully.'
+    const isUpdate = Boolean(editingScoreCardUuid.value)
+    const result = isUpdate
+      ? await updateNitroSyncScoreCard(payload)
+      : await createNitroSyncScoreCard(payload)
+    scoreCardActionMessage.value = result.message || (isUpdate ? 'Score card updated successfully.' : 'Score card created successfully.')
     scoreCardActionError.value = ''
     await fetchScoreCards()
     selectedScoreCard.value = payload.score_card_uuid
@@ -771,6 +861,15 @@ const saveScoreCard = async () => {
         title: payload.name,
         owner: payload.interviewer,
         action: 'Edit card',
+        jobTitle: payload.job_title,
+        interviewer: payload.interviewer,
+        tags: payload.tags,
+        instructionMessage: payload.instruction_message,
+        questions: payload.questions,
+        competenciesTraits: payload.competencies_traits,
+        skills: payload.skills,
+        evaluationCriteria: payload.evaluation_criteria,
+        commentsObservation: payload.comments_observation,
       },
       ...savedScorecards.value.filter((item) => item.uuid !== payload.score_card_uuid),
     ]
@@ -780,7 +879,9 @@ const saveScoreCard = async () => {
         scoreCardUuids: [...management.scoreCardUuids.filter((item) => item !== payload.score_card_uuid), payload.score_card_uuid],
       }))
     }
-    screen.value = 10
+    editingScoreCardUuid.value = payload.score_card_uuid
+    props.form.editingScoreCardUuid = editingScoreCardUuid.value
+    returnToScoreCardManager()
   } catch (error) {
     console.error('Failed to create score card', {
       payload,
@@ -960,31 +1061,23 @@ syncStageManagement(visibleStageRows.value)
 
     <div v-else class="job-stages-step__canvas" :class="{ 'job-stages-step__canvas--dimmed': overlayVisible }">
       <section class="stage-shell">
-        <div v-if="primaryStage" class="stage-shell__stage-name">
-          <span class="stage-shell__handle" aria-hidden="true"></span>
-          <span class="stage-shell__label stage-shell__label--current">
-            <span class="stage-shell__dot"></span>
-            <span>{{ primaryStage.label }}</span>
-          </span>
-          <button
-            type="button"
-            class="stage-switch"
-            :class="{ 'stage-switch--on': primaryStage.enabled }"
-            @click="toggleStage(primaryStage.jobStageUuid, primaryStage.label)"
-          ></button>
-        </div>
-
-        <template v-if="!showExpandedStage">
-          <div
-            v-for="item in visibleStageRows.slice(1)"
-            :key="item.jobStageUuid || item.label"
-            class="stage-shell__row"
-          >
+        <template
+          v-for="(item, index) in visibleStageRows"
+          :key="item.jobStageUuid || item.label"
+        >
+          <div :class="index === 0 ? 'stage-shell__stage-name' : 'stage-shell__row'">
             <span class="stage-shell__handle" aria-hidden="true"></span>
-            <span class="stage-shell__label">
-              <span class="stage-shell__dot stage-shell__dot--ghost"></span>
-              <span>{{ item.label }}</span>
-            </span>
+            <button
+              type="button"
+              class="stage-shell__label-button"
+              :class="{ 'stage-shell__label-button--active': getStageKey(item) === currentStageKey }"
+              @click="setCurrentStage(item)"
+            >
+              <span :class="['stage-shell__label', index === 0 ? 'stage-shell__label--current' : '']">
+                <span :class="['stage-shell__dot', index === 0 ? '' : 'stage-shell__dot--ghost']"></span>
+                <span>{{ item.label }}</span>
+              </span>
+            </button>
             <button
               type="button"
               class="stage-switch"
@@ -992,25 +1085,19 @@ syncStageManagement(visibleStageRows.value)
               @click="toggleStage(item.jobStageUuid, item.label)"
             ></button>
           </div>
-          <p v-if="!visibleStageRows.length" class="job-stages-step__api-feedback">
-            No job stages found yet.
-          </p>
-        </template>
 
-        <template v-else>
-          <div v-if="activeStageRows.length" class="active-stage-stack">
+          <div v-if="item.enabled" class="active-stage-stack">
             <article
-              v-for="stage in activeStageRows"
-              :key="stage.jobStageUuid || stage.label"
+              :key="`card-${item.jobStageUuid || item.label}`"
               class="active-stage-card"
             >
               <div class="active-stage-card__head">
                 <div class="active-stage-card__identity">
                   <span class="stage-shell__handle" aria-hidden="true"></span>
-                  <span class="active-stage-card__pill">{{ stage.label }}</span>
+                  <span class="active-stage-card__pill">{{ item.label }}</span>
                 </div>
                 <span class="active-stage-card__meta">
-                  {{ getStageScoreCards(stage).length }} score cards, {{ getStageAssessments(stage).length }} assessments, {{ getStageAutomatedActions(stage).length }} actions
+                  {{ getStageScoreCards(item).length }} score cards, {{ getStageAssessments(item).length }} assessments, {{ getStageAutomatedActions(item).length }} actions
                 </span>
               </div>
 
@@ -1026,28 +1113,28 @@ syncStageManagement(visibleStageRows.value)
                   </div>
                 </div>
 
-                <div v-if="getStageScoreCards(stage).length" class="scorecard-summary-list">
+                <div v-if="getStageScoreCards(item).length" class="scorecard-summary-list">
                   <div
-                    v-for="item in getStageScoreCards(stage)"
-                    :key="item.uuid"
+                    v-for="scoreCard in getStageScoreCards(item)"
+                    :key="scoreCard.uuid"
                     class="scorecard-summary-card"
                   >
                     <div class="scorecard-summary-card__top">
                       <div>
-                        <strong>{{ item.title }}</strong>
-                        <p v-if="item.owner" class="scorecard-summary-card__owner">{{ item.owner }}</p>
+                        <strong>{{ scoreCard.title }}</strong>
+                        <p v-if="scoreCard.owner" class="scorecard-summary-card__owner">{{ scoreCard.owner }}</p>
                       </div>
                     </div>
 
                     <div class="scorecard-summary-card__tags">
-                      <span v-for="(tag, index) in scoreSummaryTags" :key="`${item.uuid}-${tag}-${index}`">{{ tag }}</span>
+                      <span v-for="(tag, tagIndex) in scoreSummaryTags" :key="`${scoreCard.uuid}-${tag}-${tagIndex}`">{{ tag }}</span>
                     </div>
                   </div>
                 </div>
 
                 <p v-else class="stage-module__empty">No score cards assigned to this stage yet.</p>
 
-                <button type="button" class="stage-module__add" @click="openStageScoreCardManager(stage)">
+                <button type="button" class="stage-module__add" @click="openStageScoreCardManager(item)">
                   Manage Score Cards
                 </button>
               </div>
@@ -1064,15 +1151,15 @@ syncStageManagement(visibleStageRows.value)
                   </div>
                 </div>
 
-                <div v-if="getStageAssessments(stage).length" class="assessment-summary-list">
+                <div v-if="getStageAssessments(item).length" class="assessment-summary-list">
                   <div
-                    v-for="item in getStageAssessments(stage)"
-                    :key="item.title"
+                    v-for="assessment in getStageAssessments(item)"
+                    :key="assessment.title"
                     class="assessment-summary-card"
                   >
-                    <span class="assessment-summary-card__icon" :style="{ '--assessment-color': item.color }"></span>
+                    <span class="assessment-summary-card__icon" :style="{ '--assessment-color': assessment.color }"></span>
                     <div>
-                      <strong>{{ item.title }}</strong>
+                      <strong>{{ assessment.title }}</strong>
                       <p>Assessment is active for this stage.</p>
                     </div>
                   </div>
@@ -1080,7 +1167,7 @@ syncStageManagement(visibleStageRows.value)
 
                 <p v-else class="stage-module__empty">No assessments assigned to this stage yet.</p>
 
-                <button type="button" class="stage-module__add" @click="openStageAssessments(stage)">Manage Assessments</button>
+                <button type="button" class="stage-module__add" @click="openStageAssessments(item)">Manage Assessments</button>
               </div>
 
               <div class="stage-module">
@@ -1095,28 +1182,30 @@ syncStageManagement(visibleStageRows.value)
                   </div>
                 </div>
 
-                <div v-if="getStageAutomatedActions(stage).length" class="automated-summary-list">
+                <div v-if="getStageAutomatedActions(item).length" class="automated-summary-list">
                   <div
-                    v-for="item in getStageAutomatedActions(stage)"
-                    :key="item.automatedActionUuid"
+                    v-for="action in getStageAutomatedActions(item)"
+                    :key="action.automatedActionUuid"
                     class="automated-summary-card"
                   >
-                    <strong>{{ item.condition }}</strong>
-                    <p>{{ item.assignedRecruiter || 'No recruiter assigned' }}</p>
+                    <strong>{{ action.condition }}</strong>
+                    <p>{{ action.assignedRecruiter || 'No recruiter assigned' }}</p>
                   </div>
                 </div>
 
                 <p v-else class="stage-module__empty">No automated actions assigned to this stage yet.</p>
 
-                <button type="button" class="stage-module__add" @click="openStageAutomatedActions(stage)">Manage Automated Actions</button>
+                <button type="button" class="stage-module__add" @click="openStageAutomatedActions(item)">Manage Automated Actions</button>
               </div>
             </article>
           </div>
-
-          <p v-else class="stage-module__empty stage-module__empty--board">
-            Turn on at least one stage to manage score cards, assessments, and automated actions.
-          </p>
         </template>
+        <p v-if="!visibleStageRows.length" class="job-stages-step__api-feedback">
+          No job stages found yet.
+        </p>
+        <p v-if="!showExpandedStage" class="stage-module__empty stage-module__empty--board">
+          Turn on at least one stage to manage score cards, assessments, and automated actions.
+        </p>
 
         <div class="stage-shell__append-row">
           <input
@@ -1192,6 +1281,7 @@ syncStageManagement(visibleStageRows.value)
                 <button type="button" @click="toggleStageScoreCard(currentStageKey, item.uuid)">
                   {{ hasStageScoreCard(currentStageKey, item.uuid) ? 'Remove' : 'Add' }}
                 </button>
+                <button type="button" @click="editScoreCard(item)">Edit</button>
                 <button
                   type="button"
                   :disabled="deletingScoreCardUuid === item.uuid"
@@ -1366,7 +1456,7 @@ syncStageManagement(visibleStageRows.value)
             <p>Score Card has create successfully.</p>
             <div class="success-card__actions">
               <button type="button" class="modal-primary modal-primary--small" @click="nextFromSuccess">Preview it</button>
-              <button type="button" class="stage-link" @click="screen = 1">add another</button>
+              <button type="button" class="stage-link" @click="openStageScoreCardBuilder(currentStageKey)">add another</button>
             </div>
           </div>
         </template>
@@ -1409,7 +1499,7 @@ syncStageManagement(visibleStageRows.value)
             </div>
           </div>
 
-          <button type="button" class="modal-primary" @click="screen = 12">Finish</button>
+          <button type="button" class="modal-primary" @click="returnToScoreCardManager">Finish</button>
         </template>
 
         <template v-else-if="screen === 12">
@@ -1440,7 +1530,7 @@ syncStageManagement(visibleStageRows.value)
             </div>
           </div>
 
-          <button type="button" class="modal-primary" @click="screen = 13">Next</button>
+          <button type="button" class="modal-primary" @click="closeOverlayToBoard">Done</button>
         </template>
 
         <template v-else-if="screen === 13 || screen === 14">
@@ -1674,6 +1764,21 @@ syncStageManagement(visibleStageRows.value)
   justify-content: flex-start;
   text-align: left;
   padding-left: 14px;
+}
+
+.stage-shell__label-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.stage-shell__label-button--active .stage-shell__label {
+  color: #ea4f8d;
+  font-weight: 600;
 }
 
 .stage-shell__label--current {

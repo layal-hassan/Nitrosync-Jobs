@@ -27,16 +27,16 @@ defineEmits(['toggle'])
 
 <style scoped>
 .position-chip {
-  min-height: 40px;
-  padding: 0 16px 0 10px;
+  min-height: 34px;
+  padding: 0 14px 0 8px;
   border: 1px solid #e5dce1;
   border-radius: 999px;
   background: #ffffff;
   color: #59545a;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 7px;
+  font-size: 12px;
   line-height: 1;
   box-shadow: 0 2px 5px rgba(52, 35, 43, 0.04);
   transition:
@@ -52,8 +52,8 @@ defineEmits(['toggle'])
 }
 
 .position-chip__check {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border: 1px solid #ddd5da;
   border-radius: 999px;
   background: #ffffff;
@@ -74,10 +74,10 @@ defineEmits(['toggle'])
 .position-chip--active .position-chip__check::before {
   content: '';
   position: absolute;
-  left: 7px;
-  top: 4px;
-  width: 5px;
-  height: 9px;
+  left: 5px;
+  top: 3px;
+  width: 4px;
+  height: 7px;
   border-right: 2px solid #ffffff;
   border-bottom: 2px solid #ffffff;
   transform: rotate(45deg);

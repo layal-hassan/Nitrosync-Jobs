@@ -51,6 +51,10 @@ const getStageUuid = (item) =>
 const normalizeCandidateCard = (item) => {
   const candidateUuid = normalizeValue(
     item?.candidate_uuid
+    ?? item?.uuid
+    ?? item?.id
+    ?? item?.candidate_id
+    ?? item?.application_form_id
     ?? item?.candidate?.candidate_uuid
     ?? item?.candidate?.uuid
     ?? item?.candidate?.id,
@@ -63,9 +67,11 @@ const normalizeCandidateCard = (item) => {
   const fullName = normalizeValue(
     item?.full_name
     ?? item?.candidate_name
+    ?? item?.name
     ?? item?.candidate?.full_name
     ?? item?.candidate?.name
-    ?? item?.name,
+    ?? item?.candidate_details?.full_name
+    ?? item?.candidate_details?.name,
   )
 
   return {
@@ -73,11 +79,17 @@ const normalizeCandidateCard = (item) => {
     name: fullName || [firstName, lastName].filter(Boolean).join(' ').trim() || 'Candidate',
     role: normalizeValue(
       item?.current_position
+      ?? item?.position
+      ?? item?.title
       ?? item?.candidate?.current_position
       ?? item?.job_title
       ?? item?.candidate?.job_title,
     ) || 'Candidate',
-    email: normalizeValue(item?.email ?? item?.candidate?.email),
+    email: normalizeValue(
+      item?.email
+      ?? item?.candidate?.email
+      ?? item?.candidate_details?.email,
+    ),
     raw: item,
   }
 }
@@ -85,6 +97,12 @@ const normalizeCandidateCard = (item) => {
 const normalizeCandidateRows = (response) => {
   const rows = Array.isArray(response?.data?.data)
     ? response.data.data
+    : Array.isArray(response?.data?.candidates)
+      ? response.data.candidates
+      : Array.isArray(response?.data?.items)
+        ? response.data.items
+        : Array.isArray(response?.data?.rows)
+          ? response.data.rows
     : Array.isArray(response?.data)
       ? response.data
       : []
@@ -123,7 +141,7 @@ export const fetchNitroSyncJobStages = async (relatedCompany, { timeout = nitroS
       groupedRows.set(key, {
         jobStageUuid,
         label,
-        enabled: item?.enabled ?? item?.is_enabled ?? item?.active ?? true,
+        enabled: item?.enabled ?? item?.is_enabled ?? item?.active ?? false,
         cards: [],
         raw: item,
       })

@@ -6,7 +6,7 @@ defineProps({
   },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'back'])
 
 const channels = [
   {
@@ -72,6 +72,7 @@ const channels = [
       </div>
 
       <footer class="channels-modal__footer">
+        <button type="button" class="channels-modal__back" @click="$emit('back')">Back</button>
         <button type="button" class="channels-modal__confirm" @click="$emit('close')">GOT IT</button>
       </footer>
     </section>
@@ -192,16 +193,27 @@ const channels = [
 .channels-modal__footer {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   padding: 16px 22px 18px;
 }
 
+.channels-modal__back,
 .channels-modal__confirm {
   min-width: 82px;
   height: 31px;
   border-radius: 9px;
+  font-size: 12px;
+}
+
+.channels-modal__back {
+  border: 1px solid #e8dde3;
+  background: #ffffff;
+  color: #9f9098;
+}
+
+.channels-modal__confirm {
   background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
   color: #ffffff;
-  font-size: 12px;
   box-shadow: 0 10px 16px rgba(234, 79, 141, 0.18);
 }
 </style>

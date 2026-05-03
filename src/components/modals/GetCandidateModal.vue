@@ -124,18 +124,21 @@ const handleEmployeeReferralNext = () => {
       </div>
 
       <footer class="candidate-modal__footer">
+        <button type="button" class="candidate-modal__back" @click="$emit('close')">Back</button>
         <button type="button" class="candidate-modal__confirm" @click="$emit('close')">GOT IT</button>
       </footer>
     </section>
 
     <RecommendedChannelsModal
       :open="activeModal === 'recommended'"
+      @back="activeModal = 'root'"
       @close="activeModal = 'root'"
     />
 
     <EmployeeReferralModal
       :open="activeModal === 'employeeReferral'"
       :job="props.job"
+      @back="activeModal = 'root'"
       @close="activeModal = 'root'"
       @next="handleEmployeeReferralNext"
     />
@@ -143,11 +146,13 @@ const handleEmployeeReferralNext = () => {
     <SocialShareModal
       :open="activeModal === 'socialShare'"
       :job="props.job"
+      @back="activeModal = 'root'"
       @close="activeModal = 'root'"
     />
 
     <SendEmailModal
       :open="activeModal === 'sendEmail'"
+      @back="activeModal = 'employeeReferral'"
       @close="activeModal = 'root'"
     />
   </div>
@@ -280,16 +285,27 @@ const handleEmployeeReferralNext = () => {
 .candidate-modal__footer {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   padding: 10px 16px 14px;
 }
 
+.candidate-modal__back,
 .candidate-modal__confirm {
   min-width: 82px;
   height: 29px;
   border-radius: 9px;
+  font-size: 12px;
+}
+
+.candidate-modal__back {
+  border: 1px solid #e8dde3;
+  background: #ffffff;
+  color: #9f9098;
+}
+
+.candidate-modal__confirm {
   background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
   color: #ffffff;
-  font-size: 12px;
   box-shadow: 0 10px 16px rgba(234, 79, 141, 0.18);
 }
 

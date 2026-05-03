@@ -11,6 +11,8 @@ import {
   buildNitroSyncEndpoint,
   nitroSyncRequestTimeoutMs,
 } from '../../composables/nitroSyncApi'
+import { fetchNitroSyncCompany } from '../../composables/useNitroSyncCompanies'
+import { getNitroSyncEmployees } from '../../composables/useNitroSyncEmployees'
 import AdditionalInformation from '../../components/jobPosting/AdditionalInformation.vue'
 import ApplicationFormStep from '../../components/jobPosting/ApplicationFormStep.vue'
 import AppearanceStep from '../../components/jobPosting/AppearanceStep.vue'
@@ -48,6 +50,8 @@ const isViewMode = ref(false)
 const editingJobUuid = ref('')
 const currentJobUuid = ref('')
 const applicationFormId = ref('')
+const resolvedCompanyName = ref('')
+const recruiterDirectory = ref([])
 
 const jobDetailsForm = ref({
   jobTitle: '',
@@ -284,6 +288,140 @@ const postingTabs = [
 ]
 
 const normalizeTemplateText = (value) => String(value ?? '').trim()
+const recruiterStorageKey = 'nitrosync-job-recruiters'
+const jobStagesStorageKeyPrefix = 'nitrosync-job-stages:'
+const wizardDraftStorageKeyPrefix = 'nitrosync-post-job-draft:'
+
+const getJobStagesStorageKey = (jobUuid) =>
+  `${jobStagesStorageKeyPrefix}${String(jobUuid || '').trim()}`
+
+const getStoredJobStagesForm = (jobUuid) => {
+  const normalizedJobUuid = String(jobUuid || '').trim()
+  if (!normalizedJobUuid) return null
+
+  try {
+    const rawValue = localStorage.getItem(getJobStagesStorageKey(normalizedJobUuid))
+    const parsed = rawValue ? JSON.parse(rawValue) : null
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const storeJobStagesForm = (jobUuid, value) => {
+  const normalizedJobUuid = String(jobUuid || '').trim()
+  if (!normalizedJobUuid) return
+
+  try {
+    localStorage.setItem(getJobStagesStorageKey(normalizedJobUuid), JSON.stringify(value))
+  } catch {
+    // Ignore local storage failures and keep submit flow working.
+  }
+}
+
+const getWizardDraftStorageKey = ({ mode = 'create', jobUuid = '' } = {}) => {
+  const normalizedMode = String(mode || 'create').trim().toLowerCase()
+  const normalizedJobUuid = String(jobUuid || '').trim()
+  return normalizedMode === 'edit' && normalizedJobUuid
+    ? `${wizardDraftStorageKeyPrefix}edit:${normalizedJobUuid}`
+    : `${wizardDraftStorageKeyPrefix}create`
+}
+
+const getStoredWizardDraft = ({ mode = 'create', jobUuid = '' } = {}) => {
+  try {
+    const rawValue = localStorage.getItem(getWizardDraftStorageKey({ mode, jobUuid }))
+    const parsed = rawValue ? JSON.parse(rawValue) : null
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+const buildWizardDraftSnapshot = () => ({
+  companyId,
+  showWizard: showWizard.value,
+  mainStep: mainStep.value,
+  currentStep: currentStep.value,
+  furthestMainStep: furthestMainStep.value,
+  furthestPostingStep: furthestPostingStep.value,
+  appFormStage: appFormStage.value,
+  intelligentStage: intelligentStage.value,
+  intelligentQuestionTypes: [...intelligentQuestionTypes.value],
+  jobDetailsForm: { ...jobDetailsForm.value },
+  additionalInfoForm: { ...additionalInfoForm.value },
+  metaDataForm: {
+    ...metaDataForm.value,
+    seoPhoto: null,
+  },
+  tagsForm: {
+    selectedTags: [...tagsForm.value.selectedTags],
+  },
+  recruiterForm: {
+    selectedRecruiters: [...recruiterForm.value.selectedRecruiters],
+  },
+  hiringTeamForm: {
+    ...hiringTeamForm.value,
+    additionalUsers: Array.isArray(hiringTeamForm.value.additionalUsers) ? [...hiringTeamForm.value.additionalUsers] : [],
+  },
+  previewForm: JSON.parse(JSON.stringify(previewForm.value)),
+  appearanceForm: {
+    coverPhoto: null,
+    photo: null,
+  },
+  intelligentScreenForm: JSON.parse(JSON.stringify(intelligentScreenForm.value)),
+  jobStagesForm: JSON.parse(JSON.stringify(jobStagesForm.value)),
+  appForm: {
+    ...appForm.value,
+    cvFile: null,
+    coverLetterFile: null,
+  },
+})
+
+const storeWizardDraft = () => {
+  if (!showWizard.value || isViewMode.value) return
+
+  const mode = isEditMode.value ? 'edit' : 'create'
+  const jobUuid = isEditMode.value ? (editingJobUuid.value || route.query.job_uuid || '') : ''
+
+  try {
+    localStorage.setItem(
+      getWizardDraftStorageKey({ mode, jobUuid }),
+      JSON.stringify(buildWizardDraftSnapshot()),
+    )
+  } catch {
+    // Ignore local storage failures and keep wizard usable.
+  }
+}
+
+const applyStoredWizardDraft = (draft) => {
+  if (!draft || typeof draft !== 'object') return
+
+  companyId = String(draft.companyId || companyId || defaultCompanyId).trim() || defaultCompanyId
+  showWizard.value = draft.showWizard ?? showWizard.value
+  mainStep.value = Number.isFinite(Number(draft.mainStep)) ? Number(draft.mainStep) : mainStep.value
+  currentStep.value = Number.isFinite(Number(draft.currentStep)) ? Number(draft.currentStep) : currentStep.value
+  furthestMainStep.value = Number.isFinite(Number(draft.furthestMainStep)) ? Number(draft.furthestMainStep) : furthestMainStep.value
+  furthestPostingStep.value = Number.isFinite(Number(draft.furthestPostingStep)) ? Number(draft.furthestPostingStep) : furthestPostingStep.value
+  appFormStage.value = Number.isFinite(Number(draft.appFormStage)) ? Number(draft.appFormStage) : appFormStage.value
+  intelligentStage.value = Number.isFinite(Number(draft.intelligentStage)) ? Number(draft.intelligentStage) : intelligentStage.value
+  intelligentQuestionTypes.value = Array.isArray(draft.intelligentQuestionTypes) ? draft.intelligentQuestionTypes : intelligentQuestionTypes.value
+  jobDetailsForm.value = draft.jobDetailsForm ? { ...jobDetailsForm.value, ...draft.jobDetailsForm } : jobDetailsForm.value
+  additionalInfoForm.value = draft.additionalInfoForm ? { ...additionalInfoForm.value, ...draft.additionalInfoForm } : additionalInfoForm.value
+  metaDataForm.value = draft.metaDataForm ? { ...metaDataForm.value, ...draft.metaDataForm, seoPhoto: null } : metaDataForm.value
+  tagsForm.value = draft.tagsForm ? { selectedTags: Array.isArray(draft.tagsForm.selectedTags) ? draft.tagsForm.selectedTags : tagsForm.value.selectedTags } : tagsForm.value
+  recruiterForm.value = draft.recruiterForm ? { selectedRecruiters: Array.isArray(draft.recruiterForm.selectedRecruiters) ? draft.recruiterForm.selectedRecruiters : recruiterForm.value.selectedRecruiters } : recruiterForm.value
+  hiringTeamForm.value = draft.hiringTeamForm
+    ? {
+        ...hiringTeamForm.value,
+        ...draft.hiringTeamForm,
+        additionalUsers: Array.isArray(draft.hiringTeamForm.additionalUsers) ? draft.hiringTeamForm.additionalUsers : hiringTeamForm.value.additionalUsers,
+      }
+    : hiringTeamForm.value
+  previewForm.value = draft.previewForm ? { ...previewForm.value, ...draft.previewForm } : previewForm.value
+  intelligentScreenForm.value = draft.intelligentScreenForm ? draft.intelligentScreenForm : intelligentScreenForm.value
+  jobStagesForm.value = draft.jobStagesForm ? draft.jobStagesForm : jobStagesForm.value
+  appForm.value = draft.appForm ? { ...appForm.value, ...draft.appForm, cvFile: null, coverLetterFile: null } : appForm.value
+}
 const normalizeTemplateArray = (value) =>
   Array.isArray(value)
     ? value.map((item) =>
@@ -315,6 +453,70 @@ const createTemplateDraft = (item = {}) => ({
   job_title_seo: normalizeTemplateText(item?.job_title_seo ?? item?.seo_title),
   job_description_seo: normalizeTemplateText(item?.job_description_seo ?? item?.seo_description),
 })
+
+const normalizeRecruiterUuid = (employee = {}) =>
+  normalizeTemplateText(
+    employee?.employee_uuid
+    ?? employee?.employeeUuid
+    ?? employee?.uuid
+    ?? employee?.id,
+  )
+
+const normalizeRecruiterName = (employee = {}) => {
+  const fullName = normalizeTemplateText(
+    employee?.full_name
+    ?? employee?.fullName
+    ?? employee?.employee_name
+    ?? employee?.employeeName
+    ?? employee?.name,
+  )
+  const firstName = normalizeTemplateText(employee?.first_name ?? employee?.firstName)
+  const lastName = normalizeTemplateText(employee?.last_name ?? employee?.lastName)
+
+  return fullName || [firstName, lastName].filter(Boolean).join(' ').trim()
+}
+
+const resolveRecruiterRecord = (value) => {
+  const normalizedValue = normalizeTemplateText(value).toLowerCase()
+  if (!normalizedValue) return null
+
+  return recruiterDirectory.value.find((employee) => {
+    const recruiterUuid = normalizeRecruiterUuid(employee).toLowerCase()
+    const recruiterName = normalizeRecruiterName(employee).toLowerCase()
+    return recruiterUuid === normalizedValue || recruiterName === normalizedValue
+  }) || null
+}
+
+const getStoredRecruitersByJob = () => {
+  try {
+    const rawValue = localStorage.getItem(recruiterStorageKey)
+    const parsed = rawValue ? JSON.parse(rawValue) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const storeRecruiterForJob = (jobUuid, recruiterName, recruiterUuid = '') => {
+  const normalizedJobUuid = normalizeTemplateText(jobUuid)
+  const normalizedRecruiterName = normalizeTemplateText(recruiterName)
+
+  if (!normalizedJobUuid || !normalizedRecruiterName) return
+
+  const nextValue = {
+    ...getStoredRecruitersByJob(),
+    [normalizedJobUuid]: {
+      recruiter_name: normalizedRecruiterName,
+      recruiter_uuid: normalizeTemplateText(recruiterUuid),
+    },
+  }
+
+  try {
+    localStorage.setItem(recruiterStorageKey, JSON.stringify(nextValue))
+  } catch {
+    // Ignore local storage failures and keep submit flow working.
+  }
+}
 
 const getSelectedTemplateDraft = () => {
   const selectedValue = String(selectedTemplate.value || '').trim()
@@ -376,7 +578,8 @@ const getStoredCompanyName = () => {
 
 const currentCompanyName = computed(() =>
   normalizeMeaningfulCompanyLabel(
-    getStoredCompanyName()
+    resolvedCompanyName.value
+    || getStoredCompanyName()
     || appForm.value.company
     || '',
   ),
@@ -445,6 +648,49 @@ const applyTemplateDraft = (draft) => {
   }
 }
 
+const loadCurrentCompanyName = async () => {
+  const storedCompanyName = normalizeMeaningfulCompanyLabel(getStoredCompanyName())
+
+  if (storedCompanyName) {
+    resolvedCompanyName.value = storedCompanyName
+    return
+  }
+
+  if (!String(companyId || '').trim()) {
+    resolvedCompanyName.value = ''
+    return
+  }
+
+  try {
+    const response = await fetchNitroSyncCompany(companyId)
+    resolvedCompanyName.value = normalizeMeaningfulCompanyLabel(response?.companyName)
+  } catch (error) {
+    console.error('Failed to load company name', {
+      relatedCompany: companyId,
+      error,
+    })
+    resolvedCompanyName.value = ''
+  }
+}
+
+const loadRecruiterDirectory = async () => {
+  if (!String(companyId || '').trim()) {
+    recruiterDirectory.value = []
+    return
+  }
+
+  try {
+    const response = await getNitroSyncEmployees(companyId)
+    recruiterDirectory.value = Array.isArray(response?.data) ? response.data : []
+  } catch (error) {
+    console.error('Failed to load recruiter directory', {
+      relatedCompany: companyId,
+      error,
+    })
+    recruiterDirectory.value = []
+  }
+}
+
 const fetchTemplates = async () => {
   templatesLoading.value = true
 
@@ -506,6 +752,7 @@ const fetchTemplates = async () => {
 
 const startWizard = () => {
   companyId = defaultCompanyId
+  resolvedCompanyName.value = ''
   isEditMode.value = false
   isViewMode.value = false
   editingJobUuid.value = ''
@@ -613,7 +860,68 @@ const startWizard = () => {
   validationMessage.value = ''
   submissionMessage.value = ''
 
-  applyTemplateDraft(getSelectedTemplateDraft())
+  const storedCreateDraft = getStoredWizardDraft({ mode: 'create' })
+  if (storedCreateDraft) {
+    applyStoredWizardDraft(storedCreateDraft)
+  } else {
+    applyTemplateDraft(getSelectedTemplateDraft())
+  }
+  loadCurrentCompanyName()
+  loadRecruiterDirectory()
+}
+
+const buildJobStagesFormFromDraft = (draft) => {
+  const stageRows = Array.isArray(draft.jobs_stages) && draft.jobs_stages.length
+    ? draft.jobs_stages.map((item, index) => ({
+      jobStageUuid: String(item?.job_stage_uuid ?? item?.uuid ?? '').trim(),
+      label: String(item?.stage_name ?? item?.job_stage_name ?? item?.name ?? item?.title ?? `Stage ${index + 1}`).trim(),
+      enabled: true,
+    }))
+    : jobStagesForm.value.stageRows
+
+  const managementByStage = {}
+  const stageKeyByUuid = Object.fromEntries(
+    stageRows.map((item) => [String(item.jobStageUuid || '').trim(), String(item.label || item.jobStageUuid || '').trim()]),
+  )
+
+  stageRows.forEach((item) => {
+    managementByStage[String(item.label || item.jobStageUuid || '').trim()] = {
+      scoreCardUuids: [],
+      assessmentTitles: [],
+      automatedActionUuids: [],
+    }
+  })
+
+  ;(Array.isArray(draft.score_cards) ? draft.score_cards : []).forEach((item) => {
+    const stageKey = stageKeyByUuid[String(item?.job_stage_uuid ?? '').trim()]
+    const scoreCardUuid = String(item?.score_card_uuid ?? item?.uuid ?? '').trim()
+    if (!stageKey || !scoreCardUuid) return
+    managementByStage[stageKey] ||= { scoreCardUuids: [], assessmentTitles: [], automatedActionUuids: [] }
+    managementByStage[stageKey].scoreCardUuids = [...new Set([...managementByStage[stageKey].scoreCardUuids, scoreCardUuid])]
+  })
+
+  ;(Array.isArray(draft.automated_actions) ? draft.automated_actions : []).forEach((item) => {
+    const stageKey = stageKeyByUuid[String(item?.job_stage_uuid ?? '').trim()]
+    const automatedActionUuid = String(item?.automated_action_uuid ?? item?.uuid ?? '').trim()
+    if (!stageKey || !automatedActionUuid) return
+    managementByStage[stageKey] ||= { scoreCardUuids: [], assessmentTitles: [], automatedActionUuids: [] }
+    managementByStage[stageKey].automatedActionUuids = [...new Set([...managementByStage[stageKey].automatedActionUuids, automatedActionUuid])]
+  })
+
+  ;(Array.isArray(draft.assessments) ? draft.assessments : []).forEach((item) => {
+    const stageKey = stageKeyByUuid[String(item?.job_stage_uuid ?? '').trim()]
+    const assessmentTitle = String(item?.title ?? item?.assessment_title ?? item?.name ?? item?.assessment_uuid ?? '').trim()
+    if (!stageKey || !assessmentTitle) return
+    managementByStage[stageKey] ||= { scoreCardUuids: [], assessmentTitles: [], automatedActionUuids: [] }
+    managementByStage[stageKey].assessmentTitles = [...new Set([...managementByStage[stageKey].assessmentTitles, assessmentTitle])]
+  })
+
+  return {
+    ...jobStagesForm.value,
+    stageRows,
+    stageManagementByStage: managementByStage,
+    currentStageKey: stageRows[0]?.label || '',
+  }
 }
 
 const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
@@ -674,6 +982,49 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
     seoDescription: draft.job_description_seo || '',
     seoPhoto: null,
   }
+
+  intelligentScreenForm.value = {
+    ...intelligentScreenForm.value,
+    criteriaList: Array.isArray(draft.intelligent_screen_move_criterias) && draft.intelligent_screen_move_criterias.length
+      ? draft.intelligent_screen_move_criterias.map((item, index) => ({
+        id: index + 1,
+        name: String(item?.name || '').trim(),
+        selectedConditionId: '',
+        lowerValue: '',
+        upperValue: '',
+        moveTo: String(item?.action || '').trim(),
+        scoreMenuOpen: false,
+      }))
+      : intelligentScreenForm.value.criteriaList,
+  }
+
+  if (
+    (Array.isArray(draft.jobs_stages) && draft.jobs_stages.length)
+    || (Array.isArray(draft.score_cards) && draft.score_cards.length)
+    || (Array.isArray(draft.automated_actions) && draft.automated_actions.length)
+    || (Array.isArray(draft.assessments) && draft.assessments.length)
+  ) {
+    jobStagesForm.value = buildJobStagesFormFromDraft(draft)
+  }
+
+  const storedJobStagesForm = getStoredJobStagesForm(editingJobUuid.value || draft.job_uuid || route.query.job_uuid || '')
+  if (storedJobStagesForm) {
+    jobStagesForm.value = {
+      ...jobStagesForm.value,
+      ...storedJobStagesForm,
+    }
+  }
+
+  const storedWizardDraft = getStoredWizardDraft({
+    mode,
+    jobUuid: editingJobUuid.value || draft.job_uuid || route.query.job_uuid || '',
+  })
+  if (storedWizardDraft) {
+    applyStoredWizardDraft(storedWizardDraft)
+  }
+
+  loadCurrentCompanyName()
+  loadRecruiterDirectory()
 }
 
 const applyApplicationFormDraft = (draft) => {
@@ -752,6 +1103,8 @@ loadEditDraft()
 loadViewDraft()
 onMounted(() => {
   fetchTemplates()
+  loadCurrentCompanyName()
+  loadRecruiterDirectory()
 })
 
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim())
@@ -901,7 +1254,7 @@ const isAppFormValid = computed(() =>
   Object.keys(getAppFormErrors()).length === 0,
 )
 
-const maxIntelligentStage = computed(() => intelligentQuestionTypes.value.length + 4)
+const maxIntelligentStage = computed(() => intelligentQuestionTypes.value.length + 2)
 const isHiringTeamValid = computed(() =>
   Object.keys(getHiringTeamErrors()).length === 0,
 )
@@ -1099,13 +1452,15 @@ const buildHiringTeamAiCommand = () => [
 ].join('\n')
 
 const buildIntelligentScreenQuestionsPayload = () =>
-  intelligentQuestionTypes.value.map((typeId) => {
+  intelligentQuestionTypes.value
+    .map((typeId) => {
     const draft = intelligentScreenForm.value.questionDrafts[typeId] || {}
     const questionLabel = draft.title?.trim() || questionTypeLabelMap[typeId] || typeId
+    const questionType = questionTypeLabelMap[typeId] || typeId
 
     return {
-      question: questionLabel,
-      question_type: questionTypeLabelMap[typeId] || typeId,
+      question: String(questionLabel || '').trim(),
+      question_type: String(questionType || '').trim(),
       options_details: Array.isArray(draft.options) ? draft.options.filter(Boolean) : [],
       option_classifications: Array.isArray(draft.optionClassifications)
         ? draft.optionClassifications
@@ -1121,6 +1476,21 @@ const buildIntelligentScreenQuestionsPayload = () =>
       classification_color: '',
     }
   })
+    .filter((item) => item.question && item.question_type)
+
+const formatJobSubmissionError = (error) => {
+  const rawMessage =
+    error?.response?.data?.message ||
+    error?.response?.data?.detail ||
+    error?.response?.data?.msg ||
+    ''
+
+  if (rawMessage.includes('intelligent_screen_job_questions')) {
+    return 'One or more Intelligent Screen questions are incomplete. Review that step and make sure each selected question type has a valid question.'
+  }
+
+  return rawMessage || 'Failed to create the job. Check the API payload and try again.'
+}
 
 const buildStageDefinitions = () =>
   jobStagesForm.value.stageRows
@@ -1130,12 +1500,71 @@ const buildStageDefinitions = () =>
       job_stage_uuid: item.jobStageUuid || createUuid(),
     }))
 
+const buildStageRelations = (stageDefinitions = buildStageDefinitions()) => {
+  const stageUuidByKey = Object.fromEntries(
+    stageDefinitions.map((stage) => [String(stage.label || '').trim() || String(stage.job_stage_uuid || '').trim(), stage.job_stage_uuid]),
+  )
+
+  const stageManagementByStage = jobStagesForm.value.stageManagementByStage || {}
+  const automatedActions = []
+  const scoreCards = []
+  const assessments = []
+
+  Object.entries(stageManagementByStage).forEach(([stageKey, management]) => {
+    const jobStageUuid = stageUuidByKey[String(stageKey || '').trim()]
+    if (!jobStageUuid || !management || typeof management !== 'object') return
+
+    if (Array.isArray(management.automatedActionUuids)) {
+      management.automatedActionUuids
+        .filter(Boolean)
+        .forEach((automatedActionUuid) => {
+          automatedActions.push({
+            automated_action_uuid: String(automatedActionUuid).trim(),
+            job_stage_uuid: jobStageUuid,
+          })
+        })
+    }
+
+    if (Array.isArray(management.scoreCardUuids)) {
+      management.scoreCardUuids
+        .filter(Boolean)
+        .forEach((scoreCardUuid) => {
+          scoreCards.push({
+            score_card_uuid: String(scoreCardUuid).trim(),
+            job_stage_uuid: jobStageUuid,
+          })
+        })
+    }
+
+    if (Array.isArray(management.assessmentTitles)) {
+      management.assessmentTitles
+        .filter(Boolean)
+        .forEach((assessmentTitle) => {
+          assessments.push({
+            assessment_uuid: String(assessmentTitle).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            job_stage_uuid: jobStageUuid,
+          })
+        })
+    }
+  })
+
+  return {
+    automatedActions,
+    scoreCards,
+    assessments,
+  }
+}
+
 const buildCreateJobRequest = () => {
   const recruiterValue = String(
     hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
   ).trim()
+  const recruiterRecord = resolveRecruiterRecord(recruiterValue)
+  const recruiterUuid = normalizeRecruiterUuid(recruiterRecord)
+  const recruiterName = normalizeRecruiterName(recruiterRecord) || recruiterValue
   const stageDefinitions = buildStageDefinitions()
   const primaryStageUuid = stageDefinitions[0]?.job_stage_uuid || createUuid()
+  const stageRelations = buildStageRelations(stageDefinitions)
 
   return {
     job_title: jobDetailsForm.value.jobTitle,
@@ -1159,7 +1588,7 @@ const buildCreateJobRequest = () => {
     related_company: companyId,
     status: buildStatusFromAction(),
     job_uuid: currentJobUuid.value,
-    recruiter_uuid: recruiterValue || createUuid(),
+    recruiter_uuid: recruiterUuid || recruiterValue || createUuid(),
     tags: tagsForm.value.selectedTags.map((tag) => ({
       tag_name: tag,
     })),
@@ -1179,57 +1608,58 @@ const buildCreateJobRequest = () => {
     job_hiring_team: [
       {
         team: hiringTeamForm.value.team,
-        recruiter: hiringTeamForm.value.recruiter,
+        recruiter: recruiterName,
         additional_users: hiringTeamForm.value.additionalUsers.map((name) => ({ name })),
       },
     ],
-    automated_actions: [
-      {
-        automated_action_uuid: createUuid(),
-        job_stage_uuid: primaryStageUuid,
-      },
-    ],
-    score_cards: [
-      {
-        score_card_uuid: createUuid(),
-        job_stage_uuid: primaryStageUuid,
-      },
-    ],
-    assessments: [
-      {
-        assessment_uuid: createUuid(),
-        job_stage_uuid: primaryStageUuid,
-      },
-    ],
+    automated_actions: stageRelations.automatedActions,
+    score_cards: stageRelations.scoreCards,
+    assessments: stageRelations.assessments.length
+      ? stageRelations.assessments
+      : [
+        {
+          assessment_uuid: `default-${primaryStageUuid}`,
+          job_stage_uuid: primaryStageUuid,
+        },
+      ],
     intelligent_screen_job_questions: buildIntelligentScreenQuestionsPayload(),
   }
 }
 
-const buildEditJobRequest = () => ({
-  job_uuid: editingJobUuid.value || route.query.job_uuid || '',
-  related_company: companyId,
-  job_title: jobDetailsForm.value.jobTitle,
-  description: jobDetailsForm.value.description,
-  industry: additionalInfoForm.value.industry,
-  contract_type: additionalInfoForm.value.contractType,
-  currency: additionalInfoForm.value.currency,
-  start_from: normalizeSalaryValue(additionalInfoForm.value.salaryFrom),
-  end_to: normalizeSalaryValue(additionalInfoForm.value.salaryTo),
-  career_level: additionalInfoForm.value.careerLevel,
-  degree_level: additionalInfoForm.value.degreeLevel,
-  job_title_seo: metaDataForm.value.seoTitle,
-  job_description_seo: metaDataForm.value.seoDescription,
-  tags: [...tagsForm.value.selectedTags],
-  recruiter: hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
-  intelligent_screen_move_criterias: intelligentScreenForm.value.criteriaList
-    .filter((item) => item.name || item.moveTo || item.selectedConditionId)
-    .map((item) => ({
-      name: item.name || 'Move criteria',
-      score_range: formatScoreRange(item),
-      action: item.moveTo || 'screen',
-    })),
-  intelligent_screen_job_questions: buildIntelligentScreenQuestionsPayload(),
-})
+const buildEditJobRequest = () => {
+  const stageDefinitions = buildStageDefinitions()
+  const stageRelations = buildStageRelations(stageDefinitions)
+
+  return {
+    job_uuid: editingJobUuid.value || route.query.job_uuid || '',
+    related_company: companyId,
+    job_title: jobDetailsForm.value.jobTitle,
+    description: jobDetailsForm.value.description,
+    industry: additionalInfoForm.value.industry,
+    contract_type: additionalInfoForm.value.contractType,
+    currency: additionalInfoForm.value.currency,
+    start_from: normalizeSalaryValue(additionalInfoForm.value.salaryFrom),
+    end_to: normalizeSalaryValue(additionalInfoForm.value.salaryTo),
+    career_level: additionalInfoForm.value.careerLevel,
+    degree_level: additionalInfoForm.value.degreeLevel,
+    job_title_seo: metaDataForm.value.seoTitle,
+    job_description_seo: metaDataForm.value.seoDescription,
+    tags: [...tagsForm.value.selectedTags],
+    recruiter: hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
+    jobs_stages: stageDefinitions.map((stage) => ({ job_stage_uuid: stage.job_stage_uuid })),
+    automated_actions: stageRelations.automatedActions,
+    score_cards: stageRelations.scoreCards,
+    assessments: stageRelations.assessments,
+    intelligent_screen_move_criterias: intelligentScreenForm.value.criteriaList
+      .filter((item) => item.name || item.moveTo || item.selectedConditionId)
+      .map((item) => ({
+        name: item.name || 'Move criteria',
+        score_range: formatScoreRange(item),
+        action: item.moveTo || 'screen',
+      })),
+    intelligent_screen_job_questions: buildIntelligentScreenQuestionsPayload(),
+  }
+}
 
 const buildSchedulePublishRequest = () => ({
   related_company: companyId,
@@ -1325,6 +1755,42 @@ watch(
       intelligentStage.value = maxIntelligentStage.value
     }
   },
+)
+
+watch(jobStagesForm, (value) => {
+  const jobUuid = editingJobUuid.value || currentJobUuid.value || route.query.job_uuid || ''
+  storeJobStagesForm(jobUuid, value)
+}, { deep: true })
+
+watch(
+  [
+    showWizard,
+    mainStep,
+    currentStep,
+    furthestMainStep,
+    furthestPostingStep,
+    appFormStage,
+    intelligentStage,
+    intelligentQuestionTypes,
+    jobDetailsForm,
+    additionalInfoForm,
+    metaDataForm,
+    tagsForm,
+    recruiterForm,
+    hiringTeamForm,
+    previewForm,
+    appearanceForm,
+    intelligentScreenForm,
+    jobStagesForm,
+    appForm,
+    isEditMode,
+    editingJobUuid,
+    currentJobUuid,
+  ],
+  () => {
+    storeWizardDraft()
+  },
+  { deep: true },
 )
 
 const submitCurrentStep = () => {
@@ -1494,12 +1960,18 @@ const submitJob = async (successMessage) => {
       response?.data?.detail ||
       response?.data?.msg ||
       successMessage
+
+    const recruiterValue = String(
+      hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
+    ).trim()
+    const recruiterRecord = resolveRecruiterRecord(recruiterValue)
+    storeRecruiterForJob(
+      editingJobUuid.value || currentJobUuid.value,
+      normalizeRecruiterName(recruiterRecord) || recruiterValue,
+      normalizeRecruiterUuid(recruiterRecord) || recruiterValue,
+    )
   } catch (error) {
-    validationMessage.value =
-      error?.response?.data?.message ||
-      error?.response?.data?.detail ||
-      error?.response?.data?.msg ||
-      'Failed to create the job. Check the API payload and try again.'
+    validationMessage.value = formatJobSubmissionError(error)
 
     console.error('Failed to create job', {
       endpoint,
@@ -1765,21 +2237,21 @@ const handlePreviewAction = async (action) => {
 
 <style scoped>
 .page-container--post-job {
-  max-width: var(--container-max);
-  --wizard-shell-max: 760px;
-  --job-form-title: 22px;
-  --job-form-subtitle: 14px;
-  --job-form-label: 14px;
-  --job-form-body: 15px;
-  --job-form-small: 13px;
+  max-width: 1120px;
+  --wizard-shell-max: 700px;
+  --job-form-title: 20px;
+  --job-form-subtitle: 13px;
+  --job-form-label: 12px;
+  --job-form-body: 13px;
+  --job-form-small: 12px;
   --job-form-border: #f2bfd2;
   --job-form-border-strong: #ec9fba;
   --job-form-bg: #ffffff;
   --job-form-muted: #b5a5ae;
   --job-form-ink: #17111b;
-  --job-form-radius: 12px;
-  --job-form-control-height: 56px;
-  --job-form-textarea-min: 152px;
+  --job-form-radius: 9px;
+  --job-form-control-height: 44px;
+  --job-form-textarea-min: 122px;
 }
 
 .breadcrumb-link {
@@ -1794,39 +2266,39 @@ const handlePreviewAction = async (action) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: var(--space-blocks);
-  padding-bottom: 72px;
+  padding-top: 18px;
+  padding-bottom: 52px;
 }
 
 .post-job-page__header {
   text-align: center;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .post-job-page__title {
   margin: 0;
-  font-size: var(--font-page-title);
+  font-size: 30px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   color: #17111b;
 }
 
 .post-job-page__subtitle {
-  margin: 10px 0 0;
-  font-size: var(--font-body);
+  margin: 8px 0 0;
+  font-size: 13px;
   color: #cfc1c8;
 }
 
 .starter-card {
   width: 100%;
   max-width: var(--wizard-shell-max);
-  min-height: 176px;
-  margin-top: 32px;
-  padding: var(--surface-pad);
+  min-height: 148px;
+  margin-top: 22px;
+  padding: 18px;
   background: #ffffff;
   border: 1px solid #ece3e7;
-  border-radius: var(--surface-radius-lg);
-  box-shadow: 0 6px 14px rgba(83, 57, 69, 0.03);
+  border-radius: 16px;
+  box-shadow: 0 4px 10px rgba(83, 57, 69, 0.025);
 }
 
 .starter-card__field {
@@ -1865,8 +2337,8 @@ const handlePreviewAction = async (action) => {
 .starter-card__actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: var(--space-sections);
-  padding-right: 34px;
+  margin-top: 18px;
+  padding-right: 12px;
 }
 
 .starter-card__next {
@@ -1885,22 +2357,22 @@ const handlePreviewAction = async (action) => {
   max-width: var(--wizard-shell-max);
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: nowrap;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .wizard-step-pill {
-  min-height: var(--ui-button-sm-height);
-  padding: 0 14px;
+  min-height: 32px;
+  padding: 0 12px;
   border: 1px solid #d8ccd2;
-  border-radius: 20px;
+  border-radius: 16px;
   background: #ffffff;
   color: #b9aab3;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--ui-small-font);
+  font-size: 11px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -1913,12 +2385,12 @@ const handlePreviewAction = async (action) => {
 }
 
 .wizard-step-pill__index {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 10px;
   background: #ffffff;
   color: #b9aab3;
   font-weight: 700;
@@ -1937,33 +2409,33 @@ const handlePreviewAction = async (action) => {
 .wizard-card {
   width: 100%;
   max-width: var(--wizard-shell-max);
-  min-height: 468px;
-  padding: 24px;
+  min-height: 400px;
+  padding: 20px;
   background: #ffffff;
   border: 1px solid #efe4e8;
-  border-radius: var(--surface-radius-lg);
-  box-shadow: 0 2px 8px rgba(83, 57, 69, 0.03);
+  border-radius: 18px;
+  box-shadow: 0 2px 6px rgba(83, 57, 69, 0.025);
 }
 
 .wizard-card--app-form {
-  max-width: 860px;
-  padding: 28px;
+  max-width: 780px;
+  padding: 22px;
 }
 
 .wizard-card--intelligent {
   max-width: var(--wizard-shell-max);
-  padding: 24px;
+  padding: 20px;
 }
 
 .wizard-card--job-stages {
   max-width: var(--wizard-shell-max);
-  min-height: 468px;
-  padding: 24px;
+  min-height: 400px;
+  padding: 20px;
 }
 
 .wizard-card__title {
-  margin: 0 0 18px;
-  font-size: var(--font-section-title);
+  margin: 0 0 14px;
+  font-size: 20px;
   font-weight: 600;
   color: #17111b;
 }
@@ -1971,16 +2443,16 @@ const handlePreviewAction = async (action) => {
 .posting-tabs {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: var(--space-sections);
+  gap: 8px;
+  margin-bottom: 18px;
 }
 
 .posting-tab {
   position: relative;
-  padding: 8px 0 6px;
+  padding: 6px 0 5px;
   border-bottom: 1px solid #f4eaee;
   color: #e6dbe0;
-  font-size: var(--font-small);
+  font-size: 12px;
   text-align: center;
   white-space: nowrap;
   cursor: pointer;
@@ -2012,7 +2484,7 @@ const handlePreviewAction = async (action) => {
 }
 
 .wizard-panel {
-  min-height: 322px;
+  min-height: 280px;
 }
 
 .wizard-validation {
@@ -2028,9 +2500,9 @@ const handlePreviewAction = async (action) => {
 }
 
 .wizard-placeholder {
-  min-height: 260px;
+  min-height: 220px;
   border: 1px dashed #eddbe3;
-  border-radius: 16px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
   text-align: center;
@@ -2052,8 +2524,8 @@ const handlePreviewAction = async (action) => {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 20px;
-  margin-top: 12px;
+  gap: 14px;
+  margin-top: 10px;
 }
 
 .wizard-actions__skip {
@@ -2152,7 +2624,7 @@ const handlePreviewAction = async (action) => {
 .page-container--post-job :deep(.metadata-step__textarea),
 .page-container--post-job :deep(.workflow-note-form__textarea) {
   min-height: var(--job-form-textarea-min);
-  padding: 16px 18px;
+  padding: 12px 14px;
   font-size: var(--job-form-body);
   line-height: 1.5;
 }
@@ -2185,7 +2657,7 @@ const handlePreviewAction = async (action) => {
 .page-container--post-job :deep(.job-preview-card__menu),
 .page-container--post-job :deep(.job-preview-card__publish-menu) {
   border: 1px solid var(--job-form-border);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 12px 24px rgba(42, 24, 34, 0.08);
 }
 
@@ -2198,7 +2670,7 @@ const handlePreviewAction = async (action) => {
 .page-container--post-job :deep(.tags-step__selected),
 .page-container--post-job :deep(.recruiter-step__selected) {
   border-color: var(--job-form-border);
-  border-radius: 14px;
+  border-radius: 12px;
 }
 
 .page-container--post-job :deep(.dropdown__arrow),

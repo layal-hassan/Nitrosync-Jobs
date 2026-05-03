@@ -97,14 +97,16 @@ a {
 
 .topbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto auto;
   align-items: center;
-  column-gap: 28px;
-  width: 100%;
-  min-height: 92px;
-  padding: 16px 20px;
+  column-gap: 18px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  min-height: 78px;
+  padding: 12px 16px;
   border: 1px solid var(--panel-line);
-  border-radius: 28px;
+  border-radius: 24px;
   background:
     radial-gradient(circle at top left, rgba(234, 79, 141, 0.08), transparent 34%),
     linear-gradient(180deg, #fffefe 0%, #fff7fa 100%);
@@ -114,13 +116,13 @@ a {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
 .brand__mark {
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
   display: block;
   flex: 0 0 auto;
   object-fit: contain;
@@ -133,18 +135,18 @@ a {
 
 .brand__title {
   color: var(--pink);
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 0.95;
   letter-spacing: -0.03em;
 }
 
 .brand__subtitle {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #b993a5;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.2;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
@@ -187,21 +189,25 @@ a {
 .nav-tabs {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
-  padding: 8px;
+  padding: 6px;
   border: 1px solid rgba(240, 221, 229, 0.92);
-  border-radius: 22px;
+  border-radius: 20px;
   background: rgba(255, 252, 253, 0.92);
 }
 
 .nav-tabs__item {
-  padding: 12px 18px;
-  border-radius: 14px;
-  font-size: 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #5e5260;
   transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.nav-tabs__item--link {
+  cursor: pointer;
 }
 
 .nav-tabs__item:hover {
@@ -225,10 +231,10 @@ a {
 .topbar-actions__panel {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 8px 10px;
   border: 1px solid var(--panel-line);
-  border-radius: 24px;
+  border-radius: 20px;
   background: rgba(255, 248, 251, 0.92);
   box-shadow: 0 14px 28px rgba(232, 170, 196, 0.18);
 }
@@ -236,20 +242,20 @@ a {
 .quick-icons {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px;
-  border-radius: 18px;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 16px;
   background: #f9edf2;
   border: 1px solid #f1dfe7;
 }
 
 .icon-btn {
-  width: 46px;
-  height: 46px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
   color: var(--pink);
-  border-radius: 16px;
+  border-radius: 12px;
   transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -270,35 +276,35 @@ a {
 }
 
 .icon-svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   display: block;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .icon-svg--search {
-  width: 21px;
-  height: 21px;
+  width: 18px;
+  height: 18px;
 }
 
 .profile-chip {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
-  padding-left: 4px;
+  padding-left: 2px;
 }
 
 .profile-chip__avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 16px;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #efc171, #ea8250);
   color: #fff;
   display: grid;
   place-items: center;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
@@ -308,32 +314,32 @@ a {
 }
 
 .profile-chip__eyebrow {
-  margin-bottom: 2px;
+  margin-bottom: 1px;
   color: #af8d9b;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .profile-chip__name {
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1.15;
   font-weight: 700;
   color: var(--pink);
 }
 
 .profile-chip__mail {
-  margin-top: 3px;
-  font-size: 13px;
+  margin-top: 2px;
+  font-size: 12px;
   color: #675765;
   white-space: nowrap;
 }
 
 .profile-chip__caret {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-right: 2px solid #de7ca4;
   border-bottom: 2px solid #de7ca4;
   transform: rotate(45deg);
@@ -814,6 +820,8 @@ textarea {
   }
 
   .topbar {
+    width: 100%;
+    margin: 0;
     grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 20px;
     row-gap: 18px;
@@ -874,6 +882,8 @@ textarea {
   }
 
   .topbar {
+    width: 100%;
+    margin: 0;
     min-height: auto;
     padding: 14px;
   }

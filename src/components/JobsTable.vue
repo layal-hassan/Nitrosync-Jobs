@@ -38,6 +38,7 @@ const viewingJobUuid = ref('')
 const router = useRouter()
 const deleteJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/delete')
 const getOneJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-one')
+const recruiterStorageKey = 'nitrosync-job-recruiters'
 
 const createDefaultFilters = () => ({
   job_title: '',
@@ -133,10 +134,71 @@ const recruiterPresentation = (index = 0) => {
   return variants[index % variants.length]
 }
 
+const getJobStageRows = (job = {}) =>
+  Array.isArray(job?.jobs_stages)
+    ? job.jobs_stages
+    : Array.isArray(job?.job_stages)
+      ? job.job_stages
+      : Array.isArray(job?.stages)
+        ? job.stages
+        : []
+
+const getStageCandidateCount = (stageRow = {}) => {
+  const directCount = Number(
+    stageRow?.candidates_count
+    ?? stageRow?.candidate_count
+    ?? stageRow?.count
+    ?? stageRow?.total_candidates,
+  )
+
+  if (Number.isFinite(directCount)) {
+    return directCount
+  }
+
+  if (Array.isArray(stageRow?.cards)) {
+    return stageRow.cards.length
+  }
+
+  if (Array.isArray(stageRow?.candidates)) {
+    return stageRow.candidates.length
+  }
+
+  return 0
+}
+
+const getRecruiterAvatar = (job = {}) =>
+  String(
+    job?.recruiter_avatar
+    ?? job?.avatar
+    ?? job?.recruiter_image
+    ?? job?.recruiter_photo
+    ?? job?.recruiter?.avatar
+    ?? job?.recruiter?.image
+    ?? job?.recruiter?.photo
+    ?? '',
+  ).trim()
+
+const getStoredRecruiterName = (job = {}) => {
+  const jobUuid = String(job?.job_uuid ?? job?.uuid ?? '').trim()
+  if (!jobUuid) return ''
+
+  try {
+    const rawValue = localStorage.getItem(recruiterStorageKey)
+    const parsed = rawValue ? JSON.parse(rawValue) : {}
+    const storedRecruiter = parsed?.[jobUuid]
+    return typeof storedRecruiter?.recruiter_name === 'string' ? storedRecruiter.recruiter_name.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
 const normalizedJobs = computed(() =>
   (props.jobs || []).map((job, index) => {
     const department = departmentPresentation(job.department?.department_name || '')
-    const recruiterName = typeof job.recruiter_name === 'string' ? job.recruiter_name : ''
+    const recruiterName =
+      (typeof job.recruiter_name === 'string' ? job.recruiter_name.trim() : '')
+      || (typeof job.recruiter === 'string' ? job.recruiter.trim() : '')
+      || getStoredRecruiterName(job)
     const recruiterUi = recruiterPresentation(index)
     const tags = toArray(job.tags).map((tag) =>
       typeof tag === 'object'
@@ -155,10 +217,14 @@ const normalizedJobs = computed(() =>
     ].filter(Boolean)
 
     const activeStageKey = slugifyStage(hiringStage)
+    const stageRows = getJobStageRows(job)
     const stages = stageDefinitions.map((stage) => ({
       ...stage,
       isActive: stage.key === activeStageKey,
       displayColor: stage.key === activeStageKey ? stage.color : stage.mutedColor,
+      candidateCount: getStageCandidateCount(
+        stageRows.find((item) => slugifyStage(item?.label ?? item?.stage_name ?? item?.job_stage_name ?? item?.name ?? item?.title) === stage.key),
+      ),
     }))
 
     return {
@@ -171,6 +237,7 @@ const normalizedJobs = computed(() =>
       department: department.label,
       departmentClass: department.className,
       recruiter: recruiterName || '--',
+      recruiterAvatar: getRecruiterAvatar(job),
       recruiterClass: recruiterUi.recruiterClass,
       avatar: getInitials(recruiterName),
       avatarClass: recruiterUi.avatarClass,
@@ -349,6 +416,14 @@ const openFilter = () => {
   openMenuIndex.value = null
 }
 
+const showStageTooltip = (job, stage) => {
+  openStageTooltip.value = `${job.jobUuid || job.id}-${stage.key}`
+}
+
+const hideStageTooltip = () => {
+  openStageTooltip.value = ''
+}
+
 const closeFilter = () => {
   isFilterOpen.value = false
 }
@@ -396,38 +471,60 @@ const goToPostJob = () => {
   router.push('/jobs/post')
 }
 
-const openEditJob = (job) => {
-  const payload = {
-    job_uuid: job.jobUuid,
-    related_company: job.relatedCompany,
-    job_title: job.title === '--' ? '' : job.title,
-    job_code: job.jobCode,
-    department: job.department,
-    country: job.country,
-    city: job.city,
-    description: job.description,
-    industry: job.industry,
-    contract_type: job.contractType,
-    currency: job.currency,
-    start_from: job.startFrom,
-    end_to: job.endTo,
-    career_level: job.careerLevel,
-    degree_level: job.degreeLevel,
-    job_title_seo: job.jobTitleSeo,
-    job_description_seo: job.jobDescriptionSeo,
-    tags: [...job.tags],
-    recruiter: job.recruiter === '--' ? '' : job.recruiter,
+const openEditJob = async (job) => {
+  if (!job.jobUuid) {
+    window.alert('This job is missing job_uuid, so edit cannot be loaded.')
+    return
   }
 
-  sessionStorage.setItem('nitrosync-edit-job', JSON.stringify(payload))
-  openMenuIndex.value = null
-  router.push({
-    path: '/jobs/post',
-    query: {
-      mode: 'edit',
-      job_uuid: job.jobUuid || '',
-    },
-  })
+  try {
+    const response = await axios.post(
+      getOneJobEndpoint,
+      {
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: nitroSyncRequestTimeoutMs,
+      },
+    )
+
+    const details =
+      response?.data?.data?.job
+      ?? response?.data?.data
+      ?? response?.data?.job
+      ?? {}
+
+    const payload = buildStoredJobPayload(job, details)
+    sessionStorage.setItem('nitrosync-edit-job', JSON.stringify(payload))
+    openMenuIndex.value = null
+    router.push({
+      path: '/jobs/post',
+      query: {
+        mode: 'edit',
+        job_uuid: payload.job_uuid || job.jobUuid || '',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to get job details for edit', {
+      endpoint: getOneJobEndpoint,
+      payload: {
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+      },
+      error,
+    })
+
+    window.alert(
+      error?.response?.data?.message
+        || error?.response?.data?.detail
+        || error?.response?.data?.msg
+        || 'Failed to load job details.',
+    )
+  }
 }
 
 const buildStoredJobPayload = (job, details = {}) => ({
@@ -472,6 +569,12 @@ const buildStoredJobPayload = (job, details = {}) => ({
       ).filter(Boolean)
     : [...job.tags],
   recruiter: details.recruiter_name ?? details.recruiter ?? job.recruiter,
+  jobs_stages: Array.isArray(details.jobs_stages) ? details.jobs_stages : [],
+  score_cards: Array.isArray(details.score_cards) ? details.score_cards : [],
+  automated_actions: Array.isArray(details.automated_actions) ? details.automated_actions : [],
+  assessments: Array.isArray(details.assessments) ? details.assessments : [],
+  intelligent_screen_move_criterias: Array.isArray(details.intelligent_screen_move_criterias) ? details.intelligent_screen_move_criterias : [],
+  intelligent_screen_job_questions: Array.isArray(details.intelligent_screen_job_questions) ? details.intelligent_screen_job_questions : [],
 })
 
 const openViewJob = async (job) => {
@@ -697,13 +800,16 @@ onBeforeUnmount(() => {
               class="jobs-stages__dot"
               :class="{ 'jobs-stages__dot--active': stage.isActive }"
               :style="{ backgroundColor: stage.displayColor }"
+              @mouseenter="showStageTooltip(job, stage)"
+              @mouseleave="hideStageTooltip"
               @click.stop="openJobStages(job)"
             >
               <span
                 v-if="openStageTooltip === `${job.jobUuid || job.id}-${stage.key}`"
                 class="jobs-stages__tooltip"
               >
-                {{ stage.label }}
+                <strong>{{ stage.label }}</strong>
+                <span>{{ stage.candidateCount }} candidates</span>
               </span>
             </button>
           </div>
@@ -721,7 +827,12 @@ onBeforeUnmount(() => {
 
         <div class="jobs-col jobs-col--recruiter">
           <span :class="job.recruiterClass">
-            <span :class="job.avatarClass">{{ job.avatar }}</span>
+            <img
+              v-if="job.recruiterAvatar"
+              :src="job.recruiterAvatar"
+              alt=""
+              class="avatar-image"
+            />
             {{ job.recruiter }}
           </span>
         </div>
@@ -792,13 +903,16 @@ onBeforeUnmount(() => {
               class="jobs-stages__dot"
               :class="{ 'jobs-stages__dot--active': stage.isActive }"
               :style="{ backgroundColor: stage.displayColor }"
+              @mouseenter="showStageTooltip(job, stage)"
+              @mouseleave="hideStageTooltip"
               @click.stop="openJobStages(job)"
             >
               <span
                 v-if="openStageTooltip === `${job.jobUuid || job.id}-${stage.key}`"
                 class="jobs-stages__tooltip"
               >
-                {{ stage.label }}
+                <strong>{{ stage.label }}</strong>
+                <span>{{ stage.candidateCount }} candidates</span>
               </span>
             </button>
           </div>
@@ -807,7 +921,12 @@ onBeforeUnmount(() => {
         <div class="jobs-grid-card__section">
           <span class="jobs-grid-card__label">Recruiter</span>
           <span :class="job.recruiterClass">
-            <span :class="job.avatarClass">{{ job.avatar }}</span>
+            <img
+              v-if="job.recruiterAvatar"
+              :src="job.recruiterAvatar"
+              alt=""
+              class="avatar-image"
+            />
             {{ job.recruiter }}
           </span>
         </div>
@@ -1410,16 +1529,28 @@ onBeforeUnmount(() => {
   bottom: calc(100% + 10px);
   transform: translateX(-50%);
   min-width: max-content;
-  padding: 6px 10px;
+  padding: 7px 10px;
   border-radius: 8px;
   background: #ffffff;
   border: 1px solid #eddbe3;
   box-shadow: 0 12px 24px rgba(63, 37, 49, 0.12);
   color: #7d5f6d;
   font-size: 11px;
-  line-height: 1;
+  line-height: 1.2;
   white-space: nowrap;
+  display: grid;
+  gap: 3px;
+  text-align: center;
   z-index: 12;
+}
+
+.jobs-stages__tooltip strong {
+  color: #4e3e47;
+  font-weight: 700;
+}
+
+.jobs-stages__tooltip span {
+  color: #9a8791;
 }
 
 .jobs-stages__tooltip::after {
@@ -1467,7 +1598,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   background: #f7f7f9;
   border-radius: 20px;
-  padding: 4px 10px 4px 4px;
+  padding: 4px 10px;
   font-size: 10px;
   white-space: nowrap;
 }
@@ -1488,6 +1619,14 @@ onBeforeUnmount(() => {
   color: #ffffff;
   font-size: 9px;
   font-weight: 700;
+}
+
+.avatar-image {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex: 0 0 auto;
 }
 
 :deep(.avatar--pink) { background: linear-gradient(135deg, #ffbdcb, #ec4b8d); }

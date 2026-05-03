@@ -1,15 +1,26 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 import logoImage from './assets/logo.png'
 import { getNitroSyncEmployees } from './composables/useNitroSyncEmployees'
 
-const navItems = ['Job', 'Employee', 'Reports', 'Payroll', 'Adbuilder', 'Survey', 'Support']
+const navItems = [
+  { label: 'Home', to: '/' },
+  { label: 'Job', to: '/jobs' },
+  { label: 'Employee', to: '/employees' },
+  { label: 'Payroll', to: '#' },
+  { label: 'Adbuilder', to: '#' },
+  { label: 'Survey', to: '#' },
+  { label: 'Reports', to: '#' },
+  { label: 'Support', to: '#' },
+]
 const mobileMenuOpen = ref(false)
 const companyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
 const profile = ref({
   name: 'Team member',
   email: 'member@nitrosync.com',
 })
+const route = useRoute()
 
 const normalizeLabel = (value, fallback = '') => {
   const normalized = String(value ?? '').trim()
@@ -148,16 +159,25 @@ onMounted(() => {
         </button>
 
         <nav class="nav-tabs" :class="{ 'nav-tabs--open': mobileMenuOpen }">
-          <a
+          <component
             v-for="item in navItems"
-            :key="item"
-            href="#"
+            :key="item.label"
+            :is="item.to !== '#' ? RouterLink : 'a'"
+            :to="item.to !== '#' ? item.to : undefined"
+            :href="item.to === '#' ? '#' : undefined"
             class="nav-tabs__item"
-            :class="{ 'nav-tabs__item--active': item === 'Job' }"
+            :class="{
+              'nav-tabs__item--link': item.to !== '#',
+              'nav-tabs__item--active':
+                route.path === item.to
+                || (item.to === '/' && route.path === '/')
+                || (item.to === '/jobs' && route.path.startsWith('/jobs'))
+                || (item.to === '/employees' && route.path.startsWith('/employees')),
+            }"
             @click="closeMobileMenu"
           >
-            {{ item }}
-          </a>
+            {{ item.label }}
+          </component>
         </nav>
 
         <div class="topbar-actions">

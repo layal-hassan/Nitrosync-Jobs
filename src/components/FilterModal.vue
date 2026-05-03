@@ -197,46 +197,50 @@ const applyFilters = () => {
 }
 
 .filter-modal__panel {
+  --control-height: 38px;
+  --control-radius: 10px;
+  --control-padding-x: 14px;
+  --font-body: 12px;
   position: relative;
-  width: min(972px, calc(100vw - 64px));
+  width: min(920px, calc(100vw - 72px));
   background: #ffffff;
   border: 1px solid #f0e6ea;
   border-radius: 0;
-  box-shadow: 0 22px 44px rgba(67, 46, 57, 0.18);
+  box-shadow: 0 18px 36px rgba(67, 46, 57, 0.16);
 }
 
 .filter-modal__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 10px 14px 12px;
+  padding: 12px 10px 12px 12px;
   border-bottom: 1px solid #f4ecef;
 }
 
 .filter-modal__heading {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .filter-modal__funnel {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   background: #a86a82;
   clip-path: polygon(0 0, 100% 0, 62% 42%, 62% 100%, 38% 100%, 38% 42%);
 }
 
 .filter-modal__title {
   margin: 0;
-  font-size: 25px;
+  font-size: 20px;
   font-weight: 500;
   line-height: 1;
   color: #8f5a6f;
 }
 
 .filter-modal__close {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border: 1px solid #b87f94;
   border-radius: 999px;
   position: relative;
@@ -245,9 +249,9 @@ const applyFilters = () => {
 
 .filter-modal__close span {
   position: absolute;
-  top: 10px;
+  top: 9px;
   left: 4px;
-  width: 12px;
+  width: 10px;
   height: 1px;
   background: #b87f94;
 }
@@ -261,14 +265,14 @@ const applyFilters = () => {
 }
 
 .filter-modal__body {
-  padding: 28px 0 0;
+  padding: 20px 0 0;
 }
 
 .filter-modal__grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px 14px;
-  padding: 0 26px 30px;
+  gap: 12px 12px;
+  padding: 0 22px 22px;
 }
 
 .filter-modal__divider {
@@ -277,12 +281,12 @@ const applyFilters = () => {
 }
 
 .filter-modal__positions {
-  padding: 16px 26px 0;
+  padding: 14px 22px 0;
 }
 
 .filter-modal__positions-title {
-  margin: 0 0 18px;
-  font-size: 24px;
+  margin: 0 0 14px;
+  font-size: 18px;
   line-height: 1.1;
   font-weight: 500;
   color: #372f35;
@@ -291,21 +295,21 @@ const applyFilters = () => {
 .filter-modal__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px 12px;
+  gap: 10px 10px;
 }
 
 .filter-modal__actions {
   display: flex;
   justify-content: flex-end;
-  gap: 20px;
-  padding: 28px 46px 22px;
+  gap: 14px;
+  padding: 20px 32px 18px;
 }
 
 .filter-modal__button {
-  min-width: 90px;
-  height: 34px;
-  border-radius: 11px;
-  font-size: 14px;
+  min-width: 84px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 12px;
   line-height: 1;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
@@ -329,7 +333,7 @@ const applyFilters = () => {
 
 @media (max-width: 1100px) {
   .filter-modal__panel {
-    width: min(972px, calc(100vw - 32px));
+    width: min(920px, calc(100vw - 32px));
   }
 
   .filter-modal__grid {

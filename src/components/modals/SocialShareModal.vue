@@ -12,7 +12,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'back'])
 
 const copied = ref(false)
 
@@ -114,6 +114,7 @@ const openShare = async (platform) => {
       </div>
 
       <footer class="social-modal__footer">
+        <button type="button" class="social-modal__back" @click="$emit('back')">Back</button>
         <button type="button" class="social-modal__done" @click="$emit('close')">Done</button>
       </footer>
     </section>
@@ -313,16 +314,27 @@ const openShare = async (platform) => {
 .social-modal__footer {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   padding: 18px 16px 16px;
 }
 
+.social-modal__back,
 .social-modal__done {
   min-width: 80px;
   height: 31px;
   border-radius: 9px;
+  font-size: 12px;
+}
+
+.social-modal__back {
+  border: 1px solid #e8dde3;
+  background: #ffffff;
+  color: #9f9098;
+}
+
+.social-modal__done {
   background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
   color: #ffffff;
-  font-size: 12px;
   box-shadow: 0 10px 16px rgba(234, 79, 141, 0.18);
 }
 </style>

@@ -71,7 +71,7 @@ defineProps({
   width: 100%;
   min-width: 0;
   height: var(--control-height);
-  padding: 0 42px 0 var(--control-padding-x);
+  padding: 0 36px 0 var(--control-padding-x);
   border: 0;
   outline: 0;
   background: transparent;
@@ -100,46 +100,46 @@ defineProps({
 
 .filter-input__icon {
   position: absolute;
-  right: 16px;
+  right: 13px;
   pointer-events: none;
 }
 
 .filter-input__icon--chevron {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-right: 1.5px solid #a7929d;
   border-bottom: 1.5px solid #a7929d;
   transform: rotate(45deg);
-  margin-top: -4px;
+  margin-top: -3px;
 }
 
 .filter-input__icon--calendar {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
   border: 1.5px solid #ea4f8d;
-  border-radius: 4px;
+  border-radius: 3px;
   background:
-    linear-gradient(#ea4f8d, #ea4f8d) center 4px / 11px 1.5px no-repeat,
-    linear-gradient(#ea4f8d, #ea4f8d) center 8px / 9px 1px no-repeat,
-    linear-gradient(#ea4f8d, #ea4f8d) center 11px / 9px 1px no-repeat;
+    linear-gradient(#ea4f8d, #ea4f8d) center 3px / 9px 1.5px no-repeat,
+    linear-gradient(#ea4f8d, #ea4f8d) center 7px / 7px 1px no-repeat,
+    linear-gradient(#ea4f8d, #ea4f8d) center 10px / 7px 1px no-repeat;
 }
 
 .filter-input__icon--calendar::before,
 .filter-input__icon--calendar::after {
   content: '';
   position: absolute;
-  top: -3px;
+  top: -2px;
   width: 2px;
-  height: 5px;
+  height: 4px;
   border-radius: 999px;
   background: #ea4f8d;
 }
 
 .filter-input__icon--calendar::before {
-  left: 3px;
+  left: 2px;
 }
 
 .filter-input__icon--calendar::after {
-  right: 3px;
+  right: 2px;
 }
 </style>

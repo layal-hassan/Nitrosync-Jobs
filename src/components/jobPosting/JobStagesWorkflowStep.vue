@@ -222,37 +222,37 @@ const candidateMenuItems = [
 const fallbackStageColumns = [
   {
     title: 'new',
-    isOpen: true,
+    isOpen: false,
     color: '#e94b8a',
     cards: [],
   },
   {
     title: 'screen',
-    isOpen: true,
+    isOpen: false,
     color: '#4f7dff',
     cards: [],
   },
   {
     title: 'testing',
-    isOpen: true,
+    isOpen: false,
     color: '#6b21d8',
     cards: [],
   },
   {
     title: 'interview',
-    isOpen: true,
+    isOpen: false,
     color: '#f4b21b',
     cards: [],
   },
   {
     title: 'shortlisted',
-    isOpen: true,
+    isOpen: false,
     color: '#41c86a',
     cards: [],
   },
   {
     title: 'hired',
-    isOpen: true,
+    isOpen: false,
     color: '#e94b8a',
     cards: [],
   },
@@ -269,7 +269,7 @@ const mapStageRowsToColumns = (rows = []) => {
     title: String(row.label || `Stage ${index + 1}`).toLowerCase(),
     displayTitle: String(row.label || `Stage ${index + 1}`),
     jobStageUuid: row.jobStageUuid || '',
-    isOpen: row.enabled ?? true,
+    isOpen: row.enabled ?? false,
     color: stagePalette[index % stagePalette.length],
     cards: Array.isArray(row.cards) ? row.cards : [],
   }))

@@ -152,7 +152,7 @@ const generateDescriptionWithAi = async () => {
 
 .step-form__label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   font-size: var(--font-label);
   color: #1f1720;
 }
@@ -161,7 +161,7 @@ const generateDescriptionWithAi = async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .step-form__input,
@@ -172,7 +172,7 @@ const generateDescriptionWithAi = async () => {
   background: #f8f8f8;
   color: #5f565c;
   min-height: var(--control-height);
-  padding: 12px var(--control-padding-x);
+  padding: 10px var(--control-padding-x);
   font: inherit;
   font-size: var(--font-body);
 }
@@ -185,21 +185,21 @@ const generateDescriptionWithAi = async () => {
 .step-form__textarea {
   min-height: var(--textarea-min-height);
   resize: none;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .step-form__ai-button {
-  height: 34px;
-  padding: 0 14px;
+  height: 30px;
+  padding: 0 12px;
   border: 1px solid #8fa8ff;
   border-radius: 999px;
   color: #4f7dff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   background: linear-gradient(180deg, #ffffff, #f5f8ff);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   box-shadow: 0 4px 10px rgba(79, 125, 255, 0.08);
 }
 
@@ -209,26 +209,26 @@ const generateDescriptionWithAi = async () => {
 }
 
 .step-form__ai-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
   display: grid;
   place-items: center;
   background: #eef3ff;
   color: #4f7dff;
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1;
 }
 
 .step-form__error {
   margin: 6px 0 0;
-  font-size: 12px;
+  font-size: 11px;
   color: #e15b8f;
 }
 
 .step-form__success {
   margin: 6px 0 0;
-  font-size: 12px;
+  font-size: 11px;
   color: #1d8f46;
 }
 

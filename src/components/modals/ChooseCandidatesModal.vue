@@ -122,11 +122,11 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
 
 .choose-modal__panel {
   position: relative;
-  width: min(546px, calc(100vw - 28px));
+  width: min(452px, calc(100vw - 28px));
   max-height: calc(100vh - 40px);
   background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 24px 50px rgba(32, 19, 26, 0.24);
+  border-radius: 12px;
+  box-shadow: 0 18px 34px rgba(32, 19, 26, 0.18);
   overflow: auto;
 }
 
@@ -134,20 +134,20 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 28px;
+  padding: 12px 16px;
   border-bottom: 1px solid #f0e9ed;
 }
 
 .choose-modal__title {
   margin: 0;
   color: #f04f92;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 500;
 }
 
 .choose-modal__close {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
   background: #f04f92;
   position: relative;
@@ -155,9 +155,9 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
 
 .choose-modal__close span {
   position: absolute;
-  top: 10px;
-  left: 5px;
-  width: 12px;
+  top: 8px;
+  left: 4px;
+  width: 10px;
   height: 1.5px;
   background: #ffffff;
 }
@@ -166,27 +166,27 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
 .choose-modal__close span:last-child { transform: rotate(-45deg); }
 
 .choose-modal__body {
-  padding: 28px;
+  padding: 16px;
 }
 
 .choose-modal__filters {
-  border-radius: 26px;
+  border-radius: 16px;
   background: #fbfbfc;
-  padding: 18px 18px 20px;
+  padding: 12px;
 }
 
 .choose-modal__filters-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: #f04f92;
-  font-size: 16px;
-  margin-bottom: 18px;
+  font-size: 12px;
+  margin-bottom: 10px;
 }
 
 .choose-modal__filters-icon {
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   background: currentColor;
   clip-path: polygon(0 0, 100% 0, 63% 44%, 63% 100%, 37% 100%, 37% 44%);
 }
@@ -194,18 +194,19 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
 .choose-modal__filters-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px 14px;
+  gap: 8px;
 }
 
 .choose-modal__input {
   width: 100%;
-  height: 36px;
+  height: 25px;
   border: 1px solid #e8dde3;
-  border-radius: 12px;
+  border-radius: 8px;
   background: #ffffff;
-  padding: 0 14px;
+  padding: 0 8px;
   color: #655b62;
   font: inherit;
+  font-size: 10px;
   outline: 0;
 }
 
@@ -216,24 +217,25 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
 .choose-modal__cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px 22px;
-  margin-top: 46px;
+  gap: 10px 12px;
+  margin-top: 18px;
 }
 
 .choose-modal__card {
-  min-height: 56px;
+  min-height: 40px;
   background: #fcfcfd;
   border: 1px solid #f0eaee;
-  padding: 0 16px 0 14px;
+  padding: 0 10px 0 8px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   text-align: left;
 }
 
 .choose-modal__avatar {
-  width: 30px;
-  height: 30px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   background: #dedede;
   flex: 0 0 auto;
@@ -241,7 +243,7 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
 
 .choose-modal__name {
   flex: 1 1 auto;
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .choose-modal__name--pink { color: #f04f92; }
@@ -250,16 +252,18 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
 .choose-modal__name--gold { color: #eea800; }
 
 .choose-modal__plus {
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   border: 1px solid currentColor;
   color: #f04f92;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  font-size: 18px;
-  line-height: 1;
+  font-size: 13px;
+  line-height: 0;
+  padding-bottom: 1px;
 }
 
 .choose-modal__plus--selected {
@@ -271,16 +275,16 @@ const isSelected = (id) => props.selectedCandidates.some((candidate) => candidat
 .choose-modal__footer {
   display: flex;
   justify-content: flex-end;
-  padding: 0 28px 28px;
+  padding: 0 16px 16px;
 }
 
 .choose-modal__done {
-  min-width: 118px;
-  height: 38px;
-  border-radius: 14px;
+  min-width: 84px;
+  height: 30px;
+  border-radius: 9px;
   background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
   color: #ffffff;
-  font-size: 14px;
+  font-size: 11px;
   box-shadow: 0 10px 16px rgba(234, 79, 141, 0.18);
 }
 
