@@ -714,26 +714,31 @@ onBeforeUnmount(() => {
 
       <div v-if="viewMode === 'list'" class="employee-table">
         <div class="employee-table__header">
-          <div>Employee ID</div>
-          <div>Employee Name</div>
-          <div>Position</div>
-          <div>Status</div>
-          <div>Hire Date</div>
-          <div>Phone Number</div>
-          <div>Email Address</div>
-          <div>Action</div>
+          <div class="employee-table__head employee-table__head--id">Employee ID</div>
+          <div class="employee-table__head employee-table__head--name">Employee Name</div>
+          <div class="employee-table__head employee-table__head--position">Position</div>
+          <div class="employee-table__head employee-table__head--status">Status</div>
+          <div class="employee-table__head employee-table__head--date">Hire Date</div>
+          <div class="employee-table__head employee-table__head--phone">Phone Number</div>
+          <div class="employee-table__head employee-table__head--email">Email Address</div>
+          <div class="employee-table__head employee-table__head--action">Action</div>
         </div>
 
-        <article v-for="(employee, index) in filteredEmployees" :key="employee.id" class="employee-table__row">
+        <article
+          v-for="(employee, index) in filteredEmployees"
+          :key="employee.id"
+          class="employee-table__row"
+          :class="{ 'employee-table__row--menu-open': openMenuKey === employee.id }"
+        >
           <div class="employee-table__cell employee-table__cell--id">{{ formatEmployeeRowId(employee, index) }}</div>
           <div class="employee-table__cell employee-table__cell--name">{{ employee.name }}</div>
           <div class="employee-table__cell employee-table__cell--position">{{ employee.role }}</div>
-          <div class="employee-table__cell">
+          <div class="employee-table__cell employee-table__cell--status">
             <span class="employee-table__status" :class="{ 'employee-table__status--inactive': employee.status !== 'Active' }">
               {{ employee.status }}
             </span>
           </div>
-          <div class="employee-table__cell">{{ formatEmployeeHireDate(employee) }}</div>
+          <div class="employee-table__cell employee-table__cell--date">{{ formatEmployeeHireDate(employee) }}</div>
           <div class="employee-table__cell employee-table__cell--phone">{{ employee.phone }}</div>
           <div class="employee-table__cell employee-table__cell--email">{{ employee.email }}</div>
           <div class="employee-table__cell employee-table__cell--action">
@@ -1031,15 +1036,15 @@ onBeforeUnmount(() => {
 }
 
 .employee-search {
-  width: 260px;
+  width: 180px;
   display: flex;
   align-items: center;
-  flex: 0 0 260px;
-  gap: 10px;
-  min-height: 44px;
-  padding: 0 14px;
+  flex: 0 0 180px;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
   border: 1px solid #f2e7ec;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #fbf8fa;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
@@ -1048,13 +1053,13 @@ onBeforeUnmount(() => {
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 42px;
-  height: 42px;
+  min-height: 34px;
+  height: 34px;
   padding: 0;
   border: 0;
   background: transparent;
   color: #6e616a;
-  font-size: 15px;
+  font-size: 12px;
   font: inherit;
   line-height: 1.2;
   -webkit-appearance: none;
@@ -1063,11 +1068,11 @@ onBeforeUnmount(() => {
 }
 
 .employee-search__icon {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   color: #f0a9c4;
   display: flex;
-  flex: 0 0 18px;
+  flex: 0 0 14px;
   align-items: center;
   justify-content: center;
   pointer-events: none;
@@ -1215,6 +1220,15 @@ onBeforeUnmount(() => {
 }
 
 .employee-table {
+  --employee-table-columns:
+    minmax(88px, 0.8fr)
+    minmax(170px, 1.45fr)
+    minmax(150px, 1.2fr)
+    minmax(118px, 0.9fr)
+    minmax(122px, 1fr)
+    minmax(146px, 1.15fr)
+    minmax(190px, 1.5fr)
+    minmax(82px, 0.72fr);
   margin-top: 18px;
   border: 1px solid #f4e7ec;
   border-radius: 18px;
@@ -1225,7 +1239,7 @@ onBeforeUnmount(() => {
 .employee-table__header,
 .employee-table__row {
   display: grid;
-  grid-template-columns: 84px 182px 132px 118px 132px 154px 170px 76px;
+  grid-template-columns: var(--employee-table-columns);
   gap: 0;
   align-items: center;
   padding: 14px 18px;
@@ -1240,11 +1254,31 @@ onBeforeUnmount(() => {
   border-radius: 16px;
 }
 
+.employee-table__head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  font-size: 10px;
+  text-align: center;
+}
+
+.employee-table__head--date,
+.employee-table__head--phone,
+.employee-table__head--email {
+  justify-content: flex-start;
+  text-align: left;
+}
+
 .employee-table__row {
   position: relative;
   min-height: 0;
   border-bottom: 1px solid #f6ebef;
   background: #fff;
+}
+
+.employee-table__row--menu-open {
+  z-index: 60;
 }
 
 .employee-table__row:last-child {
@@ -1264,6 +1298,13 @@ onBeforeUnmount(() => {
 
 .employee-table__cell--id {
   font-weight: 600;
+}
+
+.employee-table__cell--date,
+.employee-table__cell--phone,
+.employee-table__cell--email {
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .employee-table__cell--name {

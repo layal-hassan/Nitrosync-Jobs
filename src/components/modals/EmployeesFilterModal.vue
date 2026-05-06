@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import Dropdown from '../ui/Dropdown.vue'
 
 const props = defineProps({
@@ -22,6 +22,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'apply', 'clear'])
+const activeDateField = ref('')
 
 const createForm = () => ({
   employmentStatus: '',
@@ -61,6 +62,8 @@ const handleClear = () => {
   syncForm()
   emit('clear')
 }
+
+const getDateInputType = (fieldName) => (activeDateField.value === fieldName || form[fieldName] ? 'date' : 'text')
 
 watch(
   () => props.open,
@@ -117,17 +120,35 @@ watch(
         <div class="employee-filters-modal__range-label">Employee Range</div>
 
         <label class="employee-filters-modal__field employee-filters-modal__field--date">
-          <input v-model="form.rangeFrom" type="date" placeholder="From" />
+          <input
+            v-model="form.rangeFrom"
+            :type="getDateInputType('rangeFrom')"
+            placeholder="From"
+            @focus="activeDateField = 'rangeFrom'"
+            @blur="activeDateField = ''"
+          />
           <span class="employee-filters-modal__calendar" aria-hidden="true"></span>
         </label>
 
         <label class="employee-filters-modal__field employee-filters-modal__field--date">
-          <input v-model="form.rangeTo" type="date" placeholder="To" />
+          <input
+            v-model="form.rangeTo"
+            :type="getDateInputType('rangeTo')"
+            placeholder="To"
+            @focus="activeDateField = 'rangeTo'"
+            @blur="activeDateField = ''"
+          />
           <span class="employee-filters-modal__calendar" aria-hidden="true"></span>
         </label>
 
         <label class="employee-filters-modal__field employee-filters-modal__field--full employee-filters-modal__field--date">
-          <input v-model="form.hireDate" type="date" placeholder="Hire date" />
+          <input
+            v-model="form.hireDate"
+            :type="getDateInputType('hireDate')"
+            placeholder="Hire date"
+            @focus="activeDateField = 'hireDate'"
+            @blur="activeDateField = ''"
+          />
           <span class="employee-filters-modal__calendar" aria-hidden="true"></span>
         </label>
 
@@ -159,30 +180,34 @@ watch(
   z-index: 145;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 28px;
 }
 
 .employee-filters-modal__overlay {
   position: absolute;
   inset: 0;
-  background: rgba(34, 21, 28, 0.48);
+  background: rgba(54, 35, 45, 0.34);
+  backdrop-filter: blur(3px);
 }
 
 .employee-filters-modal__panel {
+  --employee-filter-control-height: 36px;
+  --employee-filter-control-radius: 13px;
   position: relative;
-  width: min(438px, calc(100vw - 28px));
-  padding: 9px;
-  border: 1px solid #f0dfe6;
-  border-radius: 16px;
+  width: min(552px, calc(100vw - 36px));
+  padding: 12px;
+  border: 1px solid #f3dbe5;
+  border-radius: 22px;
   background: #fff;
-  box-shadow: 0 20px 50px rgba(44, 26, 34, 0.22);
+  box-shadow: 0 26px 60px rgba(61, 36, 48, 0.2);
 }
 
 .employee-filters-modal__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  padding: 4px 2px 0;
 }
 
 .employee-filters-modal__title-wrap {
@@ -192,8 +217,8 @@ watch(
 }
 
 .employee-filters-modal__title-icon {
-  width: 11px;
-  height: 11px;
+  width: 13px;
+  height: 13px;
   background: #ef5a96;
   clip-path: polygon(0 0, 100% 0, 68% 36%, 68% 100%, 32% 100%, 32% 36%);
 }
@@ -201,24 +226,25 @@ watch(
 .employee-filters-modal__title {
   margin: 0;
   color: #ef5a96;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .employee-filters-modal__close {
   position: relative;
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #ef5a96;
+  box-shadow: 0 6px 14px rgba(239, 90, 150, 0.22);
 }
 
 .employee-filters-modal__close span {
   position: absolute;
-  top: 8px;
-  left: 4px;
-  width: 10px;
-  height: 1.5px;
+  top: 11px;
+  left: 6px;
+  width: 12px;
+  height: 1.6px;
   background: #fff;
 }
 
@@ -233,7 +259,7 @@ watch(
 .employee-filters-modal__body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .employee-filters-modal__field {
@@ -248,17 +274,18 @@ watch(
 .employee-filters-modal__field input,
 .employee-filters-modal__field :deep(.dropdown__trigger) {
   width: 100%;
-  min-height: 29px !important;
-  height: 29px !important;
-  max-height: 29px !important;
-  padding: 0 10px !important;
-  border: 1px solid #eee4e8;
-  border-radius: 7px;
+  min-height: var(--employee-filter-control-height) !important;
+  height: var(--employee-filter-control-height) !important;
+  max-height: var(--employee-filter-control-height) !important;
+  padding: 0 13px !important;
+  border: 1px solid #efdee5;
+  border-radius: var(--employee-filter-control-radius);
   background: #fff;
   color: #746a70;
-  font-size: 10px !important;
-  line-height: 29px !important;
+  font-size: 12px !important;
+  line-height: var(--employee-filter-control-height) !important;
   box-sizing: border-box;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
 }
 
 .employee-filters-modal__field input {
@@ -272,6 +299,13 @@ watch(
   background-clip: padding-box;
 }
 
+.employee-filters-modal__field input:focus,
+.employee-filters-modal__field :deep(.dropdown__trigger:focus-visible) {
+  outline: none;
+  border-color: #ef87b1;
+  box-shadow: 0 0 0 3px rgba(239, 90, 150, 0.1);
+}
+
 .employee-filters-modal__field input::placeholder,
 .employee-filters-modal__field :deep(.dropdown__trigger--placeholder) {
   color: #b9afb5;
@@ -280,31 +314,31 @@ watch(
 .employee-filters-modal__field :deep(.dropdown__trigger) {
   display: flex;
   align-items: center;
-  padding-right: 28px !important;
+  padding-right: 34px !important;
   background: #fff;
 }
 
 .employee-filters-modal__field :deep(.dropdown__value) {
-  font-size: 10px !important;
+  font-size: 12px !important;
   line-height: 1;
 }
 
 .employee-filters-modal__field :deep(.dropdown__arrow) {
-  right: 10px;
-  width: 6px;
-  height: 6px;
+  right: 14px;
+  width: 7px;
+  height: 7px;
   color: #c5bbc0;
 }
 
 .employee-filters-modal__range-label {
   margin-top: -2px;
   color: #2b2228;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .employee-filters-modal__field--date input {
-  padding-right: 28px !important;
+  padding-right: 36px !important;
   color-scheme: light;
 }
 
@@ -320,14 +354,14 @@ watch(
 .employee-filters-modal__calendar {
   position: absolute;
   top: 50%;
-  right: 9px;
-  width: 11px;
-  height: 11px;
-  border: 1.2px solid #ef5a96;
-  border-radius: 3px;
+  right: 12px;
+  width: 14px;
+  height: 14px;
+  border: 1.4px solid #ef5a96;
+  border-radius: 4px;
   background:
-    linear-gradient(#ef5a96, #ef5a96) center 3px / 7px 1px no-repeat,
-    linear-gradient(#ef5a96, #ef5a96) center 6px / 5px 1px no-repeat;
+    linear-gradient(#ef5a96, #ef5a96) center 4px / 8px 1.2px no-repeat,
+    linear-gradient(#ef5a96, #ef5a96) center 8px / 5px 1.2px no-repeat;
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -355,15 +389,16 @@ watch(
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
+  padding: 0 2px 0;
 }
 
 .employee-filters-modal__apply,
 .employee-filters-modal__clear {
-  min-width: 73px;
-  height: 28px;
-  border-radius: 8px;
-  font-size: 10px;
+  min-width: 92px;
+  height: 36px;
+  border-radius: 12px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -375,5 +410,26 @@ watch(
 .employee-filters-modal__clear {
   background: #f6f3f5;
   color: #b4a9af;
+}
+
+@media (max-width: 640px) {
+  .employee-filters-modal {
+    padding: 16px;
+  }
+
+  .employee-filters-modal__panel {
+    width: min(100%, calc(100vw - 24px));
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .employee-filters-modal__body {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-filters-modal__field--full,
+  .employee-filters-modal__range-label {
+    grid-column: auto;
+  }
 }
 </style>
