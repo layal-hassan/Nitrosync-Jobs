@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue'
+import { UserPlus } from 'lucide-vue-next'
 import { getNitroSyncEmployees } from '../../composables/useNitroSyncEmployees'
 import AddEmployeeModal from './AddEmployeeModal.vue'
 
@@ -129,7 +130,12 @@ watch(
 
     <section class="employee-modal__panel" role="dialog" aria-modal="true" aria-label="Employee Referral">
       <header class="employee-modal__header">
-        <h2 class="employee-modal__title">Employee Referral</h2>
+        <div class="employee-modal__title-wrap">
+          <span class="employee-modal__title-icon" aria-hidden="true">
+            <UserPlus :size="18" :stroke-width="2.2" />
+          </span>
+          <h2 class="employee-modal__title">Employee Referral</h2>
+        </div>
         <button
           class="employee-modal__close"
           type="button"
@@ -244,6 +250,27 @@ watch(
   justify-content: space-between;
   padding: 24px 54px 22px;
   border-bottom: 1px solid #f0e9ed;
+}
+
+.employee-modal__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.employee-modal__title-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: inline-grid;
+  place-items: center;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.28), transparent 58%),
+    linear-gradient(180deg, #f0629a 0%, #e34789 100%);
+  box-shadow:
+    0 10px 18px rgba(227, 71, 137, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
 .employee-modal__title {

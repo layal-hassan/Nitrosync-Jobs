@@ -208,7 +208,7 @@ watch(
 
 .edit-values-modal__fields {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .edit-values-modal__field {
@@ -217,12 +217,12 @@ watch(
 
 .edit-values-modal__field input {
   width: 100%;
-  height: 40px;
-  padding: 0 36px 0 12px;
+  height: 34px;
+  padding: 0 30px 0 10px;
   border: 1px solid #f0e6ea;
   border-radius: 5px;
   color: #7a7076;
-  font-size: 12px;
+  font-size: 11px;
   outline: none;
 }
 
@@ -233,9 +233,9 @@ watch(
 .edit-values-modal__field-dot {
   position: absolute;
   top: 50%;
-  right: 10px;
-  width: 10px;
-  height: 10px;
+  right: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #d0d3d7;
   transform: translateY(-50%);

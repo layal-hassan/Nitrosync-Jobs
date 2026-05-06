@@ -569,7 +569,16 @@ const buildStoredJobPayload = (job, details = {}) => ({
       ).filter(Boolean)
     : [...job.tags],
   recruiter: details.recruiter_name ?? details.recruiter ?? job.recruiter,
-  jobs_stages: Array.isArray(details.jobs_stages) ? details.jobs_stages : [],
+  job_stages: Array.isArray(details.job_stages)
+    ? details.job_stages
+    : Array.isArray(details.jobs_stages)
+      ? details.jobs_stages
+      : [],
+  jobs_stages: Array.isArray(details.jobs_stages)
+    ? details.jobs_stages
+    : Array.isArray(details.job_stages)
+      ? details.job_stages
+      : [],
   score_cards: Array.isArray(details.score_cards) ? details.score_cards : [],
   automated_actions: Array.isArray(details.automated_actions) ? details.automated_actions : [],
   assessments: Array.isArray(details.assessments) ? details.assessments : [],

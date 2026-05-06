@@ -188,6 +188,10 @@ const generateDescriptionWithAi = async () => {
   line-height: 1.4;
 }
 
+.step-form__label-row {
+  margin-bottom: 10px;
+}
+
 .step-form__ai-button {
   height: 30px;
   padding: 0 12px;

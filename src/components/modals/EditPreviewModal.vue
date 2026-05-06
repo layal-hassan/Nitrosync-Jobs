@@ -195,6 +195,9 @@ const summaryRows = computed(() =>
 
 .edit-preview-modal__close {
   position: relative;
+  position: absolute;
+  top: 22px;
+  right: 24px;
   width: 20px;
   height: 20px;
   border-radius: 50%;

@@ -1,16 +1,21 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   selectedRecruiters: {
     type: Array,
     default: () => [],
   },
+  recruiterOptions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['update:selectedRecruiters'])
+const searchQuery = ref('')
 
-const recruiterOptions = [
+const defaultRecruiterOptions = [
   { name: 'Manal Oraby', type: 'Lead Recruiter', color: '#ff6a9d', initials: 'MO' },
   { name: 'Tareq Ahmad', type: 'Technical Recruiter', color: '#f1b32a', initials: 'TA' },
   { name: 'Lina Saleh', type: 'Operations Recruiter', color: '#4f7dff', initials: 'LS' },
@@ -18,14 +23,50 @@ const recruiterOptions = [
   { name: 'Dana Samir', type: 'Campus Recruiter', color: '#7028e4', initials: 'DS' },
 ]
 
-const availableRecruiters = computed(() =>
-  recruiterOptions.filter((item) => !props.selectedRecruiters.includes(item.name)),
-)
+const recruiterOptions = computed(() => {
+  const baseOptions = Array.isArray(props.recruiterOptions) && props.recruiterOptions.length
+    ? props.recruiterOptions
+    : defaultRecruiterOptions
+
+  const merged = [...baseOptions]
+  const existingNames = new Set(baseOptions.map((item) => String(item?.name || '').trim().toLowerCase()).filter(Boolean))
+
+  props.selectedRecruiters.forEach((name, index) => {
+    const normalizedName = String(name || '').trim()
+    if (!normalizedName || existingNames.has(normalizedName.toLowerCase())) return
+
+    merged.push({
+      name: normalizedName,
+      type: 'Selected Recruiter',
+      color: ['#ff6a9d', '#f1b32a', '#4f7dff', '#48d873', '#7028e4'][index % 5],
+      initials: normalizedName
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() || '')
+        .join('') || normalizedName.slice(0, 2).toUpperCase(),
+    })
+  })
+
+  return merged
+})
 
 const selectedRecruiterObjects = computed(() =>
   props.selectedRecruiters
-    .map((name) => recruiterOptions.find((item) => item.name === name))
+    .map((name) => recruiterOptions.value.find((item) => item.name === name))
     .filter(Boolean),
+)
+
+const filteredRecruiters = computed(() => {
+  const query = String(searchQuery.value || '').trim().toLowerCase()
+
+  if (!query) return recruiterOptions.value
+
+  return recruiterOptions.value.filter((item) => String(item?.name || '').trim().toLowerCase().includes(query))
+})
+
+const visibleRecruiters = computed(() =>
+  filteredRecruiters.value.slice(0, 5),
 )
 
 const selectRecruiter = (name) => {
@@ -43,10 +84,20 @@ const removeRecruiter = (name) => {
     <p class="recruiter-step__hint"><span>Recruiter:</span> One recruiter must be selected</p>
 
     <div class="recruiter-step__title">Choose one recruiter</div>
+    <p class="recruiter-step__subhint">
+      Showing the 5 most suitable recruiters. Use search to find a recruiter by name.
+    </p>
+    <input
+      v-model.trim="searchQuery"
+      type="search"
+      class="recruiter-step__search"
+      placeholder="Search recruiter by name"
+      spellcheck="false"
+    />
 
     <div class="recruiter-step__grid">
       <button
-        v-for="item in recruiterOptions"
+        v-for="item in visibleRecruiters"
         :key="item.name"
         type="button"
         class="recruiter-step__card"
@@ -61,6 +112,7 @@ const removeRecruiter = (name) => {
         <span class="recruiter-step__selector" :class="{ 'recruiter-step__selector--active': selectedRecruiters.includes(item.name) }"></span>
       </button>
     </div>
+    <p v-if="searchQuery && !visibleRecruiters.length" class="recruiter-step__empty">No recruiters match this name</p>
 
     <div class="recruiter-step__selected-title">Selected Recruiter</div>
 
@@ -99,6 +151,29 @@ const removeRecruiter = (name) => {
 
 .recruiter-step__selected-title {
   margin-top: 20px;
+}
+
+.recruiter-step__subhint {
+  margin: 8px 0 10px;
+  font-size: var(--font-small);
+  color: #b49faa;
+}
+
+.recruiter-step__search {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 10px;
+  padding: 0 14px;
+  border: 1px solid #e7dde2;
+  border-radius: 10px;
+  background: #fff;
+  color: #1d171f;
+  font: inherit;
+  font-size: var(--font-small);
+}
+
+.recruiter-step__search::placeholder {
+  color: #b8aab2;
 }
 
 .recruiter-step__grid {
@@ -222,5 +297,11 @@ const removeRecruiter = (name) => {
   margin: 6px 0 0;
   font-size: var(--font-small);
   color: #ff6a9d;
+}
+
+.recruiter-step__empty {
+  margin: 10px 0 0;
+  font-size: var(--font-small);
+  color: #b49faa;
 }
 </style>

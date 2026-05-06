@@ -9,7 +9,9 @@ import CodeBlock from '@tiptap/extension-code-block'
 import Blockquote from '@tiptap/extension-blockquote'
 import {
   Bold,
+  CheckCheck,
   Italic,
+  MailOpen,
   Underline as UnderlineIcon,
   Strikethrough,
   Code,
@@ -38,6 +40,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'back'])
 
 const savedEmail = ref('Custom Email')
+const customEmailAddress = ref('')
 const showCandidateMenu = ref(false)
 const isChooseCandidatesOpen = ref(false)
 const isFullscreenOpen = ref(false)
@@ -47,6 +50,7 @@ const editorContent = ref('<p></p>')
 const sendingEmail = ref(false)
 const sendMessage = ref('')
 const sendError = ref('')
+const showSuccessState = ref(false)
 
 const allCandidates = [
   { id: 1, name: 'Carlos Mahovia', email: 'carlos.mahovia@example.com', accent: 'pink', tags: 'Finance', position: 'Accountant', country: 'Jordan', rating: '5' },
@@ -56,6 +60,7 @@ const allCandidates = [
 ]
 
 const emailTemplates = ['Custom Email', 'Referral Intro', 'Short Follow Up']
+const isCustomEmailSelected = computed(() => savedEmail.value === 'Custom Email')
 
 const editor = useEditor({
   extensions: [
@@ -113,7 +118,7 @@ const handleSendEmail = async () => {
     })
 
     sendMessage.value = result.message || 'Email sent successfully.'
-    emit('close')
+    showSuccessState.value = true
   } catch (error) {
     const isTimeoutError = error?.code === 'ECONNABORTED' || String(error?.message || '').includes('timeout')
     sendError.value = isTimeoutError
@@ -232,12 +237,14 @@ watch(
       isChooseCandidatesOpen.value = false
       isFullscreenOpen.value = false
       savedEmail.value = 'Custom Email'
+      customEmailAddress.value = ''
       selectedCandidates.value = []
       emailSubject.value = ''
       editor.value?.commands.clearContent()
       editorContent.value = '<p></p>'
       sendMessage.value = ''
       sendError.value = ''
+      showSuccessState.value = false
       return
     }
 
@@ -264,8 +271,10 @@ onBeforeUnmount(() => {
     <section class="send-email-modal__panel" role="dialog" aria-modal="true" aria-label="Send an Email">
       <header class="send-email-modal__header">
         <div class="send-email-modal__title-wrap">
-          <span class="send-email-modal__mail-icon" aria-hidden="true"></span>
-          <h2 class="send-email-modal__title">Send an Email</h2>
+          <span class="send-email-modal__mail-icon" aria-hidden="true">
+            <MailOpen :size="18" :stroke-width="2.2" />
+          </span>
+          <h2 class="send-email-modal__title">{{ showSuccessState ? 'Email Sent' : 'Send an Email' }}</h2>
         </div>
         <button class="send-email-modal__close" type="button" aria-label="Close send email modal" @click="$emit('close')">
           <span></span>
@@ -273,7 +282,7 @@ onBeforeUnmount(() => {
         </button>
       </header>
 
-      <div class="send-email-modal__body">
+      <div v-if="!showSuccessState" class="send-email-modal__body">
         <section class="send-email-modal__section">
           <div class="send-email-modal__candidate-strip">
             <button
@@ -290,7 +299,7 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
-          <button type="button" class="send-email-modal__see-more" @click="isChooseCandidatesOpen = true">
+          <button type="button" class="send-email-modal__see-more" @click="showCandidateMenu = !showCandidateMenu">
             See More
           </button>
 
@@ -327,7 +336,7 @@ onBeforeUnmount(() => {
                   </button>
                 </span>
               </div>
-              <button type="button" class="send-email-modal__add-btn" @click="showCandidateMenu = !showCandidateMenu">
+              <button type="button" class="send-email-modal__add-btn" @click="isChooseCandidatesOpen = true">
                 Add
               </button>
             </div>
@@ -336,6 +345,16 @@ onBeforeUnmount(() => {
           <div class="send-email-modal__field">
             <label class="send-email-modal__label">Saved Emails</label>
             <Dropdown v-model="savedEmail" :options="emailTemplates" placeholder="Custom Email" />
+          </div>
+
+          <div v-if="isCustomEmailSelected" class="send-email-modal__field">
+            <label class="send-email-modal__label">Custom Email</label>
+            <input
+              v-model="customEmailAddress"
+              class="send-email-modal__text-input"
+              type="email"
+              placeholder="Enter custom email"
+            />
           </div>
 
           <div class="send-email-modal__field">
@@ -371,10 +390,22 @@ onBeforeUnmount(() => {
         </section>
       </div>
 
+      <div v-else class="send-email-modal__success">
+        <div class="send-email-modal__success-icon" aria-hidden="true">
+          <CheckCheck :size="34" :stroke-width="2.6" />
+        </div>
+        <h3 class="send-email-modal__success-title">Email sent successfully</h3>
+        <p class="send-email-modal__success-copy">
+          Your message was delivered to {{ selectedCandidates.length }}
+          {{ selectedCandidates.length === 1 ? 'candidate' : 'candidates' }}.
+        </p>
+        <p v-if="sendMessage" class="send-email-modal__success-note">{{ sendMessage }}</p>
+      </div>
+
       <footer class="send-email-modal__footer">
-        <p v-if="sendMessage" class="send-email-modal__feedback send-email-modal__feedback--success">{{ sendMessage }}</p>
+        <p v-if="sendMessage && !showSuccessState" class="send-email-modal__feedback send-email-modal__feedback--success">{{ sendMessage }}</p>
         <p v-if="sendError" class="send-email-modal__feedback send-email-modal__feedback--error">{{ sendError }}</p>
-        <div class="send-email-modal__actions">
+        <div v-if="!showSuccessState" class="send-email-modal__actions">
           <button type="button" class="send-email-modal__back" @click="$emit('back')">Back</button>
           <button
             type="button"
@@ -384,8 +415,10 @@ onBeforeUnmount(() => {
             @click="handleSendEmail"
           >
             <span>{{ sendingEmail ? 'Sending...' : 'Send Email' }}</span>
-            <span class="send-email-modal__send-caret"></span>
           </button>
+        </div>
+        <div v-else class="send-email-modal__actions">
+          <button type="button" class="send-email-modal__send" @click="$emit('close')">Done</button>
         </div>
       </footer>
     </section>
@@ -447,32 +480,18 @@ onBeforeUnmount(() => {
 }
 
 .send-email-modal__mail-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
-  position: relative;
-}
-
-.send-email-modal__mail-icon::before {
-  content: '';
-  position: absolute;
-  inset: 6px 5px;
-  border: 2px solid #ffffff;
-  border-radius: 4px;
-}
-
-.send-email-modal__mail-icon::after {
-  content: '';
-  position: absolute;
-  left: 7px;
-  right: 7px;
-  top: 10px;
-  height: 6px;
-  border-left: 2px solid #ffffff;
-  border-bottom: 2px solid #ffffff;
-  border-right: 2px solid #ffffff;
-  transform: skewY(-28deg);
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: inline-grid;
+  place-items: center;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.28), transparent 58%),
+    linear-gradient(180deg, #f0629a 0%, #e34789 100%);
+  box-shadow:
+    0 10px 18px rgba(227, 71, 137, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
 .send-email-modal__title {
@@ -816,6 +835,55 @@ onBeforeUnmount(() => {
   padding: 8px 20px 18px;
 }
 
+.send-email-modal__success {
+  padding: 34px 28px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.send-email-modal__success-icon {
+  width: 84px;
+  height: 84px;
+  border-radius: 28px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.36), transparent 58%),
+    linear-gradient(180deg, #53d78a 0%, #27bf68 100%);
+  box-shadow:
+    0 16px 30px rgba(39, 191, 104, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.send-email-modal__success-title {
+  margin: 20px 0 8px;
+  color: #1d1720;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.send-email-modal__success-copy {
+  margin: 0;
+  max-width: 320px;
+  color: #716672;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.send-email-modal__success-note {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border: 1px solid #d8f1e1;
+  border-radius: 999px;
+  background: #f4fcf7;
+  color: #1d8f46;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .send-email-modal__actions {
   display: flex;
   align-items: center;
@@ -856,7 +924,10 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
   box-shadow: 0 10px 16px rgba(234, 79, 141, 0.18);
 }
 
@@ -866,15 +937,6 @@ onBeforeUnmount(() => {
   color: #9d9499;
   box-shadow: none;
   cursor: not-allowed;
-}
-
-.send-email-modal__send-caret {
-  width: 7px;
-  height: 7px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-  margin-top: -3px;
 }
 
 @media (max-width: 640px) {

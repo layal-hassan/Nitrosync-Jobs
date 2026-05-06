@@ -1,4 +1,5 @@
 <script setup>
+import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import stageNotebookImage from '../../assets/jobPosting/stage-notebook.png'
 import hiredConfettiImage from '../../assets/jobPosting/hired-confetti.png'
@@ -15,7 +16,11 @@ import {
   fetchNitroSyncJobStages,
   updateNitroSyncJobStage,
 } from '../../composables/useNitroSyncJobStages'
-import { getNitroSyncErrorMessage } from '../../composables/nitroSyncApi'
+import {
+  buildNitroSyncEndpoint,
+  getNitroSyncErrorMessage,
+  nitroSyncRequestTimeoutMs,
+} from '../../composables/nitroSyncApi'
 import { createNitroSyncCandidatesAssign } from '../../composables/useNitroSyncCandidatesAssigns'
 import { createNitroSyncCandidatesDisqualificant } from '../../composables/useNitroSyncCandidatesDisqualificants'
 import { createNitroSyncCandidatesInterview } from '../../composables/useNitroSyncCandidatesInterviews'
@@ -63,8 +68,10 @@ const editStageName = ref('')
 const selectedStageColumn = ref(null)
 const showStatusMenu = ref(false)
 const showJobTitleMenu = ref(true)
+const workflowJobTitles = ref([])
 const activeCandidateMenu = ref(null)
 const activeStageMenu = ref(null)
+const jobsGetAllEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-all')
 const createCandidateEmail = (name) =>
   `${String(name || '')
     .toLowerCase()
@@ -277,6 +284,40 @@ const mapStageRowsToColumns = (rows = []) => {
 
 const stageColumns = ref(mapStageRowsToColumns(props.stageRows))
 
+const fetchWorkflowJobTitles = async () => {
+  try {
+    const response = await axios.post(
+      jobsGetAllEndpoint,
+      {
+        related_company: props.relatedCompany,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: nitroSyncRequestTimeoutMs,
+      },
+    )
+
+    const rows = Array.isArray(response?.data?.data)
+      ? response.data.data
+      : Array.isArray(response?.data)
+        ? response.data
+        : []
+
+    const titles = [...new Set(
+      rows
+        .map((item) => String(item?.job_title || '').trim())
+        .filter(Boolean),
+    )]
+
+    workflowJobTitles.value = titles
+  } catch (error) {
+    console.error('Failed to fetch workflow job titles', error)
+    workflowJobTitles.value = []
+  }
+}
+
 const openAddStageModal = () => {
   showAddStageSuccessModal.value = false
   showAddStageModal.value = true
@@ -317,10 +358,6 @@ const fetchWorkflowStages = async () => {
     if (rows.length) {
       const hydratedRows = await Promise.all(
         rows.map(async (row) => {
-          if (Array.isArray(row.cards) && row.cards.length) {
-            return row
-          }
-
           if (!row.jobStageUuid) {
             return {
               ...row,
@@ -332,7 +369,7 @@ const fetchWorkflowStages = async () => {
             const cards = await fetchNitroSyncJobStageCandidates(row.jobStageUuid)
             return {
               ...row,
-              cards,
+              cards: cards.length ? cards : (Array.isArray(row.cards) ? row.cards : []),
             }
           } catch (error) {
             console.error('Failed to fetch stage candidates', {
@@ -1310,6 +1347,7 @@ const handleDocumentClick = () => {
 }
 
 onMounted(() => {
+  fetchWorkflowJobTitles()
   if (Array.isArray(props.stageRows) && props.stageRows.length) {
     stageColumns.value = mapStageRowsToColumns(props.stageRows)
   }
@@ -1357,14 +1395,18 @@ watch(
           </button>
 
           <div v-if="showJobTitleMenu" class="workflow-toolbar__tag-children" @click.stop>
-            <button type="button" class="workflow-toolbar__tag workflow-toolbar__tag--child">
+            <button
+              v-for="title in workflowJobTitles"
+              :key="title"
+              type="button"
+              class="workflow-toolbar__tag workflow-toolbar__tag--child"
+            >
               <span class="workflow-toolbar__tag-icon"></span>
-              <span>Accounting</span>
+              <span>{{ title }}</span>
             </button>
-            <button type="button" class="workflow-toolbar__tag workflow-toolbar__tag--child">
-              <span class="workflow-toolbar__tag-icon"></span>
-              <span>Software Engineer</span>
-            </button>
+            <div v-if="!workflowJobTitles.length" class="workflow-toolbar__tag-empty">
+              No job titles found.
+            </div>
           </div>
         </div>
       </div>
@@ -2501,6 +2543,16 @@ watch(
   left: calc(100% + 4px);
   display: grid;
   gap: 4px;
+}
+
+.workflow-toolbar__tag-empty {
+  padding: 8px 10px;
+  border: 1px solid #f0dfe6;
+  border-radius: 10px;
+  background: #fff;
+  color: #9f8d95;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .workflow-toolbar__tag-icon {

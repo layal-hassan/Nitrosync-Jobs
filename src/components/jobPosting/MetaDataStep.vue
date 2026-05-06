@@ -195,6 +195,10 @@ const generateSeoDescriptionWithAi = async () => {
   line-height: 1.35;
 }
 
+.metadata-step__label-row {
+  margin-bottom: 10px;
+}
+
 .metadata-step__ai-btn {
   height: 34px;
   padding: 0 14px;

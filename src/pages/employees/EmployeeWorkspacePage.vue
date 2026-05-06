@@ -1,18 +1,39 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
-import { findEmployeeById, relatedCompany } from '../../composables/useEmployeeDirectory'
+import Dropdown from '../../components/ui/Dropdown.vue'
+import {
+  buildEmployeeUpdatePayload,
+  findEmployeeById,
+  relatedCompany,
+} from '../../composables/useEmployeeDirectory'
 import { assignNitroSyncEmployeeRole } from '../../composables/useNitroSyncAssignEmployeeRole'
+import { fetchNitroSyncRoles } from '../../composables/useNitroSyncRoles'
+import { updateNitroSyncEmployee } from '../../composables/useNitroSyncUpdateEmployee'
 
 const route = useRoute()
 const loading = ref(true)
 const loadError = ref('')
 const employee = ref(null)
+const editSaving = ref(false)
+const editError = ref('')
+const editFeedback = ref('')
 const roleSaving = ref(false)
 const roleError = ref('')
 const roleFeedback = ref('')
+const rolesLoading = ref(false)
+const roles = ref([])
 const roleForm = reactive({
   roleId: '',
+})
+const editForm = reactive({
+  firstName: '',
+  lastName: '',
+  workEmail: '',
+  mobilePhone: '',
+  jobPosition: '',
+  department: '',
+  joiningDate: '',
 })
 
 const sectionLabels = {
@@ -26,11 +47,6 @@ const sectionCards = {
     { title: 'Contact', items: ['Email', 'Phone', 'Address'] },
     { title: 'Employment', items: ['Status', 'Position', 'Department'] },
     { title: 'Summary', items: ['Profile note', 'Hire date', 'Workspace identity'] },
-  ],
-  edit: [
-    { title: 'Personal Details', items: ['Full name', 'Work email', 'Mobile number'] },
-    { title: 'Employment Details', items: ['Job title', 'Department', 'Employment status'] },
-    { title: 'Location', items: ['Office address', 'City', 'Country'] },
   ],
   permissions: [
     { title: 'Access Scope', items: ['Workspace access', 'Module visibility', 'Approval limits'] },
@@ -62,15 +78,44 @@ const infoRows = computed(() => {
   ]
 })
 
+const roleOptions = computed(() => roles.value.map((item) => item.label))
+
+const syncEditFormFromEmployee = () => {
+  editForm.firstName = String(employee.value?.firstName || '').trim()
+  editForm.lastName = String(employee.value?.lastName || '').trim()
+  editForm.workEmail = String(employee.value?.email || '').trim()
+  editForm.mobilePhone = String(employee.value?.phone || '').trim()
+  editForm.jobPosition = String(employee.value?.position || employee.value?.role || '').trim()
+  editForm.department = String(employee.value?.department || '').trim()
+  editForm.joiningDate = String(employee.value?.hireDate || '').trim()
+}
+
+const loadRoles = async () => {
+  rolesLoading.value = true
+  roleError.value = ''
+
+  try {
+    roles.value = await fetchNitroSyncRoles(relatedCompany)
+  } catch (error) {
+    roleError.value = error?.message || 'Failed to load roles.'
+    roles.value = []
+  } finally {
+    rolesLoading.value = false
+  }
+}
+
 const loadEmployee = async () => {
   loading.value = true
   loadError.value = ''
+  editError.value = ''
+  editFeedback.value = ''
   roleError.value = ''
   roleFeedback.value = ''
 
   const { employee: currentEmployee, usedFallback } = await findEmployeeById(route.params.employeeId)
   employee.value = currentEmployee
   roleForm.roleId = currentEmployee?.roleId || ''
+  syncEditFormFromEmployee()
 
   if (usedFallback) {
     loadError.value = 'Employee details could not be loaded from NitroSync.'
@@ -83,9 +128,52 @@ const loadEmployee = async () => {
   loading.value = false
 }
 
+const handleSaveEdit = async () => {
+  if (!employee.value) {
+    editError.value = 'Employee was not found.'
+    return
+  }
+
+  const employeeUuid = String(employee.value?.employeeUuid || '').trim()
+
+  if (!employeeUuid) {
+    editError.value = 'This employee does not have a NitroSync employee UUID.'
+    return
+  }
+
+  editSaving.value = true
+  editError.value = ''
+  editFeedback.value = ''
+
+  try {
+    const payload = buildEmployeeUpdatePayload(employee.value, {
+      firstName: editForm.firstName,
+      lastName: editForm.lastName,
+      workEmail: editForm.workEmail,
+      mobilePhone: editForm.mobilePhone,
+      jobPosition: editForm.jobPosition,
+      department: editForm.department,
+      joiningDate: editForm.joiningDate,
+    })
+
+    const result = await updateNitroSyncEmployee(payload, {
+      relatedCompany,
+      departmentId: payload.departmentId,
+    })
+
+    editFeedback.value = result.message || 'Employee updated successfully.'
+    await loadEmployee()
+  } catch (error) {
+    editError.value = error?.message || 'Failed to update employee.'
+  } finally {
+    editSaving.value = false
+  }
+}
+
 const handleAssignRole = async () => {
   const employeeUuid = String(employee.value?.employeeUuid || '').trim()
-  const roleId = String(roleForm.roleId || '').trim()
+  const selectedRole = roles.value.find((item) => item.label === roleForm.roleId || item.value === roleForm.roleId)
+  const roleId = String(selectedRole?.value || roleForm.roleId || '').trim()
 
   roleError.value = ''
   roleFeedback.value = ''
@@ -127,7 +215,12 @@ const handleAssignRole = async () => {
   }
 }
 
-onMounted(loadEmployee)
+onMounted(async () => {
+  await Promise.all([
+    loadEmployee(),
+    loadRoles(),
+  ])
+})
 
 watch(
   () => [route.params.employeeId, route.params.section],
@@ -168,7 +261,7 @@ watch(
           </div>
           <div>
             <div class="workspace-hero__name">{{ employee.name }}</div>
-            <div class="workspace-hero__meta">{{ employee.role }} · {{ employee.status }}</div>
+            <div class="workspace-hero__meta">{{ employee.role }} آ· {{ employee.status }}</div>
           </div>
         </div>
       </header>
@@ -200,7 +293,54 @@ watch(
         </article>
 
         <article class="workspace-panel">
-          <template v-if="currentSection === 'permissions'">
+          <template v-if="currentSection === 'edit'">
+            <h2>Edit Info</h2>
+            <div class="workspace-form">
+              <label class="workspace-field">
+                <span>First name</span>
+                <input v-model.trim="editForm.firstName" type="text" placeholder="First name" />
+              </label>
+
+              <label class="workspace-field">
+                <span>Last name</span>
+                <input v-model.trim="editForm.lastName" type="text" placeholder="Last name" />
+              </label>
+
+              <label class="workspace-field workspace-field--full">
+                <span>Work email</span>
+                <input v-model.trim="editForm.workEmail" type="email" placeholder="Work email" />
+              </label>
+
+              <label class="workspace-field">
+                <span>Mobile phone</span>
+                <input v-model.trim="editForm.mobilePhone" type="text" placeholder="Mobile phone" />
+              </label>
+
+              <label class="workspace-field">
+                <span>Job title</span>
+                <input v-model.trim="editForm.jobPosition" type="text" placeholder="Job title" />
+              </label>
+
+              <label class="workspace-field">
+                <span>Department</span>
+                <input v-model.trim="editForm.department" type="text" placeholder="Department" />
+              </label>
+
+              <label class="workspace-field">
+                <span>Joining date</span>
+                <input v-model="editForm.joiningDate" type="date" />
+              </label>
+
+              <p v-if="editError" class="workspace-feedback workspace-feedback--error">{{ editError }}</p>
+              <p v-else-if="editFeedback" class="workspace-feedback workspace-feedback--success">{{ editFeedback }}</p>
+
+              <button type="button" class="workspace-submit" :disabled="editSaving" @click="handleSaveEdit">
+                {{ editSaving ? 'Saving...' : 'Save Changes' }}
+              </button>
+            </div>
+          </template>
+
+          <template v-else-if="currentSection === 'permissions'">
             <h2>Assign Role</h2>
             <div class="workspace-form">
               <label class="workspace-field">
@@ -214,8 +354,12 @@ watch(
               </label>
 
               <label class="workspace-field workspace-field--full">
-                <span>Role ID</span>
-                <input v-model.trim="roleForm.roleId" type="text" placeholder="Enter NitroSync role id" />
+                <span>Role</span>
+                <Dropdown
+                  v-model="roleForm.roleId"
+                  :options="roleOptions"
+                  :placeholder="rolesLoading ? 'Loading roles...' : 'Select role'"
+                />
               </label>
 
               <p v-if="roleError" class="workspace-feedback workspace-feedback--error">{{ roleError }}</p>

@@ -20,6 +20,7 @@ const props = defineProps({
 })
 
 const quickUser = ref('')
+const recruiterSearch = ref('')
 const employeesLoading = ref(false)
 const employeesError = ref('')
 const aiLoading = ref(false)
@@ -38,6 +39,10 @@ const baseUserOptions = ref([...fallbackUserOptions])
 const companyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
 
 const normalizeLabel = (value) => String(value || '').trim()
+const normalizeFormField = (value) =>
+  value && typeof value === 'object'
+    ? String(value.label ?? value.name ?? value.value ?? '').trim()
+    : String(value || '').trim()
 
 const uniqueLabels = (values) => [...new Set(values.map(normalizeLabel).filter(Boolean))]
 
@@ -82,6 +87,35 @@ const userOptions = computed(() =>
 const availableUsers = computed(() =>
   userOptions.value.filter((item) => !props.form.additionalUsers.includes(item)),
 )
+
+const normalizedRecruiterSearch = computed(() => normalizeLabel(recruiterSearch.value).toLowerCase())
+
+const filteredRecruiterOptions = computed(() => {
+  const query = normalizedRecruiterSearch.value
+
+  if (!query) return recruiterOptions.value
+
+  return recruiterOptions.value.filter((item) => normalizeLabel(item).toLowerCase().includes(query))
+})
+
+const suggestedRecruiters = computed(() => filteredRecruiterOptions.value.slice(0, 5))
+
+const buildInitials = (value) =>
+  normalizeLabel(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || 'RC'
+
+const recruiterAccentClass = (name) => {
+  const palette = ['pink', 'blue', 'gold', 'green', 'purple']
+  const seed = normalizeLabel(name)
+    .split('')
+    .reduce((total, char) => total + char.charCodeAt(0), 0)
+
+  return `hiring-team-step__recruiter-card--${palette[seed % palette.length]}`
+}
 
 const pickBestOption = (options, answerText) => {
   const normalizedAnswer = normalizeLabel(answerText).toLowerCase()
@@ -138,6 +172,8 @@ const fetchEmployees = async () => {
 }
 
 onMounted(() => {
+  props.form.team = normalizeFormField(props.form.team)
+  props.form.recruiter = normalizeFormField(props.form.recruiter)
   fetchEmployees()
 })
 
@@ -219,6 +255,32 @@ const suggestTeamWithAi = async () => {
 
       <div class="hiring-team-step__field">
         <label>Recruiter</label>
+        <input
+          v-model.trim="recruiterSearch"
+          type="search"
+          class="hiring-team-step__search"
+          placeholder="Search recruiter by name"
+          spellcheck="false"
+        />
+        <div class="hiring-team-step__recruiter-grid">
+          <button
+            v-for="recruiter in suggestedRecruiters"
+            :key="recruiter"
+            type="button"
+            class="hiring-team-step__recruiter-card"
+            :class="[
+              recruiterAccentClass(recruiter),
+              { 'hiring-team-step__recruiter-card--selected': form.recruiter === recruiter },
+            ]"
+            @click="form.recruiter = recruiter"
+          >
+            <span class="hiring-team-step__recruiter-avatar">{{ buildInitials(recruiter) }}</span>
+            <span class="hiring-team-step__recruiter-copy">
+              <strong>{{ recruiter }}</strong>
+              <small>Recruiter</small>
+            </span>
+          </button>
+        </div>
         <div class="hiring-team-step__dropdown" :class="{ 'hiring-team-step__dropdown--error': errors.recruiter }">
           <Dropdown v-model="form.recruiter" :options="recruiterOptions" placeholder="Select Recruiter" />
         </div>
@@ -330,6 +392,107 @@ const suggestTeamWithAi = async () => {
   margin-bottom: 8px;
   font-size: var(--ui-small-font);
   color: #17111b;
+}
+
+.hiring-team-step__search {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 12px;
+  padding: 0 14px;
+  border: 1px solid #e4dbe0;
+  border-radius: 12px;
+  background: #fff;
+  color: #352d32;
+  font: inherit;
+  font-size: var(--ui-small-font);
+}
+
+.hiring-team-step__search::placeholder {
+  color: #b9a9b1;
+}
+
+.hiring-team-step__recruiter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.hiring-team-step__recruiter-card {
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 1px solid #eee5e9;
+  border-radius: 16px;
+  background: #fbf9fa;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.hiring-team-step__recruiter-card:hover {
+  border-color: #efc9d9;
+  box-shadow: 0 10px 20px rgba(56, 33, 45, 0.07);
+}
+
+.hiring-team-step__recruiter-card--selected {
+  border-color: #ef5d97;
+  background: #fff4f8;
+  box-shadow: 0 12px 24px rgba(239, 93, 151, 0.12);
+}
+
+.hiring-team-step__recruiter-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+.hiring-team-step__recruiter-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hiring-team-step__recruiter-copy strong {
+  color: #201920;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hiring-team-step__recruiter-copy small {
+  color: #b78a9d;
+  font-size: 12px;
+}
+
+.hiring-team-step__recruiter-card--pink .hiring-team-step__recruiter-avatar {
+  background: linear-gradient(135deg, #ff87b1, #ef5d97);
+}
+
+.hiring-team-step__recruiter-card--blue .hiring-team-step__recruiter-avatar {
+  background: linear-gradient(135deg, #7fa9ff, #4f7dff);
+}
+
+.hiring-team-step__recruiter-card--gold .hiring-team-step__recruiter-avatar {
+  background: linear-gradient(135deg, #ffd46b, #f1b32a);
+}
+
+.hiring-team-step__recruiter-card--green .hiring-team-step__recruiter-avatar {
+  background: linear-gradient(135deg, #7ce7a0, #48d873);
+}
+
+.hiring-team-step__recruiter-card--purple .hiring-team-step__recruiter-avatar {
+  background: linear-gradient(135deg, #c49cff, #8b5cf6);
 }
 
 .hiring-team-step__selected {

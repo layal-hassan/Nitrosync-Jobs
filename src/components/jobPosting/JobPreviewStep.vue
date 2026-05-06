@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import DatePicker from '../ui/DatePicker.vue'
 
 const props = defineProps({
   jobDetails: {
@@ -43,6 +44,8 @@ const actionMenuOpen = ref(false)
 const publishMenuRef = ref(null)
 const publishMenuOpen = ref(false)
 const scheduleModalOpen = ref(false)
+const publishTimeInputRef = ref(null)
+const closePublishTimeInputRef = ref(null)
 
 const tagPalette = ['#ea4f8d', '#4f7dff', '#6b21d8', '#f1b32a', '#48d873', '#f08db2', '#8ea7ff', '#c4a1e8', '#f3d78f']
 
@@ -90,6 +93,28 @@ const openScheduleModal = () => {
 
 const closeScheduleModal = () => {
   scheduleModalOpen.value = false
+}
+
+const openTimePicker = (field) => {
+  if (props.submitting) return
+
+  const target = field === 'close' ? closePublishTimeInputRef.value : publishTimeInputRef.value
+  if (!target) return
+
+  if (typeof target.showPicker === 'function') {
+    target.showPicker()
+    return
+  }
+
+  target.focus()
+  target.click()
+}
+
+const formatTimeDisplay = (value) => {
+  if (!value) return '-- : --'
+
+  const [hours = '--', minutes = '--'] = String(value).split(':')
+  return `${hours} : ${minutes}`
 }
 
 const handleDocumentClick = (event) => {
@@ -315,10 +340,10 @@ onBeforeUnmount(() => {
               <span class="job-preview-card__primary-arrow"></span>
             </button>
 
-            <div v-if="publishMenuOpen" class="job-preview-card__publish-menu">
-              <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_and_publish')">save and publish</button>
-              <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_only')">save only</button>
-            </div>
+              <div v-if="publishMenuOpen" class="job-preview-card__publish-menu">
+                <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_and_publish')">Save and publish</button>
+                <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_only')">Save only</button>
+              </div>
           </div>
 
           <button type="button" class="job-preview-card__ghost" :disabled="submitting" @click="openScheduleModal">
@@ -333,10 +358,21 @@ onBeforeUnmount(() => {
 
       <div class="job-preview-modal__card">
         <div class="job-preview-modal__header">
-          <div class="job-preview-modal__title-wrap">
-            <span class="job-preview-modal__title-icon"></span>
-            <h4>Schedule Publish</h4>
-          </div>
+            <div class="job-preview-modal__title-wrap">
+              <span class="job-preview-modal__title-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <rect x="4.5" y="5.5" width="15" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="1.8" />
+                  <path d="M8 3.8v3.4M16 3.8v3.4M4.9 9.4h14.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M9.1 13.1h3.2M9.1 15.9h5.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                  <path d="M16.9 12.3l2.1 2.1-3.9 3.8-2.2.2.3-2.1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+                </svg>
+              </span>
+              <h4>Schedule Publish</h4>
+            </div>
+          <button type="button" class="job-preview-modal__close" aria-label="Close schedule modal" @click="closeScheduleModal">
+            <span></span>
+            <span></span>
+          </button>
         </div>
 
         <div class="job-preview-modal__section">
@@ -354,13 +390,24 @@ onBeforeUnmount(() => {
           <div class="job-preview-modal__grid">
             <label class="job-preview-modal__field">
               <span>Publish Date</span>
-              <input v-model="previewState.schedule.publishDate" class="job-preview-modal__input-control" type="date" :disabled="submitting" />
+              <DatePicker v-model="previewState.schedule.publishDate" placeholder="MM / DD / YYYY" />
             </label>
 
-            <label class="job-preview-modal__field">
-              <span>Publish Time</span>
-              <input v-model="previewState.schedule.publishTime" class="job-preview-modal__input-control" type="time" :disabled="submitting" />
-            </label>
+              <label class="job-preview-modal__field">
+                <span>Publish Time</span>
+                <div class="job-preview-modal__time-picker">
+                  <button type="button" class="job-preview-modal__input-control job-preview-modal__time-trigger" :disabled="submitting" @click="openTimePicker('publish')">
+                    <span class="job-preview-modal__time-value" :class="{ 'job-preview-modal__time-value--placeholder': !previewState.schedule.publishTime }">{{ formatTimeDisplay(previewState.schedule.publishTime) }}</span>
+                    <span class="job-preview-modal__time-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="8.1" fill="none" stroke="currentColor" stroke-width="1.9" />
+                        <path d="M12 7.7v4.9l3.1 1.9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </span>
+                  </button>
+                  <input ref="publishTimeInputRef" v-model="previewState.schedule.publishTime" class="job-preview-modal__time-native-input" type="time" :disabled="submitting" tabindex="-1" />
+                </div>
+              </label>
           </div>
         </div>
 
@@ -379,13 +426,24 @@ onBeforeUnmount(() => {
           <div class="job-preview-modal__grid">
             <label class="job-preview-modal__field">
               <span>Publish Closing Date</span>
-              <input v-model="previewState.schedule.closePublishDate" class="job-preview-modal__input-control" type="date" :disabled="submitting" />
+              <DatePicker v-model="previewState.schedule.closePublishDate" placeholder="MM / DD / YYYY" />
             </label>
 
-            <label class="job-preview-modal__field">
-              <span>Publish Closing Time</span>
-              <input v-model="previewState.schedule.closePublishTime" class="job-preview-modal__input-control" type="time" :disabled="submitting" />
-            </label>
+              <label class="job-preview-modal__field">
+                <span>Publish Closing Time</span>
+                <div class="job-preview-modal__time-picker">
+                  <button type="button" class="job-preview-modal__input-control job-preview-modal__time-trigger" :disabled="submitting" @click="openTimePicker('close')">
+                    <span class="job-preview-modal__time-value" :class="{ 'job-preview-modal__time-value--placeholder': !previewState.schedule.closePublishTime }">{{ formatTimeDisplay(previewState.schedule.closePublishTime) }}</span>
+                    <span class="job-preview-modal__time-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="8.1" fill="none" stroke="currentColor" stroke-width="1.9" />
+                        <path d="M12 7.7v4.9l3.1 1.9" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </span>
+                  </button>
+                  <input ref="closePublishTimeInputRef" v-model="previewState.schedule.closePublishTime" class="job-preview-modal__time-native-input" type="time" :disabled="submitting" tabindex="-1" />
+                </div>
+              </label>
           </div>
         </div>
 
@@ -462,24 +520,38 @@ onBeforeUnmount(() => {
 .job-preview-card__publish-menu button:hover { background: #fff4f8; }
 .job-preview-modal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 24px; }
 .job-preview-modal__backdrop { position: absolute; inset: 0; background: rgba(17, 12, 18, 0.58); }
-.job-preview-modal__card { position: relative; z-index: 1; width: min(100%, 360px); border-radius: 8px; background: #fff; box-shadow: 0 18px 50px rgba(22, 15, 24, 0.24); overflow: hidden; }
-.job-preview-modal__header { padding: 12px 16px; border-bottom: 1px solid #f0e6ea; }
-.job-preview-modal__title-wrap { display: flex; align-items: center; gap: 10px; }
-.job-preview-modal__title-wrap h4 { margin: 0; font-size: 14px; font-weight: 600; color: #ea4f8d; }
-.job-preview-modal__title-icon { width: 14px; height: 14px; border: 1px solid #f3a8c4; border-radius: 999px; position: relative; }
-.job-preview-modal__title-icon::before, .job-preview-modal__title-icon::after { content: ''; position: absolute; top: 50%; left: 50%; background: #ea4f8d; transform: translate(-50%, -50%); }
-.job-preview-modal__title-icon::before { width: 6px; height: 1px; }
-.job-preview-modal__title-icon::after { width: 1px; height: 6px; }
-.job-preview-modal__section { padding: 16px; }
-.job-preview-modal__section + .job-preview-modal__section { padding-top: 8px; }
-.job-preview-modal__section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; color: #17111b; font-size: 11px; font-weight: 500; }
-.job-preview-modal__switch { width: 26px; height: 16px; border-radius: 999px; background: #f1dfe6; position: relative; }
-.job-preview-modal__switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
+.job-preview-modal__card { position: relative; z-index: 1; width: min(100%, 452px); border-radius: 18px; background: #fff; box-shadow: 0 22px 56px rgba(22, 15, 24, 0.22); overflow: visible; }
+.job-preview-modal__header { padding: 16px 18px 14px; border-bottom: 1px solid #f3e6ec; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.job-preview-modal__title-wrap { display: flex; align-items: center; gap: 12px; }
+.job-preview-modal__title-wrap h4 { margin: 0; font-size: 15px; font-weight: 700; color: #ea4f8d; }
+.job-preview-modal__title-icon { width: 28px; height: 28px; border-radius: 8px; background: #ea4f8d; color: #ffffff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.job-preview-modal__title-icon svg { width: 17px; height: 17px; display: block; }
+.job-preview-modal__close { position: relative; width: 22px; height: 22px; border-radius: 999px; background: #ea4e91; flex: 0 0 auto; }
+.job-preview-modal__close span { position: absolute; top: 10px; left: 5px; width: 12px; height: 1.8px; border-radius: 999px; background: #ffffff; }
+.job-preview-modal__close span:first-child { transform: rotate(45deg); }
+.job-preview-modal__close span:last-child { transform: rotate(-45deg); }
+.job-preview-modal__section { padding: 14px 18px; }
+.job-preview-modal__section + .job-preview-modal__section { padding-top: 4px; }
+.job-preview-modal__section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: #2a2027; font-size: 12px; font-weight: 600; }
+.job-preview-modal__switch { width: 30px; height: 18px; border-radius: 999px; background: #f1dfe6; position: relative; }
+.job-preview-modal__switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
 .job-preview-modal__switch--on { background: #d9f2de; }
-.job-preview-modal__switch--on::after { left: 12px; background: #48bf67; }
-.job-preview-modal__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.job-preview-modal__field span:first-child { display: block; margin-bottom: 8px; color: var(--hint); font-size: var(--ui-tiny-font); }
-.job-preview-modal__input-control { width: 100%; min-height: 34px; padding: 0 10px; border: 1px solid #f0e6ea; border-radius: 4px; background: #fff; color: var(--muted-strong); font-size: var(--ui-tiny-font); }
-.job-preview-modal__actions { padding: 4px 16px 16px; }
-.job-preview-modal__button { min-width: 66px; height: 24px; padding: 0 14px; border-radius: 8px; background: #ea4f8d; color: #fff; font-size: var(--ui-tiny-font); font-weight: 700; }
+.job-preview-modal__switch--on::after { left: 14px; background: #48bf67; }
+.job-preview-modal__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.job-preview-modal__field span:first-child { display: block; margin-bottom: 6px; color: #9f9098; font-size: 11px; }
+.job-preview-modal__input-control { width: 100%; height: 30px; min-height: 30px; padding: 0 10px; border: 1px solid #f0dfe7; border-radius: 12px; background: #fff; color: var(--muted-strong); font-size: 11px; line-height: 30px; }
+.job-preview-modal__time-picker { position: relative; }
+.job-preview-modal__time-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 10px; font-family: inherit; text-align: left; cursor: pointer; }
+.job-preview-modal__time-trigger:disabled { cursor: default; }
+.job-preview-modal__time-value { display: block; font-size: 11px; letter-spacing: 0.02em; color: var(--muted-strong); line-height: 30px; }
+.job-preview-modal__time-value--placeholder { color: #b6aab0; }
+.job-preview-modal__time-icon { width: 15px; height: 15px; color: #1f1b1e; flex: 0 0 auto; }
+.job-preview-modal__time-icon svg { width: 100%; height: 100%; display: block; }
+.job-preview-modal__time-native-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.job-preview-modal__field :deep(.date-picker__trigger) { min-height: 30px; height: 30px; padding: 0 10px; border-color: #f0dfe7; border-radius: 12px; }
+.job-preview-modal__field :deep(.date-picker__value) { font-size: 11px; letter-spacing: 0.02em; }
+.job-preview-modal__field :deep(.date-picker__icon) { width: 15px; height: 15px; color: #ea4f8d; }
+.job-preview-modal__field :deep(.date-picker__panel) { top: calc(100% + 10px); bottom: auto; left: 0; width: 274px; padding: 12px; border-radius: 14px; background: linear-gradient(180deg, #fff 0%, #fff8fb 100%); box-shadow: 0 18px 32px rgba(44, 24, 34, 0.14); }
+.job-preview-modal__actions { padding: 8px 18px 18px; }
+.job-preview-modal__button { min-width: 82px; height: 30px; padding: 0 16px; border-radius: 10px; background: #ea4f8d; color: #fff; font-size: 11px; font-weight: 700; }
 </style>

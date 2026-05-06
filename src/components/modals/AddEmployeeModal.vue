@@ -180,6 +180,7 @@ const fileInputRef = ref(null)
 const currentStepIndex = ref(0)
 const legalUploadContext = ref('')
 const isRestrictedAccessModalOpen = ref(false)
+const hasAttemptedStepSubmit = ref(false)
 
 const lettersOnlyPattern = /^[A-Za-z\s'-]+$/
 const numbersOnlyPattern = /^\d+$/
@@ -231,9 +232,15 @@ const getLiveValidationError = (fieldKey, rawValue) => {
 
 const syncLiveValidationError = (fieldKey, rawValue) => {
   const message = getLiveValidationError(fieldKey, rawValue)
+  const normalizedValue = String(rawValue ?? '').trim()
 
   if (message) {
     errors.value[fieldKey] = message
+    return
+  }
+
+  if (errors.value[fieldKey] === 'Required' && normalizedValue) {
+    delete errors.value[fieldKey]
     return
   }
 
@@ -263,6 +270,7 @@ const countRestrictedFields = (settings = {}) =>
 const resetForm = () => {
   Object.assign(form, createForm())
   errors.value = {}
+  hasAttemptedStepSubmit.value = false
 }
 
 const activeStep = computed(() => stepItems[currentStepIndex.value])
@@ -293,7 +301,9 @@ watch(
       syncLiveValidationError(fieldKey, form[fieldKey])
     })
 
-    validateCurrentStepLive()
+    if (hasAttemptedStepSubmit.value) {
+      validateCurrentStepLive()
+    }
   },
 )
 
@@ -359,7 +369,9 @@ watch(
       emit('clear-submit-error')
     }
 
-    validateCurrentStepLive()
+    if (hasAttemptedStepSubmit.value) {
+      validateCurrentStepLive()
+    }
   },
 )
 
@@ -583,6 +595,7 @@ const clearStepErrors = (keys) => {
 
 const goToNextStep = async () => {
   if (currentStepIndex.value === 0) {
+    hasAttemptedStepSubmit.value = true
     clearStepErrors([
       'employeeId',
       'firstName',
@@ -603,6 +616,7 @@ const goToNextStep = async () => {
 
     if (!validateBasicInformation()) return
 
+    hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 1
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
@@ -610,6 +624,7 @@ const goToNextStep = async () => {
   }
 
   if (currentStepIndex.value === 1) {
+    hasAttemptedStepSubmit.value = true
     clearStepErrors([
       'jobPosition',
       'jobLocation',
@@ -621,6 +636,7 @@ const goToNextStep = async () => {
 
     if (!validateWorkInformation()) return
 
+    hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 2
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
@@ -628,6 +644,7 @@ const goToNextStep = async () => {
   }
 
   if (currentStepIndex.value === 2) {
+    hasAttemptedStepSubmit.value = true
     clearStepErrors([
       'employmentType',
       'grade',
@@ -664,6 +681,7 @@ const goToNextStep = async () => {
 
     if (!validateEmploymentDetails()) return
 
+    hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 3
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
@@ -671,6 +689,7 @@ const goToNextStep = async () => {
   }
 
   if (currentStepIndex.value === 3) {
+    hasAttemptedStepSubmit.value = true
     clearStepErrors([
       'taxIdentificationNumber',
       'taxFilingStatus',
@@ -680,6 +699,7 @@ const goToNextStep = async () => {
 
     if (!validateTaxInformation()) return
 
+    hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 4
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
@@ -687,6 +707,7 @@ const goToNextStep = async () => {
   }
 
   if (currentStepIndex.value === 4) {
+    hasAttemptedStepSubmit.value = true
     clearStepErrors([
       'bankCountry',
       'bankName',
@@ -699,6 +720,7 @@ const goToNextStep = async () => {
 
     if (!validateBankInformation()) return
 
+    hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 5
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
@@ -706,6 +728,7 @@ const goToNextStep = async () => {
   }
 
   if (currentStepIndex.value === 5) {
+    hasAttemptedStepSubmit.value = true
     clearStepErrors([
       'healthInsuranceProvider',
       'healthPolicyNumber',
@@ -734,12 +757,14 @@ const goToNextStep = async () => {
 
     if (!validateBenefitsInformation()) return
 
+    hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 6
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
     return
   }
 
+  hasAttemptedStepSubmit.value = true
   clearStepErrors([
     'ndaFiles',
     'employmentContractFiles',
@@ -748,6 +773,7 @@ const goToNextStep = async () => {
 
   if (!validateComplianceInformation()) return
 
+  hasAttemptedStepSubmit.value = false
   emit('save', {
     ...form,
     employeeId: form.employeeId.trim(),
@@ -775,6 +801,7 @@ const goToNextStep = async () => {
 
 const goToPreviousStep = async () => {
   if (currentStepIndex.value === 0) return
+  hasAttemptedStepSubmit.value = false
   currentStepIndex.value -= 1
   await nextTick()
   panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
@@ -1928,47 +1955,117 @@ const handleSaveRestrictedAccess = (payload) => {
 }
 
 .field__control,
-.field :deep(.dropdown__trigger) {
+.field :deep(.dropdown__trigger),
+.field :deep(.date-picker__trigger) {
   width: 100%;
-  min-height: 38px;
-  height: 38px;
+  min-height: 36px;
+  height: 36px;
+  max-height: 36px;
   border: 1px solid #ece6ea;
   border-radius: 9px;
   background: #ffffff;
-  padding: 0 12px;
+  padding: 0 11px;
   color: #736a72;
-  font-size: 12px;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   box-sizing: border-box;
+  box-shadow: none;
+  vertical-align: top;
+}
+
+.field__control {
+  display: block;
+  width: 100%;
+  min-height: 36px !important;
+  height: 36px !important;
+  max-height: 36px !important;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-clip: padding-box;
+  padding: 0 11px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-family: inherit;
+  font-size: 10px !important;
+  font-weight: 400;
+  line-height: 36px !important;
+  border-radius: 9px;
 }
 
 .field :deep(.dropdown__trigger) {
-  padding-left: 12px;
-  padding-right: 30px;
-  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-left: 11px;
+  padding-right: 26px;
+  border-radius: 9px;
 }
 
-.field :deep(.dropdown__value) {
-  font-size: 12px;
+.field :deep(.dropdown__value),
+.field :deep(.date-picker__value) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .field :deep(.dropdown__arrow) {
-  right: 12px;
+  right: 11px;
   width: 6px;
   height: 6px;
 }
 
+.field :deep(.date-picker__trigger) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-right: 11px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 9px;
+}
+
+.field :deep(.date-picker__icon) {
+  width: 12px;
+  height: 12px;
+}
+
 .field__control::placeholder {
   color: #c8c0c6;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 36px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
+.field :deep(.dropdown__trigger--placeholder .dropdown__value),
+.field :deep(.date-picker__trigger--placeholder .date-picker__value) {
+  color: #c8c0c6;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .field__control:focus,
-.field :deep(.dropdown__trigger:focus-visible) {
+.field :deep(.dropdown__trigger:focus-visible),
+.field :deep(.date-picker__trigger:focus-visible) {
   outline: none;
   border-color: #ef8ab3;
-  box-shadow: 0 0 0 3px rgba(239, 90, 150, 0.08);
+  box-shadow: 0 0 0 2px rgba(239, 90, 150, 0.06);
 }
 
 .field__control--date {
@@ -1987,7 +2084,8 @@ const handleSaveRestrictedAccess = (payload) => {
 
 .field__control--error,
 .field :deep(.dropdown__trigger.field__control--error) {
-  border-color: #ee7ea9;
+  border-color: #ece6ea;
+  box-shadow: none;
 }
 
 .field__error {
@@ -2298,8 +2396,10 @@ const handleSaveRestrictedAccess = (payload) => {
 
   .field__control,
   .field :deep(.dropdown__trigger),
-  .field :deep(.dropdown__value) {
-    font-size: 12px;
+  .field :deep(.dropdown__value),
+  .field :deep(.date-picker__trigger),
+  .field :deep(.date-picker__value) {
+    font-size: 10px;
   }
 }
 </style>

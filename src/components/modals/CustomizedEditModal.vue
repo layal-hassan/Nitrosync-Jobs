@@ -212,11 +212,11 @@ watch(
 
 .customized-edit-modal__fields {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .customized-edit-modal__label {
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   color: #2b2228;
   font-size: 11px;
   font-weight: 600;
@@ -224,17 +224,18 @@ watch(
 
 .customized-edit-modal__field input {
   width: 100%;
-  height: 34px;
-  padding: 0 12px;
+  height: 30px;
+  padding: 0 10px;
   border: 1px solid #f0e6ea;
   border-radius: 5px;
   color: #7a7076;
-  font-size: 11px;
+  font-size: 10px;
   outline: none;
 }
 
 .customized-edit-modal__field input::placeholder {
   color: #c1b7bd;
+  font-size: 10px;
 }
 
 .customized-edit-modal__footer {

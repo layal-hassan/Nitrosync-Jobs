@@ -112,6 +112,20 @@ const normalizeCandidateRows = (response) => {
     .filter(Boolean)
 }
 
+const normalizeStageCandidateRows = (item) => {
+  const rows = Array.isArray(item?.candidates)
+    ? item.candidates
+    : Array.isArray(item?.job_stage?.candidates)
+      ? item.job_stage.candidates
+      : Array.isArray(item?.stage?.candidates)
+        ? item.stage.candidates
+        : []
+
+  return rows
+    .map(normalizeCandidateCard)
+    .filter(Boolean)
+}
+
 export const fetchNitroSyncJobStages = async (relatedCompany, { timeout = nitroSyncRequestTimeoutMs } = {}) => {
   const response = await axios.post(
     getAllJobStagesEndpoint,
@@ -135,14 +149,14 @@ export const fetchNitroSyncJobStages = async (relatedCompany, { timeout = nitroS
     const label = getStageLabel(item, index)
     const jobStageUuid = getStageUuid(item)
     const key = jobStageUuid || label.toLowerCase()
-    const candidateCard = normalizeCandidateCard(item)
+    const stageCandidateCards = normalizeStageCandidateRows(item)
 
     if (!groupedRows.has(key)) {
       groupedRows.set(key, {
         jobStageUuid,
         label,
         enabled: item?.enabled ?? item?.is_enabled ?? item?.active ?? false,
-        cards: [],
+        cards: [...stageCandidateCards],
         raw: item,
       })
     }
@@ -157,8 +171,8 @@ export const fetchNitroSyncJobStages = async (relatedCompany, { timeout = nitroS
       entry.label = label
     }
 
-    if (candidateCard) {
-      entry.cards.push(candidateCard)
+    if (stageCandidateCards.length && !entry.cards.length) {
+      entry.cards = [...stageCandidateCards]
     }
   })
 
@@ -191,6 +205,10 @@ export const fetchNitroSyncJobStageCandidates = async (jobStageUuid, { timeout =
       timeout,
     },
   )
+
+  if (String(response?.data?.code) === '-15000') {
+    return []
+  }
 
   if (response?.data?.code && String(response.data.code) !== '1') {
     throw new Error(response?.data?.message || 'Failed to fetch stage candidates.')

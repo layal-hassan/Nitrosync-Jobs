@@ -16,7 +16,10 @@ import { createNitroSyncEmployee } from '../../composables/useNitroSyncCreateEmp
 import { changeNitroSyncEmployeeStatus } from '../../composables/useNitroSyncChangeEmployeeStatus'
 import { deleteNitroSyncEmployee } from '../../composables/useNitroSyncDeleteEmployee'
 import { resetNitroSyncEmployeePassword } from '../../composables/useNitroSyncResetEmployeePassword'
+import { updateNitroSyncEmployee } from '../../composables/useNitroSyncUpdateEmployee'
+import { bulkEditNitroSyncEmployees } from '../../composables/useNitroSyncBulkEditEmployees'
 import {
+  buildEmployeeUpdatePayload,
   buildInitials,
   fallbackEmployees,
   loadEmployeesDirectory,
@@ -64,96 +67,9 @@ const filterState = reactive({
 })
 
 const employees = ref([])
-const availableEmployees = ref([
-  fallbackEmployees[3],
-  fallbackEmployees[2],
-  {
-    id: 'emp-9',
-    name: 'Nadia Alromani',
-    role: 'Financial Manager',
-    status: 'Active',
-    email: 'nalromani@nitrosync.com',
-    phone: '+963223454679',
-    address: '2030 Central St.',
-    note: 'Supports planning and financial operations across new branches.',
-    avatarBg: 'linear-gradient(135deg, #ff8e8e 0%, #ffb265 100%)',
-    avatarAccent: '#5b2cff',
-    avatarText: 'NA',
-    online: false,
-    department: 'Financial Manager',
-    position: 'Financial Manager',
-    hireDate: '2026-03-12',
-  },
-  fallbackEmployees[0],
-  {
-    id: 'emp-10',
-    name: 'Elie Romi',
-    role: 'Financial Manager',
-    status: 'Active',
-    email: 'eromi@nitrosync.com',
-    phone: '+963223454680',
-    address: '2030 Finance Hub',
-    note: 'Leads monthly closing and audit preparation.',
-    avatarBg: 'linear-gradient(135deg, #ffe76a 0%, #d6ff5f 100%)',
-    avatarAccent: '#101828',
-    avatarText: 'ER',
-    online: false,
-    department: 'Financial Manager',
-    position: 'Financial Manager',
-    hireDate: '2026-01-18',
-  },
-  {
-    id: 'emp-11',
-    name: 'Ellie Romi',
-    role: 'Financial Manager',
-    status: 'Active',
-    email: 'ellie.romi2@nitrosync.com',
-    phone: '+963223454681',
-    address: '2030 Romani St.',
-    note: 'Handles cross-team approvals and finance operations follow-up.',
-    avatarBg: 'linear-gradient(135deg, #ca7dff 0%, #ff78b6 100%)',
-    avatarAccent: '#ffe37a',
-    avatarText: 'ER',
-    online: false,
-    department: 'Financial Manager',
-    position: 'Financial Manager',
-    hireDate: '2026-02-06',
-  },
-  {
-    id: 'emp-12',
-    name: 'Jad Ferris',
-    role: 'Recruiter',
-    status: 'Active',
-    email: 'jferris@nitrosync.com',
-    phone: '+963223454682',
-    address: '2020 Talent Ave.',
-    note: 'Coordinates interview loops and recruiter workflows.',
-    avatarBg: 'linear-gradient(135deg, #78d9ff 0%, #6f8dff 100%)',
-    avatarAccent: '#ffffff',
-    avatarText: 'JF',
-    online: false,
-    department: 'Recruiter',
-    position: 'Recruiter',
-    hireDate: '2026-04-04',
-  },
-  {
-    id: 'emp-13',
-    name: 'Sara Nabulsi',
-    role: 'HR Manager',
-    status: 'Active',
-    email: 'snabulsi@nitrosync.com',
-    phone: '+963223454683',
-    address: '2100 Palm St.',
-    note: 'Owns HR policy tracking and internal employee support.',
-    avatarBg: 'linear-gradient(135deg, #8effb1 0%, #49d57f 100%)',
-    avatarAccent: '#12442b',
-    avatarText: 'SN',
-    online: false,
-    department: 'HR Manager',
-    position: 'HR Manager',
-    hireDate: '2026-05-09',
-  },
-])
+const availableEmployees = computed(() =>
+  employees.value.filter((employee) => String(employee?.employeeUuid || '').trim()),
+)
 
 const employmentStatusOptions = ['Active', 'Deactivated']
 const jobTitleOptions = ['Financial Manager', 'HR Manager', 'Recruiter', 'Operations']
@@ -185,6 +101,32 @@ const editableFieldCatalog = [
 const selectedEditableFields = computed(() =>
   editableFieldCatalog.filter((field) => selectedEditFieldKeys.value.includes(field.key)),
 )
+
+const editableFieldPayloadMap = {
+  team: { updateKey: 'team', apiField: 'team' },
+  manager: { updateKey: 'manager', apiField: 'manager' },
+  supervisor: { updateKey: 'supervisor', apiField: 'supervisor' },
+  employmentType: { updateKey: 'employmentType', apiField: 'employment_type' },
+  department: { updateKey: 'department', apiField: 'department_id' },
+  payFrequency: { updateKey: 'payFrequency', apiField: 'pay_frequency' },
+  overtimeRate: { updateKey: 'overtimeRateType', apiField: 'overtime_rate_type' },
+  allowances: { updateKey: 'allowanceName', apiField: 'allowances' },
+  basicSalary: { updateKey: 'baseSalary', apiField: 'base_salary' },
+  currency: { updateKey: 'currency', apiField: 'currency' },
+  taxes: { updateKey: 'localStateFederalTaxRates', apiField: 'tax_rates' },
+  socialSecurity: { updateKey: 'retirementContributions', apiField: 'health_insurance_retirement_contributions' },
+  healthInsurance: { updateKey: 'healthInsurance', apiField: 'health_insurance_deduction' },
+  deductions: { updateKey: 'deductionAmount', apiField: 'other_deductions_amount' },
+  healthInsuranceProvider: { updateKey: 'healthInsuranceProvider', apiField: 'health_insurance_provider' },
+  retirementPlanType: { updateKey: 'retirementPlanType', apiField: 'retirement_plan_type' },
+  leaveType: { updateKey: 'annualLeaveEntitlement', apiField: 'annual_leave_entitlement' },
+  welfarePrograms: { updateKey: 'wellnessPrograms', apiField: 'wellness_programs' },
+  paidTimeOff: { updateKey: 'paidTimeOff', apiField: 'paid_time_off' },
+  lifeInsurance: { updateKey: 'lifeInsurance', apiField: 'life_insurance' },
+  payrollStartDate: { updateKey: 'miscStartDate', apiField: 'miscellaneous_start_date' },
+  paymentMethod: { updateKey: 'paymentMethod', apiField: 'payment_method' },
+  employmentContractType: { updateKey: 'validityOfContract', apiField: 'validity_of_contract' },
+}
 
 const filteredEmployees = computed(() => {
   const query = String(searchQuery.value || '').trim().toLowerCase()
@@ -520,33 +462,89 @@ const handleConfirmPreview = () => {
   isConfirmBulkUpdateModalOpen.value = true
 }
 
-const handleConfirmBulkUpdate = () => {
-  applyCustomEditsToEmployees(
-    selectedEmployeesForEdit.value.map((employee) => employee.id),
-    {},
-  )
+const handleConfirmBulkUpdate = async () => {
+  const selectedEmployees = [...selectedEmployeesForEdit.value]
+  const employeeUuids = selectedEmployees
+    .map((employee) => String(employee?.employeeUuid || '').trim())
+    .filter(Boolean)
 
-  employees.value = employees.value.map((employee) => {
-    const previewValues = previewValuesByEmployee[employee.id]
-    if (!previewValues) return employee
+  if (!selectedEmployees.length) {
+    loadError.value = 'Select at least one employee to update.'
+    return
+  }
 
-    return {
-      ...employee,
-      customEdits: {
-        ...(employee.customEdits || {}),
-        ...previewValues,
-      },
+  if (!employeeUuids.length) {
+    loadError.value = 'The selected employees are missing NitroSync employee_uuid values.'
+    return
+  }
+
+  loading.value = true
+  loadError.value = ''
+
+  try {
+    const apiFields = selectedEditFieldKeys.value
+      .map((fieldKey) => editableFieldPayloadMap[fieldKey]?.apiField)
+      .filter(Boolean)
+
+    if (apiFields.length) {
+      await bulkEditNitroSyncEmployees({
+        relatedCompany,
+        employeeUuids,
+        editFields: apiFields,
+      })
     }
-  })
 
-  isConfirmBulkUpdateModalOpen.value = false
-  isUpdateSuccessModalOpen.value = true
-  selectedEmployeesForEdit.value = []
-  currentEmployeeEditIndex.value = 0
-  selectedEditFieldKeys.value = []
-  Object.keys(editFieldValues).forEach((key) => delete editFieldValues[key])
-  Object.keys(previewValuesByEmployee).forEach((key) => delete previewValuesByEmployee[key])
-  editApplyMode.value = 'for-all'
+    for (const selectedEmployee of selectedEmployees) {
+      const previewValues = previewValuesByEmployee[selectedEmployee.id] || {}
+      const overrides = Object.entries(previewValues).reduce((accumulator, [fieldKey, value]) => {
+        const mappedField = editableFieldPayloadMap[fieldKey]
+        if (!mappedField) return accumulator
+        accumulator[mappedField.updateKey] = value
+        return accumulator
+      }, {})
+
+      const payload = buildEmployeeUpdatePayload(selectedEmployee, overrides)
+      await updateNitroSyncEmployee(payload, {
+        relatedCompany,
+        departmentId: payload.departmentId,
+      })
+    }
+
+    const { employees: freshEmployees, usedFallback } = await loadEmployeesDirectory()
+
+    if (freshEmployees.length) {
+      employees.value = freshEmployees
+    } else {
+      employees.value = employees.value.map((employee) => {
+        const previewValues = previewValuesByEmployee[employee.id]
+        if (!previewValues) return employee
+
+        return {
+          ...employee,
+          customEdits: {
+            ...(employee.customEdits || {}),
+            ...previewValues,
+          },
+        }
+      })
+    }
+
+    isConfirmBulkUpdateModalOpen.value = false
+    isUpdateSuccessModalOpen.value = true
+    selectedEmployeesForEdit.value = []
+    currentEmployeeEditIndex.value = 0
+    selectedEditFieldKeys.value = []
+    Object.keys(editFieldValues).forEach((key) => delete editFieldValues[key])
+    Object.keys(previewValuesByEmployee).forEach((key) => delete previewValuesByEmployee[key])
+    editApplyMode.value = 'for-all'
+    loadError.value = usedFallback
+      ? 'Employees updated, but the employees list could not be refreshed from the API yet.'
+      : 'Employees updated successfully.'
+  } catch (error) {
+    loadError.value = error?.message || 'Failed to bulk update employees.'
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleEditPreviewAgain = () => {
@@ -1033,15 +1031,15 @@ onBeforeUnmount(() => {
 }
 
 .employee-search {
-  width: 240px;
+  width: 260px;
   display: flex;
   align-items: center;
-  flex: 0 0 240px;
-  gap: 12px;
-  min-height: 52px;
-  padding: 0 16px;
+  flex: 0 0 260px;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
   border: 1px solid #f2e7ec;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fbf8fa;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
@@ -1050,8 +1048,8 @@ onBeforeUnmount(() => {
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 50px;
-  height: 50px;
+  min-height: 42px;
+  height: 42px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1105,16 +1103,17 @@ onBeforeUnmount(() => {
 
 .employee-filter {
   min-width: 118px;
-  min-height: 48px;
+  min-height: 36px;
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   padding: 0 18px;
-  border-radius: 14px;
-  background: #f8dbe7;
+  border-radius: 11px;
+  background: #f3bfd2;
   color: #ef5d97;
+  font-size: 14px;
 }
 
 .employee-filter__icon {
@@ -1129,27 +1128,31 @@ onBeforeUnmount(() => {
 .employee-filter__label {
   font-size: 14px;
   font-weight: 600;
+  line-height: 1;
 }
 
 .employee-view-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 14px;
-  background: #fff4f8;
+  gap: 5px;
+  min-width: 92px;
+  height: 36px;
+  padding: 5px;
+  border-radius: 12px;
+  background: #f8d8e7;
 }
 
 .employee-view-toggle__btn {
   width: 38px;
-  height: 36px;
-  border-radius: 11px;
+  height: 26px;
+  border-radius: 9px;
   position: relative;
   background: transparent;
 }
 
 .employee-view-toggle__btn.is-active {
-  background: linear-gradient(180deg, #f15b95 0%, #e9498a 100%);
+  background: #f4b8cc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .employee-view-toggle__btn--list::before,
@@ -1182,15 +1185,16 @@ onBeforeUnmount(() => {
 
 .employee-toolbar__bulk,
 .employee-toolbar__add {
-  min-height: 48px;
-  padding: 0 20px;
-  border-radius: 14px;
-  font-size: 15px;
+  min-height: 36px;
+  padding: 0 18px;
+  border-radius: 11px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1;
 }
 
 .employee-toolbar__bulk {
-  background: #f8dbe7;
+  background: #f3bfd2;
   color: #ef5d97;
 }
 
@@ -1221,24 +1225,26 @@ onBeforeUnmount(() => {
 .employee-table__header,
 .employee-table__row {
   display: grid;
-  grid-template-columns: 0.9fr 1.35fr 1fr 0.9fr 0.95fr 1.35fr 1.45fr 0.55fr;
-  gap: 16px;
+  grid-template-columns: 84px 182px 132px 118px 132px 154px 170px 76px;
+  gap: 0;
   align-items: center;
-  padding: 16px 20px;
+  padding: 14px 18px;
 }
 
 .employee-table__header {
-  color: #211b20;
-  font-size: 15px;
-  font-weight: 600;
-  background: #fff;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 500;
+  background: #f4f5f8;
   border-bottom: 1px solid #f4e8ed;
+  border-radius: 16px;
 }
 
 .employee-table__row {
   position: relative;
-  min-height: 64px;
+  min-height: 0;
   border-bottom: 1px solid #f6ebef;
+  background: #fff;
 }
 
 .employee-table__row:last-child {
@@ -1248,8 +1254,12 @@ onBeforeUnmount(() => {
 .employee-table__cell {
   min-width: 0;
   color: #2d252b;
-  font-size: 14px;
+  font-size: 10px;
   line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .employee-table__cell--id {
@@ -1277,7 +1287,6 @@ onBeforeUnmount(() => {
 
 .employee-table__cell--action {
   position: relative;
-  display: flex;
   justify-content: center;
   overflow: visible;
 }
@@ -1286,13 +1295,13 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 52px;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 12px;
+  min-width: 64px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 20px;
   background: #ffe9f1;
   color: #ef5d97;
-  font-size: 14px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -1304,13 +1313,13 @@ onBeforeUnmount(() => {
 .employee-table__dots {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 4px 2px;
+  gap: 4px;
+  padding: 2px 0;
 }
 
 .employee-table__dots span {
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
   background: #ef5d97;
 }
@@ -1706,7 +1715,7 @@ onBeforeUnmount(() => {
 
   .employee-table__header,
   .employee-table__row {
-    min-width: 980px;
+    min-width: 1060px;
   }
 }
 

@@ -488,19 +488,20 @@ syncSectionsToForm()
   font-weight: 600;
   line-height: 1.25;
   color: #17111b;
+  white-space: nowrap;
 }
 
 .app-field__header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 14px;
 }
 
 .app-field__status-group {
   display: flex;
   flex-wrap: nowrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 5px;
   max-width: none;
 }
@@ -518,6 +519,7 @@ syncSectionsToForm()
   font-weight: 500;
   color: #594d56;
   cursor: pointer;
+  white-space: nowrap;
   transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
 }
 
@@ -742,7 +744,6 @@ syncSectionsToForm()
   }
 
   .app-field__header {
-    grid-template-columns: 1fr;
     align-items: flex-start;
   }
 
@@ -756,5 +757,5 @@ syncSectionsToForm()
     justify-content: flex-start;
     flex-wrap: wrap;
   }
-}
-</style>
+  }
+  </style>

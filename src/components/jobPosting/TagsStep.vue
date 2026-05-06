@@ -74,7 +74,7 @@ const addPendingTag = () => {
         @click="addTag(tag.label)"
       >
         <span>{{ tag.label }}</span>
-        <span>+</span>
+        <span class="tags-step__icon-badge tags-step__icon-badge--plus" aria-hidden="true"></span>
       </button>
       <span v-if="!availableTagOptions.length" class="tags-step__empty">All suggested tags are already selected</span>
     </div>
@@ -90,7 +90,7 @@ const addPendingTag = () => {
           :style="{ '--chip-color': tag.color }"
         >
           <span>{{ tag.label }}</span>
-          <button type="button" @click="removeTag(tag.label)">x</button>
+          <button type="button" class="tags-step__icon-badge tags-step__icon-badge--remove" aria-label="Remove tag" @click="removeTag(tag.label)"></button>
         </span>
         <span v-if="!selectedTagObjects.length" class="tags-step__empty">No tags selected yet</span>
       </div>
@@ -175,17 +175,53 @@ const addPendingTag = () => {
   color: #3a3136;
 }
 
-.tags-step__picker-chip span:last-child,
-.tags-step__chip button {
+.tags-step__icon-badge {
   width: 16px;
   height: 16px;
+  min-width: 16px;
   border-radius: 999px;
-  display: inline-grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: #fff;
   color: var(--chip-color);
-  font-size: 12px;
+  font-size: 0;
+  line-height: 0;
+  font-weight: 600;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.tags-step__icon-badge--plus,
+.tags-step__icon-badge--remove {
+  border: 0;
+  appearance: none;
+  font-family: Arial, sans-serif;
+}
+
+.tags-step__icon-badge::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--chip-color);
+  font-family: Arial, sans-serif;
+  font-weight: 600;
   line-height: 1;
+}
+
+.tags-step__icon-badge--plus::before {
+  content: '+';
+  font-size: 15px;
+}
+
+.tags-step__icon-badge--remove::before {
+  content: '×';
+  font-size: 14px;
 }
 
 .tags-step__section-title {

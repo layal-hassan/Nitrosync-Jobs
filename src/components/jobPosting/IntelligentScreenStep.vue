@@ -736,7 +736,6 @@ const sendAiCommand = async () => {
 
     <template v-else-if="stage === 1">
       <div class="type-chooser">
-        <Dropdown v-model="selectedType" :options="typeOptions" placeholder="Choose the type of questions" />
         <div class="type-chooser__list">
           <div v-for="item in typeOptions.slice(1)" :key="item" class="type-row">
             <span>{{ item }}</span>

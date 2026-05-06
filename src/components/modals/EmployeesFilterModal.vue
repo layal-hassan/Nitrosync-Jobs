@@ -171,7 +171,7 @@ watch(
 .employee-filters-modal__panel {
   position: relative;
   width: min(438px, calc(100vw - 28px));
-  padding: 10px;
+  padding: 9px;
   border: 1px solid #f0dfe6;
   border-radius: 16px;
   background: #fff;
@@ -182,7 +182,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .employee-filters-modal__title-wrap {
@@ -233,7 +233,7 @@ watch(
 .employee-filters-modal__body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .employee-filters-modal__field {
@@ -248,18 +248,28 @@ watch(
 .employee-filters-modal__field input,
 .employee-filters-modal__field :deep(.dropdown__trigger) {
   width: 100%;
-  min-height: 33px;
-  height: 33px;
-  padding: 0 12px;
+  min-height: 29px !important;
+  height: 29px !important;
+  max-height: 29px !important;
+  padding: 0 10px !important;
   border: 1px solid #eee4e8;
   border-radius: 7px;
   background: #fff;
   color: #746a70;
-  font-size: 11px;
+  font-size: 10px !important;
+  line-height: 29px !important;
+  box-sizing: border-box;
 }
 
 .employee-filters-modal__field input {
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   outline: none;
+  font-family: inherit;
+  font-weight: 400;
+  background-clip: padding-box;
 }
 
 .employee-filters-modal__field input::placeholder,
@@ -268,26 +278,33 @@ watch(
 }
 
 .employee-filters-modal__field :deep(.dropdown__trigger) {
-  padding-right: 32px;
+  display: flex;
+  align-items: center;
+  padding-right: 28px !important;
   background: #fff;
 }
 
+.employee-filters-modal__field :deep(.dropdown__value) {
+  font-size: 10px !important;
+  line-height: 1;
+}
+
 .employee-filters-modal__field :deep(.dropdown__arrow) {
-  right: 12px;
-  width: 7px;
-  height: 7px;
+  right: 10px;
+  width: 6px;
+  height: 6px;
   color: #c5bbc0;
 }
 
 .employee-filters-modal__range-label {
   margin-top: -2px;
   color: #2b2228;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
 .employee-filters-modal__field--date input {
-  padding-right: 34px;
+  padding-right: 28px !important;
   color-scheme: light;
 }
 
@@ -303,14 +320,14 @@ watch(
 .employee-filters-modal__calendar {
   position: absolute;
   top: 50%;
-  right: 10px;
-  width: 13px;
-  height: 13px;
-  border: 1.4px solid #ef5a96;
+  right: 9px;
+  width: 11px;
+  height: 11px;
+  border: 1.2px solid #ef5a96;
   border-radius: 3px;
   background:
-    linear-gradient(#ef5a96, #ef5a96) center 3px / 9px 1.2px no-repeat,
-    linear-gradient(#ef5a96, #ef5a96) center 7px / 7px 1px no-repeat;
+    linear-gradient(#ef5a96, #ef5a96) center 3px / 7px 1px no-repeat,
+    linear-gradient(#ef5a96, #ef5a96) center 6px / 5px 1px no-repeat;
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -321,7 +338,7 @@ watch(
   position: absolute;
   top: -3px;
   width: 2px;
-  height: 4px;
+  height: 3px;
   border-radius: 999px;
   background: #ef5a96;
 }
@@ -338,13 +355,13 @@ watch(
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .employee-filters-modal__apply,
 .employee-filters-modal__clear {
   min-width: 73px;
-  height: 31px;
+  height: 28px;
   border-radius: 8px;
   font-size: 10px;
   font-weight: 600;
