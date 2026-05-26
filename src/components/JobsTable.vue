@@ -10,6 +10,7 @@ import {
   buildNitroSyncEndpoint,
   nitroSyncRequestTimeoutMs,
 } from '../composables/nitroSyncApi'
+import { changeNitroSyncJobStatus } from '../composables/useNitroSyncChangeJobStatus'
 import FilterModal from './FilterModal.vue'
 import GetCandidateModal from './modals/GetCandidateModal.vue'
 import ShareJobModal from './modals/ShareJobModal.vue'
@@ -29,11 +30,15 @@ const selectedShareJob = ref(null)
 const selectedCandidateJob = ref(null)
 const selectedDeleteJob = ref(null)
 const deleteDialogError = ref('')
+const searchQuery = ref('')
 const viewMode = ref('list')
 const pageSize = ref(15)
 const currentPage = ref(1)
+const activeStatusFilter = ref('all')
 const deletingJobUuid = ref('')
+const changingStatusJobUuid = ref('')
 const deletedJobUuids = ref([])
+const statusOverrides = ref({})
 const viewingJobUuid = ref('')
 const router = useRouter()
 const deleteJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/delete')
@@ -54,32 +59,42 @@ const createDefaultFilters = () => ({
 })
 
 const filterForm = ref(createDefaultFilters())
-const defaultStageColors = ['#ea4f8d', '#f0d9e3', '#f0d9e3', '#f0d9e3', '#f0d9e3']
+const defaultStageColors = ['#dbe4ff', '#d9f5ea', '#eadfff', '#dcf7e6']
 const stageDefinitions = [
-  { key: 'new', label: 'New', color: '#ea4f8d', mutedColor: '#f8d4e3' },
   { key: 'screen', label: 'Screen', color: '#3f6fff', mutedColor: '#dbe4ff' },
   { key: 'testing', label: 'Testing', color: '#2fc98f', mutedColor: '#d9f5ea' },
   { key: 'interview', label: 'Interview', color: '#b58cff', mutedColor: '#eadfff' },
-  { key: 'shortlisted', label: 'Shortlisted', color: '#f1d7e6', mutedColor: '#f1d7e6' },
+  { key: 'hired', label: 'Hired', color: '#25b45b', mutedColor: '#dcf7e6' },
 ]
 
 const headers = [
   { key: 'id', label: 'Job ID', width: 'jobs-col--id' },
   { key: 'title', label: 'Job Title', width: 'jobs-col--title' },
-  { key: 'date', label: 'Create Date', width: 'jobs-col--date' },
-  { key: 'stages', label: 'Stages', width: 'jobs-col--stages' },
-  { key: 'tags', label: 'Tags', width: 'jobs-col--tags' },
   { key: 'department', label: 'Department', width: 'jobs-col--department' },
   { key: 'recruiter', label: 'Recruiter', width: 'jobs-col--recruiter' },
+  { key: 'status', label: 'Status', width: 'jobs-col--status' },
+  { key: 'date', label: 'Create Date', width: 'jobs-col--date' },
+  { key: 'expiryDate', label: 'Expiry Date', width: 'jobs-col--expiry' },
+  { key: 'stages', label: 'Stages', width: 'jobs-col--stages' },
+  { key: 'tags', label: 'Tags', width: 'jobs-col--tags' },
   { key: 'action', label: 'Action', width: 'jobs-col--action' },
 ]
 
 const pageSizeOptions = [15, 25, 50]
+const statusOptions = [
+  { key: 'active', label: 'Active' },
+  { key: 'on_hold', label: 'On Hold' },
+  { key: 'closed', label: 'Closed' },
+  { key: 'draft', label: 'Draft' },
+  { key: 'expired', label: 'Expired' },
+  { key: 'archived', label: 'Archived' },
+]
 
 const normalizeString = (value) => String(value ?? '').trim().toLowerCase()
 const includesNormalized = (source, query) => normalizeString(source).includes(normalizeString(query))
 const toArray = (value) => (Array.isArray(value) ? value : [])
 const slugifyStage = (value) => normalizeString(value).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+const uniqueValues = (values) => [...new Set(values.map((value) => String(value ?? '').trim()).filter(Boolean))]
 
 const formatDate = (value) => {
   if (!value) return '--'
@@ -92,6 +107,63 @@ const formatDate = (value) => {
   const year = date.getFullYear()
 
   return `${day} ${month},${year}`
+}
+
+const normalizeStatusKey = (value) => {
+  const normalized = normalizeString(value)
+
+  if (['1', 'draft', 'pending', 'scheduled'].includes(normalized)) return 'draft'
+  if (['2', 'active', 'published', 'open', 'live'].includes(normalized)) return 'active'
+  if (['3', 'expired', 'expire'].includes(normalized)) return 'expired'
+  if (['4', 'on_hold', 'on hold', 'hold', 'paused', 'pause'].includes(normalized)) return 'on_hold'
+  if (['5', 'closed', 'close', 'filled'].includes(normalized)) return 'closed'
+  if (['6', 'archived', 'archive'].includes(normalized)) return 'archived'
+
+  return normalized || 'unknown'
+}
+
+const statusPresentation = (value) => {
+  const key = normalizeStatusKey(value)
+
+  const map = {
+    active: { key, label: 'Active', className: 'job-status job-status--active' },
+    on_hold: { key, label: 'On Hold', className: 'job-status job-status--hold' },
+    closed: { key, label: 'Closed', className: 'job-status job-status--closed' },
+    draft: { key, label: 'Draft', className: 'job-status job-status--draft' },
+    expired: { key, label: 'Expired', className: 'job-status job-status--expired' },
+    archived: { key, label: 'Archived', className: 'job-status job-status--archived' },
+    unknown: { key, label: 'Pending', className: 'job-status job-status--pending' },
+  }
+
+  return map[key] || { key, label: String(value || 'Pending'), className: 'job-status job-status--pending' }
+}
+
+const buildJobMeta = (job = {}) => {
+  const segments = [
+    job.contractType && job.contractType !== '--' ? job.contractType : '',
+    job.city && job.city !== '--' ? job.city : '',
+    job.country && job.country !== '--' ? job.country : '',
+  ].filter(Boolean)
+
+  return segments.join(' • ')
+}
+
+const buildExpiryMeta = (value) => {
+  if (!value) return ''
+
+  const expiry = new Date(value)
+  if (Number.isNaN(expiry.getTime())) return ''
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  expiry.setHours(0, 0, 0, 0)
+
+  const diffDays = Math.round((expiry.getTime() - today.getTime()) / 86400000)
+  if (diffDays < 0) return '(Expired)'
+  if (diffDays === 0) return '(Today)'
+  if (diffDays === 1) return '(in 1 day)'
+
+  return `(in ${diffDays} days)`
 }
 
 const getInitials = (name) => {
@@ -193,8 +265,9 @@ const getStoredRecruiterName = (job = {}) => {
 }
 
 const normalizedJobs = computed(() =>
-  (props.jobs || []).map((job, index) => {
-    const department = departmentPresentation(job.department?.department_name || '')
+  (props.jobs || [])
+    .map((job, index) => {
+    const department = departmentPresentation(job.department?.department_name || job.department_name || '')
     const recruiterName =
       (typeof job.recruiter_name === 'string' ? job.recruiter_name.trim() : '')
       || (typeof job.recruiter === 'string' ? job.recruiter.trim() : '')
@@ -202,13 +275,18 @@ const normalizedJobs = computed(() =>
     const recruiterUi = recruiterPresentation(index)
     const tags = toArray(job.tags).map((tag) =>
       typeof tag === 'object'
-        ? String(tag.name ?? tag.label ?? tag.value ?? '').trim()
+        ? String(tag.tag_name ?? tag.name ?? tag.label ?? tag.value ?? '').trim()
         : String(tag).trim(),
     ).filter(Boolean)
     const address = job.address ?? job.location ?? job.city ?? ''
     const country = job.country?.name ?? job.country_name ?? job.country ?? ''
     const city = job.city?.name ?? job.city_name ?? job.city ?? ''
-    const hiringStage = job.hiring_stage ?? job.status ?? job.current_stage ?? ''
+    const explicitHiringStage = job.hiring_stage ?? job.current_stage ?? ''
+    const statusOverride = String(
+      statusOverrides.value[String(job.job_uuid ?? job.uuid ?? job.id ?? '')] ?? '',
+    ).trim()
+    const sourceStatus = statusOverride || (job.status ?? job.job_status ?? job.active_status ?? explicitHiringStage)
+    const status = statusPresentation(sourceStatus)
     const rating = job.rating ?? job.score ?? ''
     const positions = [
       typeof job.job_title === 'string' ? job.job_title : '',
@@ -216,7 +294,8 @@ const normalizedJobs = computed(() =>
       job.role ?? '',
     ].filter(Boolean)
 
-    const activeStageKey = slugifyStage(hiringStage)
+    const activeStageKey = slugifyStage(explicitHiringStage)
+    const hiringStage = String(explicitHiringStage || status.label).trim()
     const stageRows = getJobStageRows(job)
     const stages = stageDefinitions.map((stage) => ({
       ...stage,
@@ -227,20 +306,29 @@ const normalizedJobs = computed(() =>
       ),
     }))
 
-    return {
+      return {
       id: job.id ?? '--',
       title: typeof job.job_title === 'string' ? job.job_title : '--',
+      titleMeta: buildJobMeta({
+        contractType: job.contract_type?.contract_type_name ?? job.contract_type_name ?? job.contract_type ?? '',
+        city,
+        country,
+      }),
       date: formatDate(job.created_at),
+      expiryDate: formatDate(job.expiry_date),
+      expiryMeta: buildExpiryMeta(job.expiry_date),
       stageColors: defaultStageColors,
       stages,
       tags,
-      department: department.label,
+      department: department.label || '--',
       departmentClass: department.className,
       recruiter: recruiterName || '--',
+      hasRecruiter: Boolean(recruiterName),
       recruiterAvatar: getRecruiterAvatar(job),
       recruiterClass: recruiterUi.recruiterClass,
       avatar: getInitials(recruiterName),
       avatarClass: recruiterUi.avatarClass,
+      status,
       address,
       country,
       city,
@@ -261,9 +349,63 @@ const normalizedJobs = computed(() =>
       degreeLevel: job.degree_level ?? '',
       jobTitleSeo: job.job_title_seo ?? '',
       jobDescriptionSeo: job.job_description_seo ?? '',
-    }
-  }),
+      }
+    })
+    .sort((left, right) => {
+      const leftCreatedAt = new Date(left.createdAt || 0).getTime()
+      const rightCreatedAt = new Date(right.createdAt || 0).getTime()
+
+      if (leftCreatedAt !== rightCreatedAt) {
+        return rightCreatedAt - leftCreatedAt
+      }
+
+      const leftId = Number(left.id) || 0
+      const rightId = Number(right.id) || 0
+      return rightId - leftId
+    }),
 )
+
+const filterFieldOptions = computed(() => ({
+  job_title: uniqueValues(normalizedJobs.value.map((job) => job.title)).sort((a, b) => a.localeCompare(b)),
+  country: uniqueValues(normalizedJobs.value.map((job) => job.country)).sort((a, b) => a.localeCompare(b)),
+  hiring_stage: uniqueValues(normalizedJobs.value.map((job) => job.hiringStage)).sort((a, b) => a.localeCompare(b)),
+}))
+
+const filterPositionOptions = computed(() =>
+  uniqueValues(
+    normalizedJobs.value.flatMap((job) => job.positions),
+  ).sort((a, b) => a.localeCompare(b)),
+)
+
+const statusCards = computed(() => {
+  const totals = normalizedJobs.value
+    .filter((job) => !(job.jobUuid && deletedJobUuids.value.includes(job.jobUuid)))
+    .reduce((accumulator, job) => {
+    const key = job.status.key || 'unknown'
+    accumulator.total += 1
+    accumulator[key] = (accumulator[key] || 0) + 1
+    return accumulator
+  }, {
+    total: 0,
+    active: 0,
+    on_hold: 0,
+    closed: 0,
+    expired: 0,
+    draft: 0,
+    archived: 0,
+    unknown: 0,
+  })
+
+  return [
+    { key: 'all', label: 'All Jobs', count: totals.total, iconClass: 'jobs-stat__icon jobs-stat__icon--all' },
+    { key: 'active', label: 'Active', count: totals.active, iconClass: 'jobs-stat__icon jobs-stat__icon--active' },
+    { key: 'on_hold', label: 'On Hold', count: totals.on_hold, iconClass: 'jobs-stat__icon jobs-stat__icon--hold' },
+    { key: 'closed', label: 'Closed', count: totals.closed, iconClass: 'jobs-stat__icon jobs-stat__icon--closed' },
+    { key: 'expired', label: 'Expired', count: totals.expired, iconClass: 'jobs-stat__icon jobs-stat__icon--expired' },
+    { key: 'draft', label: 'Draft', count: totals.draft, iconClass: 'jobs-stat__icon jobs-stat__icon--draft' },
+    { key: 'archived', label: 'Archived', count: totals.archived, iconClass: 'jobs-stat__icon jobs-stat__icon--archived' },
+  ]
+})
 
 const filteredJobs = computed(() =>
   normalizedJobs.value.filter((job) => {
@@ -326,6 +468,28 @@ const filteredJobs = computed(() =>
       }
     }
 
+    if (activeStatusFilter.value !== 'all' && job.status.key !== activeStatusFilter.value) {
+      return false
+    }
+
+    if (searchQuery.value) {
+      const haystack = [
+        job.id,
+        job.title,
+        job.department,
+        job.recruiter,
+        job.status.label,
+        job.country,
+        job.city,
+        job.jobCode,
+        ...job.tags,
+      ]
+
+      if (!haystack.some((value) => includesNormalized(value, searchQuery.value))) {
+        return false
+      }
+    }
+
     return true
   }),
 )
@@ -361,7 +525,55 @@ const toggleMenu = (index) => {
   openMenuIndex.value = openMenuIndex.value === index ? null : index
 }
 
-const openJobStages = (job) => {
+const changeJobStatus = async (job, nextStatus) => {
+  if (!job?.jobUuid) {
+    window.alert('This job is missing job_uuid, so status cannot be changed.')
+    return
+  }
+
+  if (!job?.relatedCompany) {
+    window.alert('This job is missing related_company, so status cannot be changed.')
+    return
+  }
+
+  if (changingStatusJobUuid.value === job.jobUuid || job.status.key === nextStatus) {
+    return
+  }
+
+  const previousStatus = statusOverrides.value[job.jobUuid] || job.status.key
+  statusOverrides.value = {
+    ...statusOverrides.value,
+    [job.jobUuid]: nextStatus,
+  }
+  changingStatusJobUuid.value = job.jobUuid
+
+  try {
+    await changeNitroSyncJobStatus({
+      jobUuid: job.jobUuid,
+      relatedCompany: job.relatedCompany,
+      status: nextStatus,
+    })
+    openMenuIndex.value = null
+  } catch (error) {
+    const nextOverrides = { ...statusOverrides.value }
+
+    if (previousStatus) {
+      nextOverrides[job.jobUuid] = previousStatus
+    } else {
+      delete nextOverrides[job.jobUuid]
+    }
+
+    statusOverrides.value = nextOverrides
+
+    window.alert(
+      error?.message || 'Failed to change job status.',
+    )
+  } finally {
+    changingStatusJobUuid.value = ''
+  }
+}
+
+const openJobStages = (job, selectedStage = null) => {
   const payload = {
     job_uuid: job.jobUuid,
     related_company: job.relatedCompany,
@@ -393,6 +605,8 @@ const openJobStages = (job) => {
       mode: 'edit',
       job_uuid: job.jobUuid || '',
       step: 'job-stages',
+      source: 'table-stages',
+      target_stage: selectedStage?.label || selectedStage?.key || '',
     },
   })
 }
@@ -555,12 +769,19 @@ const buildStoredJobPayload = (job, details = {}) => ({
     ?? details.currency_name
     ?? details.currency
     ?? job.currency,
+  expiry_date: details.expiry_date ?? job.expiryDate ?? '',
   start_from: String(details.start_from ?? job.startFrom ?? ''),
   end_to: String(details.end_to ?? job.endTo ?? ''),
   career_level: details.career_level ?? job.careerLevel,
   degree_level: details.degree_level ?? job.degreeLevel,
   job_title_seo: details.job_title_seo ?? job.jobTitleSeo,
   job_description_seo: details.job_description_seo ?? job.jobDescriptionSeo,
+  status: details.status ?? details.job_status ?? details.active_status ?? job.status?.key ?? '',
+  published_at: details.published_at ?? details.publish_at ?? '',
+  publish_at: details.publish_at ?? details.published_at ?? '',
+  close_at: details.close_at ?? '',
+  updated_at: details.updated_at ?? '',
+  created_at: details.created_at ?? job.createdAt ?? '',
   tags: Array.isArray(details.tags)
     ? details.tags.map((tag) =>
         typeof tag === 'object'
@@ -672,7 +893,10 @@ const deleteJob = async (job) => {
 
     await axios.post(
       deleteJobEndpoint,
-      { job_uuid: job.jobUuid },
+      {
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+      },
         {
           headers: {
             'Content-Type': 'application/json',
@@ -688,7 +912,10 @@ const deleteJob = async (job) => {
   } catch (error) {
     console.error('Failed to delete job', {
       endpoint: deleteJobEndpoint,
-      payload: { job_uuid: job.jobUuid },
+      payload: {
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+      },
       error,
     })
 
@@ -704,6 +931,18 @@ const deleteJob = async (job) => {
 
 const setViewMode = (mode) => {
   viewMode.value = mode
+}
+
+const setStatusFilter = (value) => {
+  activeStatusFilter.value = value
+  currentPage.value = 1
+}
+
+const clearQuickFilters = () => {
+  activeStatusFilter.value = 'all'
+  searchQuery.value = ''
+  filterForm.value = createDefaultFilters()
+  currentPage.value = 1
 }
 
 const changePage = (page) => {
@@ -738,36 +977,74 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="jobs-section">
+    <div class="jobs-overview">
+      <article
+        v-for="card in statusCards"
+        :key="card.key"
+        class="jobs-stat"
+      >
+        <span :class="card.iconClass"></span>
+        <div class="jobs-stat__content">
+          <span class="jobs-stat__label">{{ card.label }}</span>
+          <strong class="jobs-stat__value">{{ card.count }}</strong>
+        </div>
+      </article>
+    </div>
+
     <div class="jobs-section__top">
-      <h1 class="jobs-section__title">JOBS LIST</h1>
+      <div class="jobs-section__heading">
+        <h1 class="jobs-section__title">JOBS LIST</h1>
+        <div class="jobs-status-tabs">
+          <button
+            v-for="card in statusCards"
+            :key="`tab-${card.key}`"
+            type="button"
+            class="jobs-status-tabs__item"
+            :class="{ 'is-active': activeStatusFilter === card.key }"
+            @click="setStatusFilter(card.key)"
+          >
+            {{ card.label }} ({{ card.count }})
+          </button>
+        </div>
+      </div>
+
       <div class="jobs-controls">
-        <div class="jobs-controls__show">
-          <span>Show</span>
-          <div class="jobs-controls__show-select">
-            <Dropdown v-model="pageSize" :options="pageSizeOptions" placeholder="15" />
+          <label class="jobs-search">
+            <span class="jobs-search__icon"></span>
+            <input
+              v-model.trim="searchQuery"
+              type="search"
+              placeholder="Search by job title, ID, department..."
+            />
+          </label>
+          <div class="jobs-controls__show">
+            <span>Show</span>
+            <div class="jobs-controls__show-select">
+              <Dropdown v-model="pageSize" :options="pageSizeOptions" placeholder="15" />
+            </div>
           </div>
-        </div>
-        <div class="jobs-controls__view">
-          <button
-            type="button"
-            class="jobs-controls__view-btn jobs-controls__view-btn--grid"
-            :class="{ 'is-active': viewMode === 'grid' }"
-            aria-label="Grid view"
-            @click="setViewMode('grid')"
-          ></button>
-          <button
-            type="button"
-            class="jobs-controls__view-btn jobs-controls__view-btn--list"
-            :class="{ 'is-active': viewMode === 'list' }"
-            aria-label="List view"
-            @click="setViewMode('list')"
-          ></button>
-        </div>
-        <button class="jobs-controls__filter" @click="openFilter">
-          <span class="jobs-controls__filter-icon"></span>
-          Filter
-        </button>
-        <button class="jobs-controls__post" @click="goToPostJob">+ Post a job</button>
+          <div class="jobs-controls__view">
+            <button
+              type="button"
+              class="jobs-controls__view-btn jobs-controls__view-btn--grid"
+              :class="{ 'is-active': viewMode === 'grid' }"
+              aria-label="Grid view"
+              @click="setViewMode('grid')"
+            ></button>
+            <button
+              type="button"
+              class="jobs-controls__view-btn jobs-controls__view-btn--list"
+              :class="{ 'is-active': viewMode === 'list' }"
+              aria-label="List view"
+              @click="setViewMode('list')"
+            ></button>
+          </div>
+          <button class="jobs-controls__filter" @click="openFilter">
+            <span class="jobs-controls__filter-icon"></span>
+            Filter
+          </button>
+          <button class="jobs-controls__clear" type="button" @click="clearQuickFilters">Clear all</button>
+          <button class="jobs-controls__post" @click="goToPostJob">+ Post a job</button>
       </div>
     </div>
 
@@ -797,8 +1074,54 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="jobs-col jobs-col--id">{{ job.id }}</div>
-        <div class="jobs-col jobs-col--title jobs-text-soft">{{ job.title }}</div>
+        <div class="jobs-col jobs-col--title jobs-col--title-wrap">
+          <div class="jobs-title-cell">
+            <strong class="jobs-title-cell__title jobs-text-soft">{{ job.title }}</strong>
+            <span v-if="job.titleMeta" class="jobs-title-cell__meta">{{ job.titleMeta }}</span>
+          </div>
+        </div>
+
+        <div class="jobs-col jobs-col--department">
+          <span :class="job.departmentClass">{{ job.department }}</span>
+        </div>
+
+        <div class="jobs-col jobs-col--recruiter">
+          <span v-if="job.hasRecruiter" :class="job.recruiterClass">
+            <img
+              v-if="job.recruiterAvatar"
+              :src="job.recruiterAvatar"
+              alt=""
+              class="avatar-image"
+            />
+            <span
+              v-else
+              class="avatar"
+              :class="job.avatarClass"
+            >
+              {{ job.avatar }}
+            </span>
+            {{ job.recruiter }}
+          </span>
+          <span v-else class="jobs-recruiter-empty">--</span>
+        </div>
+
+        <div class="jobs-col jobs-col--status">
+          <span :class="job.status.className">{{ job.status.label }}</span>
+        </div>
+
         <div class="jobs-col jobs-col--date">{{ job.date }}</div>
+
+        <div class="jobs-col jobs-col--expiry jobs-col--expiry-wrap">
+          <div class="jobs-expiry-cell">
+            <strong>{{ job.expiryDate }}</strong>
+            <span
+              v-if="job.expiryMeta"
+              :class="{ 'jobs-expiry-cell__meta--danger': job.expiryMeta === '(Expired)' }"
+            >
+              {{ job.expiryMeta }}
+            </span>
+          </div>
+        </div>
 
         <div class="jobs-col jobs-col--stages">
           <div class="jobs-stages">
@@ -811,7 +1134,7 @@ onBeforeUnmount(() => {
               :style="{ backgroundColor: stage.displayColor }"
               @mouseenter="showStageTooltip(job, stage)"
               @mouseleave="hideStageTooltip"
-              @click.stop="openJobStages(job)"
+              @click.stop="openJobStages(job, stage)"
             >
               <span
                 v-if="openStageTooltip === `${job.jobUuid || job.id}-${stage.key}`"
@@ -826,24 +1149,12 @@ onBeforeUnmount(() => {
 
         <div class="jobs-col jobs-col--tags">
           <div class="jobs-tags">
-            <span v-for="tag in job.tags" :key="tag" class="jobs-tag">{{ tag }}</span>
+            <template v-if="job.tags.length">
+              <span v-for="tag in job.tags.slice(0, 2)" :key="tag" class="jobs-tag">{{ tag }}</span>
+              <span v-if="job.tags.length > 2" class="jobs-tag jobs-tag--count">+{{ job.tags.length - 2 }}</span>
+            </template>
+            <span v-else class="jobs-tag jobs-tag--empty">No tags</span>
           </div>
-        </div>
-
-        <div class="jobs-col jobs-col--department">
-          <span :class="job.departmentClass">{{ job.department }}</span>
-        </div>
-
-        <div class="jobs-col jobs-col--recruiter">
-          <span :class="job.recruiterClass">
-            <img
-              v-if="job.recruiterAvatar"
-              :src="job.recruiterAvatar"
-              alt=""
-              class="avatar-image"
-            />
-            {{ job.recruiter }}
-          </span>
         </div>
 
         <div class="jobs-col jobs-col--action jobs-action">
@@ -856,6 +1167,22 @@ onBeforeUnmount(() => {
             <button type="button" @click.stop="openEditJob(job)">Edit</button>
             <button type="button" :disabled="deletingJobUuid === job.jobUuid" @click.stop="openDeleteDialog(job)">Delete</button>
             <button type="button" @click.stop="openGetCandidateModal(job)">Get Candidates</button>
+            <div class="jobs-action__status">
+              <span class="jobs-action__status-label">Change Status</span>
+              <div class="jobs-action__status-options">
+                <button
+                  v-for="option in statusOptions"
+                  :key="`${job.jobUuid || job.id}-${option.key}`"
+                  type="button"
+                  class="jobs-action__status-option"
+                  :class="{ 'is-active': job.status.key === option.key }"
+                  :disabled="changingStatusJobUuid === job.jobUuid"
+                  @click.stop="changeJobStatus(job, option.key)"
+                >
+                  {{ changingStatusJobUuid === job.jobUuid && job.status.key === option.key ? 'Saving...' : option.label }}
+                </button>
+              </div>
+            </div>
             <button type="button" @click.stop="openShareModal(job)">Share</button>
           </div>
         </div>
@@ -884,12 +1211,29 @@ onBeforeUnmount(() => {
               <button type="button" @click.stop="openEditJob(job)">Edit</button>
               <button type="button" :disabled="deletingJobUuid === job.jobUuid" @click.stop="openDeleteDialog(job)">Delete</button>
               <button type="button" @click.stop="openGetCandidateModal(job)">Get Candidates</button>
+              <div class="jobs-action__status">
+                <span class="jobs-action__status-label">Change Status</span>
+                <div class="jobs-action__status-options">
+                  <button
+                    v-for="option in statusOptions"
+                    :key="`grid-${job.jobUuid || job.id}-${option.key}`"
+                    type="button"
+                    class="jobs-action__status-option"
+                    :class="{ 'is-active': job.status.key === option.key }"
+                    :disabled="changingStatusJobUuid === job.jobUuid"
+                    @click.stop="changeJobStatus(job, option.key)"
+                  >
+                    {{ changingStatusJobUuid === job.jobUuid && job.status.key === option.key ? 'Saving...' : option.label }}
+                  </button>
+                </div>
+              </div>
               <button type="button" @click.stop="openShareModal(job)">Share</button>
             </div>
           </div>
         </div>
 
         <h3 class="jobs-grid-card__title">{{ job.title }}</h3>
+        <p v-if="job.titleMeta" class="jobs-grid-card__subtitle">{{ job.titleMeta }}</p>
 
         <div class="jobs-grid-card__meta">
           <div class="jobs-grid-card__meta-item">
@@ -899,6 +1243,24 @@ onBeforeUnmount(() => {
           <div class="jobs-grid-card__meta-item">
             <span class="jobs-grid-card__label">Department</span>
             <span :class="job.departmentClass">{{ job.department || '--' }}</span>
+          </div>
+        </div>
+
+        <div class="jobs-grid-card__section">
+          <span class="jobs-grid-card__label">Status</span>
+          <span :class="job.status.className">{{ job.status.label }}</span>
+        </div>
+
+        <div class="jobs-grid-card__section">
+          <span class="jobs-grid-card__label">Expiry Date</span>
+          <div class="jobs-expiry-cell jobs-expiry-cell--grid">
+            <strong>{{ job.expiryDate }}</strong>
+            <span
+              v-if="job.expiryMeta"
+              :class="{ 'jobs-expiry-cell__meta--danger': job.expiryMeta === '(Expired)' }"
+            >
+              {{ job.expiryMeta }}
+            </span>
           </div>
         </div>
 
@@ -914,7 +1276,7 @@ onBeforeUnmount(() => {
               :style="{ backgroundColor: stage.displayColor }"
               @mouseenter="showStageTooltip(job, stage)"
               @mouseleave="hideStageTooltip"
-              @click.stop="openJobStages(job)"
+              @click.stop="openJobStages(job, stage)"
             >
               <span
                 v-if="openStageTooltip === `${job.jobUuid || job.id}-${stage.key}`"
@@ -929,15 +1291,34 @@ onBeforeUnmount(() => {
 
         <div class="jobs-grid-card__section">
           <span class="jobs-grid-card__label">Recruiter</span>
-          <span :class="job.recruiterClass">
+          <span v-if="job.hasRecruiter" :class="job.recruiterClass">
             <img
               v-if="job.recruiterAvatar"
               :src="job.recruiterAvatar"
               alt=""
               class="avatar-image"
             />
+            <span
+              v-else
+              class="avatar"
+              :class="job.avatarClass"
+            >
+              {{ job.avatar }}
+            </span>
             {{ job.recruiter }}
           </span>
+          <span v-else class="jobs-recruiter-empty">--</span>
+        </div>
+
+        <div class="jobs-grid-card__section">
+          <span class="jobs-grid-card__label">Tags</span>
+          <div class="jobs-tags jobs-tags--grid">
+            <template v-if="job.tags.length">
+              <span v-for="tag in job.tags.slice(0, 3)" :key="`grid-tag-${job.id}-${tag}`" class="jobs-tag">{{ tag }}</span>
+              <span v-if="job.tags.length > 3" class="jobs-tag jobs-tag--count">+{{ job.tags.length - 3 }}</span>
+            </template>
+            <span v-else class="jobs-tag jobs-tag--empty">No tags</span>
+          </div>
         </div>
       </article>
 
@@ -963,6 +1344,8 @@ onBeforeUnmount(() => {
     <FilterModal
       :open="isFilterOpen"
       :filters="filterForm"
+      :field-options="filterFieldOptions"
+      :position-options="filterPositionOptions"
       @close="closeFilter"
       @update:filters="updateFilters"
     />
@@ -1011,6 +1394,67 @@ onBeforeUnmount(() => {
 <style scoped>
 .jobs-section {
   width: 100%;
+}
+
+.jobs-overview {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.jobs-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid #f0e5ea;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgba(66, 39, 51, 0.04);
+}
+
+.jobs-stat__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.jobs-stat__icon::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 10px;
+  background: currentColor;
+  opacity: 0.18;
+}
+
+.jobs-stat__icon--all { background: #fff1f6; color: #ea4f8d; }
+.jobs-stat__icon--active { background: #eaf9f0; color: #28b85d; }
+.jobs-stat__icon--hold { background: #fff4df; color: #cd9200; }
+.jobs-stat__icon--closed { background: #f1f3fa; color: #6b7280; }
+.jobs-stat__icon--expired { background: #fff0f1; color: #f25f6d; }
+.jobs-stat__icon--draft { background: #f3ebff; color: #8b5cf6; }
+.jobs-stat__icon--archived { background: #eceff3; color: #566273; }
+
+.jobs-stat__content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jobs-stat__label {
+  font-size: 14px;
+  color: #51414a;
+  font-weight: 600;
+}
+
+.jobs-stat__value {
+  font-size: 34px;
+  line-height: 1;
+  color: #17111b;
 }
 
 .jobs-dialog {
@@ -1115,8 +1559,14 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
   margin-bottom: 18px;
+}
+
+.jobs-section__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .jobs-section__title {
@@ -1129,19 +1579,89 @@ onBeforeUnmount(() => {
   margin-bottom: 6px;
 }
 
+.jobs-status-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jobs-status-tabs__item {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid #f1e3ea;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #5f5360;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.jobs-status-tabs__item.is-active {
+  border-color: #ea4f8d;
+  background: linear-gradient(135deg, #f24b90, #ea74a7);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(234, 79, 141, 0.2);
+}
+
 .jobs-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.jobs-search {
+  min-width: 400px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid #efe3e8;
+  border-radius: 16px;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.jobs-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #4b5563;
+  font-size: 14px;
+}
+
+.jobs-search__icon {
+  width: 15px;
+  height: 15px;
+  border: 2px solid #9ca3af;
+  border-radius: 999px;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.jobs-search__icon::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 2px;
+  background: #9ca3af;
+  border-radius: 999px;
+  right: -5px;
+  bottom: -2px;
+  transform: rotate(45deg);
 }
 
 .jobs-controls__show {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: #8d6977;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .jobs-controls__show-select {
@@ -1150,6 +1670,7 @@ onBeforeUnmount(() => {
 
 .jobs-controls__select,
 .jobs-controls__filter,
+.jobs-controls__clear,
 .jobs-controls__post,
 .jobs-controls__view {
   border-radius: 12px;
@@ -1179,7 +1700,7 @@ onBeforeUnmount(() => {
 
 .jobs-controls__show-select :deep(.dropdown__trigger) {
   min-width: 68px;
-  height: 36px;
+  height: 38px;
   padding: 0 26px 0 12px;
   border: 0;
   background: #f8d8e7;
@@ -1206,7 +1727,7 @@ onBeforeUnmount(() => {
 
 .jobs-controls__view {
   min-width: 92px;
-  height: 36px;
+  height: 38px;
   padding: 5px;
   background: #f8d8e7;
   border-radius: 12px;
@@ -1269,16 +1790,28 @@ onBeforeUnmount(() => {
 }
 
 .jobs-controls__filter {
-  height: 36px;
-  padding: 0 18px;
+  height: 38px;
+  padding: 0 16px;
   border: 0;
   background: #f3bfd2;
   color: #ea4f8d;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 13px;
   border-radius: 11px;
+  white-space: nowrap;
+}
+
+.jobs-controls__clear {
+  height: 38px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: #ea4f8d;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .jobs-controls__filter-icon {
@@ -1289,14 +1822,15 @@ onBeforeUnmount(() => {
 }
 
 .jobs-controls__post {
-  height: 36px;
-  padding: 0 18px;
+  height: 38px;
+  padding: 0 16px;
   border: 1px solid #ee6a9c;
   background: transparent;
   color: #ee5a96;
-  font-size: 14px;
+  font-size: 13px;
   border-radius: 11px;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .jobs-card {
@@ -1304,7 +1838,8 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   padding: 12px 10px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
 .jobs-grid {
@@ -1351,6 +1886,13 @@ onBeforeUnmount(() => {
   color: #9b6179;
 }
 
+.jobs-grid-card__subtitle {
+  margin: -10px 0 18px;
+  color: #8f8590;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .jobs-grid-card__meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1378,11 +1920,16 @@ onBeforeUnmount(() => {
   justify-content: flex-start;
 }
 
+.jobs-tags--grid {
+  justify-content: flex-start;
+}
+
 .jobs-row {
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
+  min-width: 1210px;
 }
 
 .jobs-header {
@@ -1391,6 +1938,7 @@ onBeforeUnmount(() => {
   padding: 14px 18px;
   font-weight: 500;
   margin-bottom: 6px;
+  position: relative;
 }
 
 .jobs-header__cell {
@@ -1408,7 +1956,8 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #f1f1f4;
   background: #ffffff;
   transition: background-color 0.18s ease;
-  font-size: 10px;
+  font-size: 11px;
+  position: relative;
 }
 
 .jobs-row--body:hover {
@@ -1439,31 +1988,41 @@ onBeforeUnmount(() => {
 }
 
 .jobs-col--title {
-  width: 182px;
+  width: 210px;
 }
 
 .jobs-col--date {
-  width: 132px;
-}
-
-.jobs-col--stages {
-  width: 118px;
-}
-
-.jobs-col--tags {
   width: 112px;
 }
 
+.jobs-col--status {
+  width: 102px;
+}
+
+.jobs-col--expiry {
+  width: 118px;
+}
+
+.jobs-col--stages {
+  width: 86px;
+}
+
+.jobs-col--tags {
+  width: 104px;
+  justify-content: flex-start;
+  padding-left: 10px;
+}
+
 .jobs-col--department {
-  width: 170px;
+  width: 148px;
 }
 
 .jobs-col--recruiter {
-  width: 154px;
+  width: 138px;
 }
 
 .jobs-col--action {
-  width: 76px;
+  width: 72px;
 }
 
 .jobs-radio {
@@ -1509,6 +2068,53 @@ onBeforeUnmount(() => {
 
 .jobs-text-soft {
   color: #9b6179;
+}
+
+.jobs-col--title-wrap,
+.jobs-col--expiry-wrap {
+  text-align: left;
+}
+
+.jobs-col--title-wrap {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.jobs-col--expiry-wrap {
+  justify-content: center;
+}
+
+.jobs-title-cell,
+.jobs-expiry-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jobs-expiry-cell {
+  align-items: center;
+}
+
+.jobs-title-cell__title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.jobs-title-cell__meta,
+.jobs-expiry-cell span {
+  font-size: 11px;
+  color: #8f8590;
+}
+
+.jobs-expiry-cell strong {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.jobs-expiry-cell__meta--danger {
+  color: #f25f6d !important;
 }
 
 .jobs-stages {
@@ -1578,20 +2184,32 @@ onBeforeUnmount(() => {
 .jobs-tags {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .jobs-tag {
   background: #f4e8ec;
-  padding: 3px 8px;
+  padding: 4px 9px;
   border-radius: 20px;
-  font-size: 9px;
+  font-size: 10px;
   color: #7f6874;
 }
 
+.jobs-tag--count {
+  background: #f0ecff;
+  color: #7757dd;
+}
+
+.jobs-tag--empty {
+  background: #f5f6fa;
+  color: #97a0ad;
+}
+
 :deep(.department) {
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -1607,10 +2225,37 @@ onBeforeUnmount(() => {
   gap: 6px;
   background: #f7f7f9;
   border-radius: 20px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   font-size: 10px;
+  font-weight: 600;
   white-space: nowrap;
 }
+
+.jobs-recruiter-empty {
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:deep(.job-status) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+:deep(.job-status--active) { color: #1fa968; background: #ddf8ea; }
+:deep(.job-status--hold) { color: #c78300; background: #fff2d5; }
+:deep(.job-status--closed) { color: #6b7280; background: #eef1f7; }
+:deep(.job-status--draft) { color: #8657f3; background: #efe8ff; }
+:deep(.job-status--expired) { color: #f25f6d; background: #ffe5e8; }
+:deep(.job-status--archived) { color: #566273; background: #eceff3; }
+:deep(.job-status--pending) { color: #4f46e5; background: #e8ecff; }
 
 :deep(.recruiter--pink) { color: #ea5b93; background: #f8eaf0; }
 :deep(.recruiter--blue) { color: #486eff; background: #ecf0ff; }
@@ -1694,6 +2339,51 @@ onBeforeUnmount(() => {
   background: #fcf7f9;
 }
 
+.jobs-action__status {
+  padding: 10px 16px 12px;
+  border-top: 1px solid #f2e7ec;
+  border-bottom: 1px solid #f2e7ec;
+}
+
+.jobs-action__status-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #9e8590;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.jobs-action__status-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jobs-action__menu .jobs-action__status-option {
+  width: auto;
+  min-height: 26px;
+  padding: 6px 10px;
+  border: 1px solid #edd8e2;
+  border-radius: 999px;
+  background: #fff7fa;
+  color: #8b596a;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.jobs-action__menu .jobs-action__status-option.is-active {
+  border-color: #ee76a9;
+  background: #ffe8f1;
+  color: #d74284;
+}
+
+.jobs-action__menu .jobs-action__status-option:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
 .jobs-pagination {
   display: flex;
   justify-content: flex-end;
@@ -1756,6 +2446,10 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1180px) {
+  .jobs-overview {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .jobs-section__top {
     align-items: flex-start;
     flex-direction: column;
@@ -1764,6 +2458,7 @@ onBeforeUnmount(() => {
   .jobs-controls {
     width: 100%;
     flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   .jobs-grid {
@@ -1772,6 +2467,10 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 840px) {
+  .jobs-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .jobs-section__title {
     font-size: 42px;
     line-height: 1;
@@ -1782,9 +2481,17 @@ onBeforeUnmount(() => {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+    padding: 12px;
+  }
+
+  .jobs-search {
+    min-width: 0;
+    width: 100%;
+    grid-column: 1 / -1;
   }
 
   .jobs-controls__show,
+  .jobs-controls__clear,
   .jobs-controls__filter,
   .jobs-controls__post,
   .jobs-controls__view {
@@ -1850,6 +2557,8 @@ onBeforeUnmount(() => {
 
   .jobs-col--id,
   .jobs-col--date,
+  .jobs-col--status,
+  .jobs-col--expiry,
   .jobs-col--stages,
   .jobs-col--tags,
   .jobs-col--department,
@@ -1861,6 +2570,8 @@ onBeforeUnmount(() => {
 
   .jobs-col--id::before,
   .jobs-col--date::before,
+  .jobs-col--status::before,
+  .jobs-col--expiry::before,
   .jobs-col--stages::before,
   .jobs-col--tags::before,
   .jobs-col--department::before,
@@ -1876,6 +2587,8 @@ onBeforeUnmount(() => {
   .jobs-col--id::before { content: 'Job ID'; }
   .jobs-col--title::before { content: 'Job Title'; }
   .jobs-col--date::before { content: 'Create Date'; }
+  .jobs-col--status::before { content: 'Status'; }
+  .jobs-col--expiry::before { content: 'Expiry Date'; }
   .jobs-col--stages::before { content: 'Stages'; }
   .jobs-col--tags::before { content: 'Tags'; }
   .jobs-col--department::before { content: 'Department'; }
@@ -1886,6 +2599,15 @@ onBeforeUnmount(() => {
     font-size: 22px;
     font-weight: 600;
     line-height: 1.2;
+  }
+
+  .jobs-col--expiry-wrap {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .jobs-expiry-cell {
+    align-items: flex-start;
   }
 
   .jobs-col--action {
@@ -1921,6 +2643,10 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 560px) {
+  .jobs-overview {
+    grid-template-columns: 1fr;
+  }
+
   .jobs-section__title {
     font-size: 34px;
   }

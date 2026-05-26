@@ -357,6 +357,10 @@ a {
   padding: 20px 24px;
 }
 
+.jobs-page-container {
+  width: min(100%, 1320px);
+}
+
 .breadcrumb-row {
   display: flex;
   align-items: center;

@@ -70,8 +70,23 @@ const employees = ref([])
 const availableEmployees = computed(() =>
   employees.value.filter((employee) => String(employee?.employeeUuid || '').trim()),
 )
+const suggestedEmployeeId = computed(() => {
+  const employeeNumbers = employees.value
+    .map((employee) => String(employee?.employeeNumber || employee?.id || '').trim())
+    .map((value) => value.replace(/\D/g, ''))
+    .filter(Boolean)
 
-const employmentStatusOptions = ['Active', 'Deactivated']
+  if (!employeeNumbers.length) {
+    return '00001'
+  }
+
+  const maxLength = Math.max(...employeeNumbers.map((value) => value.length), 5)
+  const maxValue = Math.max(...employeeNumbers.map((value) => Number.parseInt(value, 10)).filter(Number.isFinite))
+
+  return String(maxValue + 1).padStart(maxLength, '0')
+})
+
+const employmentStatusOptions = ['LoggedOut', 'Verified', 'LoggedIn', 'UnVerified']
 const jobTitleOptions = ['Financial Manager', 'HR Manager', 'Recruiter', 'Operations']
 const editableFieldCatalog = [
   { key: 'team', label: 'Team', group: 'Work Information' },
@@ -204,12 +219,12 @@ const toggleEmployeeStatusLocally = (targetEmployee) => {
 
     if (!isTarget) return itemEmployee
 
-    const nextStatus = itemEmployee.status === 'Active' ? 'Deactivated' : 'Active'
+    const nextStatus = itemEmployee.status === 'LoggedIn' ? 'LoggedOut' : 'LoggedIn'
 
     return {
       ...itemEmployee,
       status: nextStatus,
-      online: nextStatus === 'Active',
+      online: nextStatus === 'LoggedIn',
     }
   })
 }
@@ -734,7 +749,7 @@ onBeforeUnmount(() => {
           <div class="employee-table__cell employee-table__cell--name">{{ employee.name }}</div>
           <div class="employee-table__cell employee-table__cell--position">{{ employee.role }}</div>
           <div class="employee-table__cell employee-table__cell--status">
-            <span class="employee-table__status" :class="{ 'employee-table__status--inactive': employee.status !== 'Active' }">
+            <span class="employee-table__status" :class="{ 'employee-table__status--inactive': employee.status !== 'LoggedIn' }">
               {{ employee.status }}
             </span>
           </div>
@@ -837,7 +852,7 @@ onBeforeUnmount(() => {
             <div class="employee-card__identity">
               <h3>{{ employee.name }}</h3>
               <p>{{ employee.role }}</p>
-              <span class="employee-card__status" :class="{ 'employee-card__status--muted': employee.status !== 'Active' }">
+              <span class="employee-card__status" :class="{ 'employee-card__status--muted': employee.status !== 'LoggedIn' }">
                 {{ employee.status }}
               </span>
             </div>
@@ -894,6 +909,7 @@ onBeforeUnmount(() => {
 
     <AddEmployeeModal
       :open="isAddEmployeeModalOpen"
+      :suggested-employee-id="suggestedEmployeeId"
       :submitting="loading"
       :submit-error="isAddEmployeeModalOpen ? loadError : ''"
       @close="isAddEmployeeModalOpen = false"
@@ -1030,22 +1046,22 @@ onBeforeUnmount(() => {
 .employee-toolbar__actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
+  flex-wrap: nowrap;
   justify-content: flex-end;
 }
 
 .employee-search {
-  width: 180px;
+  width: 400px;
   display: flex;
   align-items: center;
-  flex: 0 0 180px;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid #f2e7ec;
-  border-radius: 10px;
-  background: #fbf8fa;
+  flex: 0 0 400px;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #efe3e8;
+  border-radius: 16px;
+  background: #ffffff;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -1053,13 +1069,13 @@ onBeforeUnmount(() => {
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 34px;
-  height: 34px;
+  min-height: 38px;
+  height: 38px;
   padding: 0;
   border: 0;
   background: transparent;
-  color: #6e616a;
-  font-size: 12px;
+  color: #4b5563;
+  font-size: 14px;
   font: inherit;
   line-height: 1.2;
   -webkit-appearance: none;
@@ -1068,11 +1084,11 @@ onBeforeUnmount(() => {
 }
 
 .employee-search__icon {
-  width: 14px;
-  height: 14px;
-  color: #f0a9c4;
+  width: 15px;
+  height: 15px;
+  color: #9ca3af;
   display: flex;
-  flex: 0 0 14px;
+  flex: 0 0 15px;
   align-items: center;
   justify-content: center;
   pointer-events: none;
@@ -1107,32 +1123,31 @@ onBeforeUnmount(() => {
 }
 
 .employee-filter {
-  min-width: 118px;
-  min-height: 36px;
+  min-width: 98px;
+  height: 38px;
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 0 18px;
+  padding: 0 16px;
   border-radius: 11px;
   background: #f3bfd2;
-  color: #ef5d97;
-  font-size: 14px;
+  color: #ea4f8d;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .employee-filter__icon {
   width: 12px;
   height: 12px;
-  width: 12px;
-  height: 12px;
-  background: #f2689f;
+  background: currentColor;
   clip-path: polygon(0 0, 100% 0, 68% 36%, 68% 100%, 32% 100%, 32% 36%);
 }
 
 .employee-filter__label {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   line-height: 1;
 }
 
@@ -1141,7 +1156,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 5px;
   min-width: 92px;
-  height: 36px;
+  height: 38px;
   padding: 5px;
   border-radius: 12px;
   background: #f8d8e7;
@@ -1190,12 +1205,13 @@ onBeforeUnmount(() => {
 
 .employee-toolbar__bulk,
 .employee-toolbar__add {
-  min-height: 36px;
-  padding: 0 18px;
+  height: 38px;
+  padding: 0 16px;
   border-radius: 11px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .employee-toolbar__bulk {

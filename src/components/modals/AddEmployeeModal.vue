@@ -3,11 +3,16 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import Dropdown from '../ui/Dropdown.vue'
 import DatePicker from '../ui/DatePicker.vue'
 import RestrictedAccessModal from './RestrictedAccessModal.vue'
+import { departmentOptions } from '../../data/jobPostingOptions'
 
 const props = defineProps({
   open: {
     type: Boolean,
     default: false,
+  },
+  suggestedEmployeeId: {
+    type: String,
+    default: '',
   },
   submitting: {
     type: Boolean,
@@ -22,16 +27,34 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save', 'clear-submit-error'])
 
 const stepItems = [
-  'basic information',
-  'work information',
-  'employment details',
-  'tax information',
-  'bank account information',
-  'benefits and reimbursements',
-  'employee end login',
+  { label: 'Basic Information', color: '#ef5a96' },
+  { label: 'Work Information', color: '#4f78ff' },
+  { label: 'Employment Details', color: '#5c15d8' },
+  { label: 'Tax Information', color: '#e1a600' },
+  { label: 'Bank Account Information', color: '#24d56a' },
+  { label: 'Benefits and Reimbursements', color: '#ef5a96' },
+  { label: 'Employee End Login', color: '#4f78ff' },
 ]
 
-const genderOptions = ['Male', 'Female']
+const dropdownPalette = ['#ef5a96', '#4f78ff', '#5c15d8', '#e1a600', '#24d56a']
+const buildColoredOptions = (items, customMatchers = []) =>
+  items.map((item, index) => {
+    const label = typeof item === 'object' ? item.label ?? String(item.value ?? '') : String(item)
+    const value = typeof item === 'object' ? item.value ?? item.label ?? '' : item
+    const normalizedKey = String(value || label).trim().toLowerCase()
+
+    return {
+      label,
+      value,
+      color: typeof item === 'object' && item.color ? item.color : dropdownPalette[index % dropdownPalette.length],
+      allowsCustom:
+        typeof item === 'object' && 'allowsCustom' in item
+          ? Boolean(item.allowsCustom)
+          : customMatchers.includes(normalizedKey),
+    }
+  })
+
+const genderOptions = ['Male', 'Female', 'Non Binary', 'Prefer Not to Say']
 const nationalityOptions = ['Syrian', 'Saudi', 'Jordanian', 'Lebanese']
 const countryOptions = ['Syria', 'Saudi Arabia', 'UAE', 'Jordan']
 const stateOptions = ['Damascus', 'Riyadh', 'Dubai', 'Amman']
@@ -41,39 +64,58 @@ const teamOptions = ['Finance Team', 'HR Team', 'Recruitment Team', 'Operations 
 const managerOptions = ['Tony Awad', 'Nadia Alromani', 'Michael Augo', 'Mohamad Sami']
 const supervisorOptions = ['Rami Bshara', 'Ellie Romi', 'Nancy Karam', 'Sara Nabulsi']
 const workScheduleOptions = ['Full time', 'Part time', 'Flexible', 'Night shift']
-const employmentTypeOptions = ['Full-time', 'Part-time', 'Contract', 'Intern', 'Shift based', 'Freelance']
-const workHoursOptions = ['40 hours', '35 hours', '30 hours', '20 hours']
-const annualLeaveEntitlementOptions = ['10 days', '14 days', '21 days', '30 days']
+const employmentTypeOptions = buildColoredOptions(['Full-time', 'Part-time', 'contract', 'intern', 'Shift based', 'freelance', 'On-call'])
 const currencyOptions = ['USD', 'EUR', 'SAR', 'AED']
-const payFrequencyOptions = ['Monthly', 'Semi-Monthly', 'Weekly', 'Bi-Weekly', 'Quarterly', 'Daily', 'Hourly', 'Annually', 'Per project']
-const bonusTypeOptions = ['Fixed Amount', 'Performance Bonus', 'Sales Incentive', 'Sign-on Bonus', 'Retention', 'Referral', '13th Salary', 'Year-end Bonus', 'Custom']
-const bonusFrequencyOptions = ['One-time', 'Monthly', 'Quarterly', 'Yearly', 'Per project']
-const calculationBasisOptions = ['Fixed amount', 'Gross salary %', 'Net salary %', 'Hourly rate']
-const eligibilityOptions = ['Immediate', 'After probation', 'After 3 months', 'After 6 months']
-const overtimeRateTypeOptions = ['1x', '1.5x', '2x', 'Food Amount Per Hour', 'Custom']
+const payFrequencyOptions = buildColoredOptions(['Monthly', 'Sami-Monthly', 'Weekly', 'Bi-Weekly', 'Quarterly', 'Daily', 'Hourly', 'Annually', 'Per Project'])
+const bonusTypeOptions = buildColoredOptions(
+  ['Performance Bonus', 'Sales Incentive', 'Sign-on Bonus', 'Retention', 'Referral', 'Holiday/end of year Bonus', 'custom'],
+  ['custom'],
+)
+const bonusFrequencyOptions = buildColoredOptions(['One-time', 'Monthly', 'Quarterly', 'Yearly', 'Per Project'])
+const calculationBasisOptions = buildColoredOptions(['Fixed Amount', '% of Salary', '% of Revenue'])
+const eligibilityOptions = ['Immediate', 'After X months']
+const overtimeRateTypeOptions = buildColoredOptions(['1.25X', '1.5x', '2.0x', 'Fixed Amount per Hour', 'custom'], ['custom'])
 const overtimeCurrencyOptions = ['USD', 'EUR', 'SAR', 'AED']
-const appliesAfterOptions = ['None', '8 hours/day', '40 hours/week', '44 hours/week']
-const eligibilityDayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+const appliesAfterOptions = buildColoredOptions(['40 hours/week', '8 hours/day', 'custom'], ['custom'])
+const eligibilityDayOptions = buildColoredOptions(['Weekdays', 'Weekends', 'Holidays', 'All Days'])
 const allowanceTypeOptions = ['Amount', 'Percentage']
-const allowanceNameOptions = ['Housing', 'Transport', 'Medical', 'Entertainment', 'Other']
+const allowanceNameOptions = buildColoredOptions(
+  ['Housing', 'Transport', 'Medical', 'Entertainment', { label: 'Other', value: 'Other', allowsCustom: true }],
+  ['other'],
+)
 const payoutFrequencyOptions = ['Monthly', 'Semi-Monthly', 'Weekly', 'Bi-Weekly', 'Quarterly', 'Daily', 'Hourly', 'Annually', 'Per project']
-const taxFilingStatusOptions = [
+const taxFilingStatusOptions = buildColoredOptions([
   'Single',
   'Married Filing Jointly',
   'Married Filing Separately',
   'Head of Household',
   'Qualifying Widow(er) with Dependent Child',
-  'Other',
-]
-const accountTypeOptions = ['checking', 'savings', 'other']
-const healthInsuranceProviderOptions = ['Employee only', 'Employee + spouse', 'Family']
-const coverageLevelOptions = ['HMO', 'PPO', 'Employee basic', 'Broad and low', 'End of service']
-const retirementPlanTypeOptions = ['Employee 401k', 'Employee + spouse', 'Family']
-const contributionTypeOptions = ['Fixed amount', 'Percentage']
+  { label: 'Other', value: 'Other', allowsCustom: true },
+])
+const accountTypeOptions = buildColoredOptions([
+  'checking',
+  'savings',
+  { label: 'Other', value: 'other', allowsCustom: true },
+])
+const dependentCoverageOptions = buildColoredOptions(['Employee-only', 'Employee + spouse', 'family'])
+const retirementPlanTypeOptions = buildColoredOptions(['Public', 'Private', 'Company Pension', 'Provident Fund', 'End-of-service'])
+const contributionTypeOptions = buildColoredOptions(['Percentage', 'Fixed amount', 'Number'])
 const benefitsCurrencyOptions = ['USD', 'EUR', 'SAR', 'AED']
+const createOtherDeductionEntry = () => ({
+  name: '',
+  amount: '',
+  currency: '',
+})
+const createOtherBenefitEntry = () => ({
+  coverageLevel: '',
+  lifeInsurance: '',
+  paidTimeOff: '',
+  wellnessPrograms: '',
+  details: '',
+})
 
-const createForm = () => ({
-  employeeId: '',
+const createForm = (suggestedEmployeeId = '') => ({
+  employeeId: suggestedEmployeeId,
   firstName: '',
   lastName: '',
   gender: '',
@@ -88,7 +130,6 @@ const createForm = () => ({
   homePhone: '',
   workEmail: '',
   personalEmail: '',
-  password: '',
   jobPosition: '',
   jobLocation: '',
   team: '',
@@ -125,9 +166,7 @@ const createForm = () => ({
   overtimePayoutFrequency: '',
   healthInsurance: '',
   retirementContributions: '',
-  deductionName: '',
-  deductionAmount: '',
-  deductionCurrency: '',
+  otherDeductions: [createOtherDeductionEntry()],
   taxIdentificationNumber: '',
   taxFilingStatus: '',
   taxExemptionsAndAllowances: '',
@@ -144,7 +183,6 @@ const createForm = () => ({
   healthPolicyNumber: '',
   healthCoverageLevel: '',
   healthStartDate: '',
-  healthEndDate: '',
   healthCoverageDetails: '',
   retirementPlan: '',
   retirementPlanType: '',
@@ -155,13 +193,8 @@ const createForm = () => ({
   employerContributionType: '',
   employerContributionAmount: '',
   employerContributionCurrency: '',
-  otherBenefitsCoverageLevel: '',
-  lifeInsurance: '',
-  paidTimeOff: '',
-  wellnessPrograms: '',
-  details: '',
+  otherBenefits: [createOtherBenefitEntry()],
   miscStartDate: '',
-  miscEndDate: '',
   employmentContracts: '',
   paymentMethod: '',
   performanceBonuses: '',
@@ -173,11 +206,12 @@ const createForm = () => ({
   openAccess: false,
 })
 
-const form = reactive(createForm())
+const form = reactive(createForm(props.suggestedEmployeeId))
 const errors = ref({})
 const panelRef = ref(null)
 const fileInputRef = ref(null)
 const currentStepIndex = ref(0)
+const furthestStepIndex = ref(0)
 const legalUploadContext = ref('')
 const isRestrictedAccessModalOpen = ref(false)
 const hasAttemptedStepSubmit = ref(false)
@@ -185,6 +219,7 @@ const hasAttemptedStepSubmit = ref(false)
 const lettersOnlyPattern = /^[A-Za-z\s'-]+$/
 const numbersOnlyPattern = /^\d+$/
 const decimalNumberPattern = /^\d+(\.\d+)?$/
+const alphaNumericPattern = /^[A-Za-z0-9\s-]+$/
 
 const isEndDateBeforeStartDate = (startDate, endDate) => {
   if (!startDate || !endDate) return false
@@ -205,12 +240,12 @@ const liveValidationRules = {
   mobilePhone: (value) => !value || numbersOnlyPattern.test(value) ? '' : 'Use numbers only',
   homePhone: (value) => !value || numbersOnlyPattern.test(value) ? '' : 'Use numbers only',
   jobPosition: (value) => !value || lettersOnlyPattern.test(value) ? '' : 'Use letters only',
-  grade: (value) => !value || lettersOnlyPattern.test(value) ? '' : 'Use letters only',
+  grade: (value) => !value || alphaNumericPattern.test(value) ? '' : 'Use letters and numbers only',
   department: (value) => !value || lettersOnlyPattern.test(value) ? '' : 'Use letters only',
   baseSalary: (value) => !value || decimalNumberPattern.test(value) ? '' : 'Use numbers only',
   months: (value) => !value || numbersOnlyPattern.test(value) ? '' : 'Use numbers only',
   overtimeMaxHours: (value) => !value || decimalNumberPattern.test(value) ? '' : 'Use numbers only',
-  taxIdentificationNumber: (value) => !value || numbersOnlyPattern.test(value) ? '' : 'Use numbers only',
+  taxIdentificationNumber: (value) => !value || alphaNumericPattern.test(value) ? '' : 'Use letters and numbers only',
   bankName: (value) => !value || lettersOnlyPattern.test(value) ? '' : 'Use letters only',
   accountNumber: (value) => !value || numbersOnlyPattern.test(value) ? '' : 'Use numbers only',
   bankBranch: (value) => !value || lettersOnlyPattern.test(value) ? '' : 'Use letters only',
@@ -220,7 +255,6 @@ const liveValidationRules = {
   amountOrPercentage: (value) => !value || decimalNumberPattern.test(value) ? '' : 'Use numbers only',
   overtimeAmount: (value) => !value || decimalNumberPattern.test(value) ? '' : 'Use numbers only',
   allowanceAmount: (value) => !value || decimalNumberPattern.test(value) ? '' : 'Use numbers only',
-  deductionAmount: (value) => !value || decimalNumberPattern.test(value) ? '' : 'Use numbers only',
 }
 
 const getLiveValidationError = (fieldKey, rawValue) => {
@@ -268,12 +302,83 @@ const countRestrictedFields = (settings = {}) =>
     .length
 
 const resetForm = () => {
-  Object.assign(form, createForm())
+  Object.assign(form, createForm(props.suggestedEmployeeId))
   errors.value = {}
   hasAttemptedStepSubmit.value = false
 }
 
 const activeStep = computed(() => stepItems[currentStepIndex.value])
+const eligibilityRequiresMonths = computed(() => form.eligibility === 'After X months')
+const canReviewStep = (index) => index <= furthestStepIndex.value
+
+const goToStep = async (index) => {
+  if (!canReviewStep(index) || index === currentStepIndex.value) return
+
+  currentStepIndex.value = index
+  hasAttemptedStepSubmit.value = false
+  await nextTick()
+  panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
+}
+
+const addOtherDeduction = () => {
+  form.otherDeductions.push(createOtherDeductionEntry())
+}
+
+const removeOtherDeduction = (index) => {
+  if (form.otherDeductions.length === 1) return
+
+  form.otherDeductions.splice(index, 1)
+  delete errors.value[`otherDeductionName-${index}`]
+  delete errors.value[`otherDeductionAmount-${index}`]
+  delete errors.value[`otherDeductionCurrency-${index}`]
+
+  const nextErrors = {}
+  Object.entries(errors.value).forEach(([key, value]) => {
+    if (key.startsWith('otherDeduction')) {
+      const match = key.match(/^(otherDeduction(?:Name|Amount|Currency)-)(\d+)$/)
+      if (match && Number(match[2]) > index) {
+        nextErrors[`${match[1]}${Number(match[2]) - 1}`] = value
+      } else if (!match) {
+        nextErrors[key] = value
+      }
+      return
+    }
+
+    nextErrors[key] = value
+  })
+  errors.value = nextErrors
+}
+
+const addOtherBenefit = () => {
+  form.otherBenefits.push(createOtherBenefitEntry())
+}
+
+const removeOtherBenefit = (index) => {
+  if (form.otherBenefits.length === 1) return
+
+  form.otherBenefits.splice(index, 1)
+
+  const nextErrors = {}
+  Object.entries(errors.value).forEach(([key, value]) => {
+    const match = key.match(/^(otherBenefit(?:CoverageLevel|LifeInsurance|PaidTimeOff|WellnessPrograms|Details)-)(\d+)$/)
+    if (!match) {
+      nextErrors[key] = value
+      return
+    }
+
+    const keyIndex = Number(match[2])
+    if (keyIndex < index) {
+      nextErrors[key] = value
+      return
+    }
+
+    if (keyIndex > index) {
+      nextErrors[`${match[1]}${keyIndex - 1}`] = value
+    }
+  })
+
+  errors.value = nextErrors
+}
 
 watch(
   () => props.open,
@@ -281,11 +386,22 @@ watch(
     if (isOpen) {
       resetForm()
       currentStepIndex.value = 0
+      furthestStepIndex.value = 0
       if (props.submitError) {
         emit('clear-submit-error')
       }
       await nextTick()
       panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  },
+)
+
+watch(
+  () => form.eligibility,
+  (value) => {
+    if (value !== 'After X months') {
+      form.months = ''
+      delete errors.value.months
     }
   },
 )
@@ -317,7 +433,6 @@ watch(
     form.state,
     form.workEmail,
     form.personalEmail,
-    form.password,
     form.jobLocation,
     form.team,
     form.manager,
@@ -340,23 +455,21 @@ watch(
     form.allowanceName,
     form.allowanceType,
     form.overtimePayoutFrequency,
-    form.deductionCurrency,
+    JSON.stringify(form.otherDeductions),
     form.taxFilingStatus,
     form.bankCountry,
     form.accountType,
     form.healthInsuranceProvider,
     form.healthCoverageLevel,
     form.healthStartDate,
-    form.healthEndDate,
     form.retirementPlanType,
     form.retirementCoverageLevel,
     form.retirementContributionType,
     form.retirementContributionCurrency,
     form.employerContributionType,
     form.employerContributionCurrency,
-    form.otherBenefitsCoverageLevel,
+    JSON.stringify(form.otherBenefits),
     form.miscStartDate,
-    form.miscEndDate,
     form.openAccess,
     form.restrictedAccess,
     form.ndaFiles.length,
@@ -401,7 +514,6 @@ const validateBasicInformation = () => {
   if (!form.mobilePhone.trim()) nextErrors.mobilePhone = 'Required'
   if (!form.workEmail.trim()) nextErrors.workEmail = 'Required'
   if (!form.personalEmail.trim()) nextErrors.personalEmail = 'Required'
-  if (!form.password.trim()) nextErrors.password = 'Required'
 
   if (form.workEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.workEmail)) {
     nextErrors.workEmail = 'Invalid email'
@@ -409,10 +521,6 @@ const validateBasicInformation = () => {
 
   if (form.personalEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.personalEmail)) {
     nextErrors.personalEmail = 'Invalid email'
-  }
-
-  if (form.password && form.password.length < 8) {
-    nextErrors.password = 'Min 8 characters'
   }
 
   Object.assign(errors.value, nextErrors)
@@ -445,7 +553,6 @@ const validateEmploymentDetails = () => {
     'overtimeAmount',
     'allowanceAmount',
     'overtimeMaxHours',
-    'deductionAmount',
     'retirementContributionAmount',
     'employerContributionAmount',
   ])
@@ -466,7 +573,7 @@ const validateEmploymentDetails = () => {
   if (!form.amountOrPercentage.trim()) nextErrors.amountOrPercentage = 'Required'
   if (!form.bonusCurrency) nextErrors.bonusCurrency = 'Required'
   if (!form.eligibility) nextErrors.eligibility = 'Required'
-  if (!form.months.trim()) nextErrors.months = 'Required'
+  if (eligibilityRequiresMonths.value && !form.months.trim()) nextErrors.months = 'Required'
   if (!form.overtimeRateType) nextErrors.overtimeRateType = 'Required'
   if (!form.overtimeAmount.trim()) nextErrors.overtimeAmount = 'Required'
   if (!form.overtimeCurrency) nextErrors.overtimeCurrency = 'Required'
@@ -478,9 +585,15 @@ const validateEmploymentDetails = () => {
   if (!form.overtimePayoutFrequency) nextErrors.overtimePayoutFrequency = 'Required'
   if (!form.healthInsurance.trim()) nextErrors.healthInsurance = 'Required'
   if (!form.retirementContributions.trim()) nextErrors.retirementContributions = 'Required'
-  if (!form.deductionName.trim()) nextErrors.deductionName = 'Required'
-  if (!form.deductionAmount.trim()) nextErrors.deductionAmount = 'Required'
-  if (!form.deductionCurrency) nextErrors.deductionCurrency = 'Required'
+  form.otherDeductions.forEach((deduction, index) => {
+    if (!String(deduction.name || '').trim()) nextErrors[`otherDeductionName-${index}`] = 'Required'
+    if (!String(deduction.amount || '').trim()) {
+      nextErrors[`otherDeductionAmount-${index}`] = 'Required'
+    } else if (!decimalNumberPattern.test(String(deduction.amount).trim())) {
+      nextErrors[`otherDeductionAmount-${index}`] = 'Use numbers only'
+    }
+    if (!deduction.currency) nextErrors[`otherDeductionCurrency-${index}`] = 'Required'
+  })
 
   Object.assign(errors.value, nextErrors)
   return Object.keys(nextErrors).length === 0
@@ -529,10 +642,6 @@ const validateBenefitsInformation = () => {
   if (!form.healthInsuranceProvider) nextErrors.healthInsuranceProvider = 'Required'
   if (!form.healthCoverageLevel) nextErrors.healthCoverageLevel = 'Required'
   if (!form.healthStartDate) nextErrors.healthStartDate = 'Required'
-  if (!form.healthEndDate) nextErrors.healthEndDate = 'Required'
-  if (isEndDateBeforeStartDate(form.healthStartDate, form.healthEndDate)) {
-    nextErrors.healthEndDate = 'End date must be after start date'
-  }
   if (!form.healthCoverageDetails.trim()) nextErrors.healthCoverageDetails = 'Required'
   if (!form.retirementPlanType) nextErrors.retirementPlanType = 'Required'
   if (!form.retirementCoverageLevel) nextErrors.retirementCoverageLevel = 'Required'
@@ -542,16 +651,14 @@ const validateBenefitsInformation = () => {
   if (!form.employerContributionType) nextErrors.employerContributionType = 'Required'
   if (!form.employerContributionAmount.trim()) nextErrors.employerContributionAmount = 'Required'
   if (!form.employerContributionCurrency) nextErrors.employerContributionCurrency = 'Required'
-  if (!form.otherBenefitsCoverageLevel) nextErrors.otherBenefitsCoverageLevel = 'Required'
-  if (!form.lifeInsurance.trim()) nextErrors.lifeInsurance = 'Required'
-  if (!form.paidTimeOff.trim()) nextErrors.paidTimeOff = 'Required'
-  if (!form.wellnessPrograms.trim()) nextErrors.wellnessPrograms = 'Required'
-  if (!form.details.trim()) nextErrors.details = 'Required'
+  form.otherBenefits.forEach((benefit, index) => {
+    if (!benefit.coverageLevel) nextErrors[`otherBenefitCoverageLevel-${index}`] = 'Required'
+    if (!String(benefit.lifeInsurance || '').trim()) nextErrors[`otherBenefitLifeInsurance-${index}`] = 'Required'
+    if (!String(benefit.paidTimeOff || '').trim()) nextErrors[`otherBenefitPaidTimeOff-${index}`] = 'Required'
+    if (!String(benefit.wellnessPrograms || '').trim()) nextErrors[`otherBenefitWellnessPrograms-${index}`] = 'Required'
+    if (!String(benefit.details || '').trim()) nextErrors[`otherBenefitDetails-${index}`] = 'Required'
+  })
   if (!form.miscStartDate) nextErrors.miscStartDate = 'Required'
-  if (!form.miscEndDate) nextErrors.miscEndDate = 'Required'
-  if (isEndDateBeforeStartDate(form.miscStartDate, form.miscEndDate)) {
-    nextErrors.miscEndDate = 'End date must be after start date'
-  }
   if (!form.paymentMethod.trim()) nextErrors.paymentMethod = 'Required'
   if (!form.performanceBonuses.trim()) nextErrors.performanceBonuses = 'Required'
 
@@ -563,9 +670,6 @@ const validateComplianceInformation = () => {
   const nextErrors = {}
   const restrictedFieldsCount = countRestrictedFields(form.restrictedAccessSettings)
 
-  if (!form.ndaFiles.length) nextErrors.ndaFiles = 'Upload at least one NDA file.'
-  if (!form.employmentContractFiles.length) nextErrors.employmentContractFiles = 'Upload at least one employment contract file.'
-  if (!form.laborLawComplianceFiles.length) nextErrors.laborLawComplianceFiles = 'Upload at least one labor law compliance file.'
   if (!form.openAccess && !form.restrictedAccess) nextErrors.accessProfile = 'Choose open or restricted access'
   if (form.restrictedAccess && !String(form.restrictedAccessSettings?.accessLevel || '').trim()) {
     nextErrors.restrictedAccessSettings = 'Configure restricted access level'
@@ -611,13 +715,13 @@ const goToNextStep = async () => {
       'mobilePhone',
       'workEmail',
       'personalEmail',
-      'password',
     ])
 
     if (!validateBasicInformation()) return
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 1
+    furthestStepIndex.value = Math.max(furthestStepIndex.value, 1)
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
     return
@@ -638,6 +742,7 @@ const goToNextStep = async () => {
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 2
+    furthestStepIndex.value = Math.max(furthestStepIndex.value, 2)
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
     return
@@ -674,15 +779,17 @@ const goToNextStep = async () => {
       'overtimePayoutFrequency',
       'healthInsurance',
       'retirementContributions',
-      'deductionName',
-      'deductionAmount',
-      'deductionCurrency',
     ])
+
+    Object.keys(errors.value)
+      .filter((key) => key.startsWith('otherDeduction'))
+      .forEach((key) => delete errors.value[key])
 
     if (!validateEmploymentDetails()) return
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 3
+    furthestStepIndex.value = Math.max(furthestStepIndex.value, 3)
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
     return
@@ -701,6 +808,7 @@ const goToNextStep = async () => {
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 4
+    furthestStepIndex.value = Math.max(furthestStepIndex.value, 4)
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
     return
@@ -722,6 +830,7 @@ const goToNextStep = async () => {
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 5
+    furthestStepIndex.value = Math.max(furthestStepIndex.value, 5)
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
     return
@@ -734,7 +843,6 @@ const goToNextStep = async () => {
       'healthPolicyNumber',
       'healthCoverageLevel',
       'healthStartDate',
-      'healthEndDate',
       'healthCoverageDetails',
       'retirementPlanType',
       'retirementCoverageLevel',
@@ -744,21 +852,20 @@ const goToNextStep = async () => {
       'employerContributionType',
       'employerContributionAmount',
       'employerContributionCurrency',
-      'otherBenefitsCoverageLevel',
-      'lifeInsurance',
-      'paidTimeOff',
-      'wellnessPrograms',
-      'details',
       'miscStartDate',
-      'miscEndDate',
       'paymentMethod',
       'performanceBonuses',
     ])
+
+    Object.keys(errors.value)
+      .filter((key) => key.startsWith('otherBenefit'))
+      .forEach((key) => delete errors.value[key])
 
     if (!validateBenefitsInformation()) return
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 6
+    furthestStepIndex.value = Math.max(furthestStepIndex.value, 6)
     await nextTick()
     panelRef.value?.scrollTo({ top: 0, behavior: 'auto' })
     return
@@ -792,6 +899,11 @@ const goToNextStep = async () => {
     accountNumber: form.accountNumber.trim(),
     iban: form.iban.trim(),
     healthPolicyNumber: form.healthPolicyNumber.trim(),
+    otherDeductions: form.otherDeductions.map((deduction) => ({
+      name: String(deduction.name || '').trim(),
+      amount: String(deduction.amount || '').trim(),
+      currency: deduction.currency,
+    })),
     restrictedAccess: form.restrictedAccess,
     openAccess: form.openAccess,
     attachments: [...form.attachments],
@@ -891,12 +1003,18 @@ const handleSaveRestrictedAccess = (payload) => {
 
       <div class="add-employee-modal__steps">
         <div
-          v-for="step in stepItems"
-          :key="step"
+          v-for="(step, index) in stepItems"
+          :key="step.label"
           class="add-employee-modal__step"
-          :class="{ 'add-employee-modal__step--active': step === activeStep }"
+          :class="{
+            'add-employee-modal__step--active': step === activeStep,
+            'add-employee-modal__step--completed': index <= furthestStepIndex,
+            'add-employee-modal__step--reviewable': canReviewStep(index),
+          }"
+          :style="{ '--step-color': step.color }"
+          @click="goToStep(index)"
         >
-          {{ step }}
+          {{ step.label }}
         </div>
       </div>
 
@@ -904,7 +1022,18 @@ const handleSaveRestrictedAccess = (payload) => {
         <div v-if="currentStepIndex === 0" class="add-employee-modal__grid">
           <label class="field field--full">
             <span class="field__label">Employee ID</span>
-            <input v-model="form.employeeId" class="field__control" :class="{ 'field__control--error': errors.employeeId }" type="text" placeholder="Employee ID" />
+            <input
+              v-model="form.employeeId"
+              class="field__control"
+              :class="{ 'field__control--error': errors.employeeId }"
+              type="text"
+              name="employee-id"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              placeholder="Employee ID"
+            />
             <span v-if="errors.employeeId" class="field__error">{{ errors.employeeId }}</span>
           </label>
 
@@ -991,11 +1120,6 @@ const handleSaveRestrictedAccess = (payload) => {
             <span v-if="errors.personalEmail" class="field__error">{{ errors.personalEmail }}</span>
           </label>
 
-          <label class="field field--full">
-            <span class="field__label">Password</span>
-            <input v-model="form.password" class="field__control" :class="{ 'field__control--error': errors.password }" type="password" placeholder="Password" />
-            <span v-if="errors.password" class="field__error">{{ errors.password }}</span>
-          </label>
         </div>
 
         <div v-else-if="currentStepIndex === 1" class="add-employee-modal__work-step">
@@ -1082,22 +1206,34 @@ const handleSaveRestrictedAccess = (payload) => {
             </div>
 
             <label class="field">
-              <span class="field__label">grade</span>
-              <input v-model="form.grade" class="field__control" :class="{ 'field__control--error': errors.grade }" type="text" placeholder="grade" />
+              <span class="field__label">Grade</span>
+              <input v-model="form.grade" class="field__control" :class="{ 'field__control--error': errors.grade }" type="text" placeholder="Grade" />
               <span v-if="errors.grade" class="field__error">{{ errors.grade }}</span>
             </label>
 
-            <div class="field">
-              <span class="field__label">work hours</span>
-              <Dropdown v-model="form.workHours" :options="workHoursOptions" placeholder="work hours" />
-              <span v-if="errors.workHours" class="field__error">{{ errors.workHours }}</span>
-            </div>
+              <label class="field">
+                <span class="field__label">Work Hours</span>
+                <input
+                  v-model="form.workHours"
+                  class="field__control"
+                  :class="{ 'field__control--error': errors.workHours }"
+                  type="text"
+                  placeholder="Work Hours"
+                />
+                <span v-if="errors.workHours" class="field__error">{{ errors.workHours }}</span>
+              </label>
 
-            <div class="field">
-              <span class="field__label">Annual leave entitlement</span>
-              <Dropdown v-model="form.annualLeaveEntitlement" :options="annualLeaveEntitlementOptions" placeholder="Annual leave entitlement" />
-              <span v-if="errors.annualLeaveEntitlement" class="field__error">{{ errors.annualLeaveEntitlement }}</span>
-            </div>
+              <label class="field">
+                <span class="field__label">Annual Leave Entitlement</span>
+                <input
+                  v-model="form.annualLeaveEntitlement"
+                  class="field__control"
+                  :class="{ 'field__control--error': errors.annualLeaveEntitlement }"
+                  type="text"
+                  placeholder="Annual Leave Entitlement"
+                />
+                <span v-if="errors.annualLeaveEntitlement" class="field__error">{{ errors.annualLeaveEntitlement }}</span>
+              </label>
 
             <label class="field">
               <span class="field__label">validity of contract</span>
@@ -1105,11 +1241,11 @@ const handleSaveRestrictedAccess = (payload) => {
               <span v-if="errors.validityOfContract" class="field__error">{{ errors.validityOfContract }}</span>
             </label>
 
-            <label class="field">
+            <div class="field">
               <span class="field__label">Department</span>
-              <input v-model="form.department" class="field__control" :class="{ 'field__control--error': errors.department }" type="text" placeholder="Department" />
+              <Dropdown v-model="form.department" :options="departmentOptions" placeholder="Department" />
               <span v-if="errors.department" class="field__error">{{ errors.department }}</span>
-            </label>
+            </div>
 
             <label class="field">
               <span class="field__label">Joining Date</span>
@@ -1175,7 +1311,7 @@ const handleSaveRestrictedAccess = (payload) => {
                 <span v-if="errors.eligibility" class="field__error">{{ errors.eligibility }}</span>
               </div>
 
-              <label class="field">
+              <label v-if="eligibilityRequiresMonths" class="field">
                 <span class="field__label">Months</span>
                 <input v-model="form.months" class="field__control" :class="{ 'field__control--error': errors.months }" type="text" placeholder="e.g 6" />
                 <span v-if="errors.months" class="field__error">{{ errors.months }}</span>
@@ -1274,24 +1410,48 @@ const handleSaveRestrictedAccess = (payload) => {
           </section>
 
           <section class="add-employee-modal__section">
-            <h3 class="add-employee-modal__section-title">Other Deductions</h3>
-            <div class="add-employee-modal__grid add-employee-modal__grid--employment">
+            <div class="add-employee-modal__section-head">
+              <h3 class="add-employee-modal__section-title">Other Deductions</h3>
+              <button type="button" class="add-employee-modal__add-row" @click="addOtherDeduction">+</button>
+            </div>
+            <div
+              v-for="(deduction, index) in form.otherDeductions"
+              :key="`other-deduction-${index}`"
+              class="add-employee-modal__grid add-employee-modal__grid--employment add-employee-modal__repeat-row"
+            >
               <label class="field">
                 <span class="field__label">Names</span>
-                <input v-model="form.deductionName" class="field__control" :class="{ 'field__control--error': errors.deductionName }" type="text" placeholder="Names" />
-                <span v-if="errors.deductionName" class="field__error">{{ errors.deductionName }}</span>
+                <input
+                  v-model="deduction.name"
+                  class="field__control"
+                  :class="{ 'field__control--error': errors[`otherDeductionName-${index}`] }"
+                  type="text"
+                  placeholder="Names"
+                />
+                <span v-if="errors[`otherDeductionName-${index}`]" class="field__error">{{ errors[`otherDeductionName-${index}`] }}</span>
               </label>
 
               <label class="field">
                 <span class="field__label">Amount</span>
-                <input v-model="form.deductionAmount" class="field__control" :class="{ 'field__control--error': errors.deductionAmount }" type="text" placeholder="Amount" />
-                <span v-if="errors.deductionAmount" class="field__error">{{ errors.deductionAmount }}</span>
+                <input
+                  v-model="deduction.amount"
+                  class="field__control"
+                  :class="{ 'field__control--error': errors[`otherDeductionAmount-${index}`] }"
+                  type="text"
+                  placeholder="Amount"
+                />
+                <span v-if="errors[`otherDeductionAmount-${index}`]" class="field__error">{{ errors[`otherDeductionAmount-${index}`] }}</span>
               </label>
 
               <div class="field">
                 <span class="field__label">Currency</span>
-                <Dropdown v-model="form.deductionCurrency" :options="currencyOptions" placeholder="Please select" />
-                <span v-if="errors.deductionCurrency" class="field__error">{{ errors.deductionCurrency }}</span>
+                <Dropdown v-model="deduction.currency" :options="currencyOptions" placeholder="Please select" />
+                <span v-if="errors[`otherDeductionCurrency-${index}`]" class="field__error">{{ errors[`otherDeductionCurrency-${index}`] }}</span>
+              </div>
+
+              <div v-if="form.otherDeductions.length > 1" class="field field--actions">
+                <span class="field__label field__label--hidden">Remove</span>
+                <button type="button" class="add-employee-modal__remove-row" @click="removeOtherDeduction(index)">Remove</button>
               </div>
             </div>
           </section>
@@ -1316,6 +1476,8 @@ const handleSaveRestrictedAccess = (payload) => {
               v-model="form.taxFilingStatus"
               :options="taxFilingStatusOptions"
               placeholder="Please select"
+              teleport
+              menu-size="small"
             />
             <span v-if="errors.taxFilingStatus" class="field__error">{{ errors.taxFilingStatus }}</span>
           </div>
@@ -1445,13 +1607,19 @@ const handleSaveRestrictedAccess = (payload) => {
 
         <div v-else-if="currentStepIndex === 5" class="add-employee-modal__work-step">
           <div class="add-employee-modal__grid add-employee-modal__grid--employment">
-            <div class="field">
+            <label class="field field--span-3">
               <span class="field__label">Health Insurance Provider</span>
-              <Dropdown v-model="form.healthInsuranceProvider" :options="healthInsuranceProviderOptions" placeholder="Please select" />
+              <input
+                v-model="form.healthInsuranceProvider"
+                class="field__control"
+                :class="{ 'field__control--error': errors.healthInsuranceProvider }"
+                type="text"
+                placeholder="Swift BIC code"
+              />
               <span v-if="errors.healthInsuranceProvider" class="field__error">{{ errors.healthInsuranceProvider }}</span>
-            </div>
+            </label>
 
-              <label class="field">
+              <label class="field field--span-3">
                 <span class="field__label">policy number</span>
                 <input v-model="form.healthPolicyNumber" class="field__control" :class="{ 'field__control--error': errors.healthPolicyNumber }" type="text" placeholder="swift BIC code" />
                 <span v-if="errors.healthPolicyNumber" class="field__error">{{ errors.healthPolicyNumber }}</span>
@@ -1459,7 +1627,7 @@ const handleSaveRestrictedAccess = (payload) => {
 
             <div class="field">
               <span class="field__label">Coverage level</span>
-              <Dropdown v-model="form.healthCoverageLevel" :options="coverageLevelOptions" placeholder="Please select" />
+              <Dropdown v-model="form.healthCoverageLevel" :options="dependentCoverageOptions" placeholder="Please select" />
               <span v-if="errors.healthCoverageLevel" class="field__error">{{ errors.healthCoverageLevel }}</span>
             </div>
 
@@ -1467,12 +1635,6 @@ const handleSaveRestrictedAccess = (payload) => {
               <span class="field__label">start date</span>
               <DatePicker v-model="form.healthStartDate" />
               <span v-if="errors.healthStartDate" class="field__error">{{ errors.healthStartDate }}</span>
-            </label>
-
-            <label class="field">
-              <span class="field__label">End date</span>
-              <DatePicker v-model="form.healthEndDate" />
-              <span v-if="errors.healthEndDate" class="field__error">{{ errors.healthEndDate }}</span>
             </label>
 
             <label class="field field--full">
@@ -1491,15 +1653,15 @@ const handleSaveRestrictedAccess = (payload) => {
           <section class="add-employee-modal__section">
             <h3 class="add-employee-modal__section-title">Retirement Plan</h3>
             <div class="add-employee-modal__grid add-employee-modal__grid--employment">
-              <div class="field">
+              <div class="field field--span-3">
                 <span class="field__label">Retirement Plan Type</span>
                 <Dropdown v-model="form.retirementPlanType" :options="retirementPlanTypeOptions" placeholder="Please select" />
                 <span v-if="errors.retirementPlanType" class="field__error">{{ errors.retirementPlanType }}</span>
               </div>
 
-              <div class="field">
+              <div class="field field--span-3">
                 <span class="field__label">coverage level</span>
-                <Dropdown v-model="form.retirementCoverageLevel" :options="coverageLevelOptions" placeholder="Please select" />
+                <Dropdown v-model="form.retirementCoverageLevel" :options="dependentCoverageOptions" placeholder="Please select" />
                 <span v-if="errors.retirementCoverageLevel" class="field__error">{{ errors.retirementCoverageLevel }}</span>
               </div>
 
@@ -1542,61 +1704,73 @@ const handleSaveRestrictedAccess = (payload) => {
           </section>
 
           <section class="add-employee-modal__section">
-            <h3 class="add-employee-modal__section-title">Other benefits</h3>
-            <div class="add-employee-modal__grid add-employee-modal__grid--employment">
+            <div class="add-employee-modal__section-head">
+              <h3 class="add-employee-modal__section-title">Other benefits</h3>
+              <button type="button" class="add-employee-modal__add-row" @click="addOtherBenefit">+</button>
+            </div>
+            <div
+              v-for="(benefit, index) in form.otherBenefits"
+              :key="`other-benefit-${index}`"
+              class="add-employee-modal__grid add-employee-modal__grid--employment add-employee-modal__repeat-row"
+            >
               <div class="field field--full">
                 <span class="field__label">coverage level</span>
-                <Dropdown v-model="form.otherBenefitsCoverageLevel" :options="coverageLevelOptions" placeholder="Please select" />
-                <span v-if="errors.otherBenefitsCoverageLevel" class="field__error">{{ errors.otherBenefitsCoverageLevel }}</span>
+                <Dropdown v-model="benefit.coverageLevel" :options="dependentCoverageOptions" placeholder="Please select" />
+                <span v-if="errors[`otherBenefitCoverageLevel-${index}`]" class="field__error">{{ errors[`otherBenefitCoverageLevel-${index}`] }}</span>
               </div>
 
               <label class="field field--full">
                 <span class="field__label">Life insurance</span>
                 <input
-                  v-model="form.lifeInsurance"
+                  v-model="benefit.lifeInsurance"
                   class="field__control"
-                  :class="{ 'field__control--error': errors.lifeInsurance }"
+                  :class="{ 'field__control--error': errors[`otherBenefitLifeInsurance-${index}`] }"
                   type="text"
                   placeholder="Life insurance"
                 />
-                <span v-if="errors.lifeInsurance" class="field__error">{{ errors.lifeInsurance }}</span>
+                <span v-if="errors[`otherBenefitLifeInsurance-${index}`]" class="field__error">{{ errors[`otherBenefitLifeInsurance-${index}`] }}</span>
               </label>
 
-              <label class="field">
+              <label class="field field--span-3">
                 <span class="field__label">Paid time off</span>
                 <input
-                  v-model="form.paidTimeOff"
+                  v-model="benefit.paidTimeOff"
                   class="field__control"
-                  :class="{ 'field__control--error': errors.paidTimeOff }"
+                  :class="{ 'field__control--error': errors[`otherBenefitPaidTimeOff-${index}`] }"
                   type="text"
                   placeholder="paid time off"
                 />
-                <span v-if="errors.paidTimeOff" class="field__error">{{ errors.paidTimeOff }}</span>
+                <span v-if="errors[`otherBenefitPaidTimeOff-${index}`]" class="field__error">{{ errors[`otherBenefitPaidTimeOff-${index}`] }}</span>
               </label>
 
-              <label class="field">
+              <label class="field field--span-3">
                 <span class="field__label">wellness programs</span>
                 <input
-                  v-model="form.wellnessPrograms"
+                  v-model="benefit.wellnessPrograms"
                   class="field__control"
-                  :class="{ 'field__control--error': errors.wellnessPrograms }"
+                  :class="{ 'field__control--error': errors[`otherBenefitWellnessPrograms-${index}`] }"
                   type="text"
                   placeholder="wellness programs"
                 />
-                <span v-if="errors.wellnessPrograms" class="field__error">{{ errors.wellnessPrograms }}</span>
+                <span v-if="errors[`otherBenefitWellnessPrograms-${index}`]" class="field__error">{{ errors[`otherBenefitWellnessPrograms-${index}`] }}</span>
               </label>
 
               <label class="field field--full">
                 <span class="field__label">Details</span>
                 <input
-                  v-model="form.details"
+                  v-model="benefit.details"
                   class="field__control"
-                  :class="{ 'field__control--error': errors.details }"
+                  :class="{ 'field__control--error': errors[`otherBenefitDetails-${index}`] }"
                   type="text"
                   placeholder="Details"
                 />
-                <span v-if="errors.details" class="field__error">{{ errors.details }}</span>
+                <span v-if="errors[`otherBenefitDetails-${index}`]" class="field__error">{{ errors[`otherBenefitDetails-${index}`] }}</span>
               </label>
+
+              <div v-if="form.otherBenefits.length > 1" class="field field--actions">
+                <span class="field__label field__label--hidden">Remove</span>
+                <button type="button" class="add-employee-modal__remove-row" @click="removeOtherBenefit(index)">Remove</button>
+              </div>
             </div>
           </section>
 
@@ -1610,17 +1784,11 @@ const handleSaveRestrictedAccess = (payload) => {
               </label>
 
               <label class="field">
-                <span class="field__label">end date</span>
-                <DatePicker v-model="form.miscEndDate" />
-                <span v-if="errors.miscEndDate" class="field__error">{{ errors.miscEndDate }}</span>
-              </label>
-
-              <label class="field field--span-2">
                 <span class="field__label">employment contracts</span>
                 <input v-model="form.employmentContracts" class="field__control" type="text" placeholder="Employment contracts" />
               </label>
 
-              <label class="field field--span-2">
+              <label class="field field--span-3">
                 <span class="field__label">Payment Method</span>
                 <input
                   v-model="form.paymentMethod"
@@ -1632,7 +1800,7 @@ const handleSaveRestrictedAccess = (payload) => {
                 <span v-if="errors.paymentMethod" class="field__error">{{ errors.paymentMethod }}</span>
               </label>
 
-              <label class="field field--span-2">
+              <label class="field field--span-3">
                 <span class="field__label">Performance Bonuses</span>
                 <input
                   v-model="form.performanceBonuses"
@@ -1703,19 +1871,9 @@ const handleSaveRestrictedAccess = (payload) => {
           </div>
 
           <div class="add-employee-modal__section">
-            <div class="add-employee-modal__section-headline">
-              <label class="field field--full">
-                <span class="field__label">Local labor laws and regulations compliance</span>
-              </label>
-              <button
-                type="button"
-                class="add-employee-modal__add-link"
-                @click="triggerLegalFileSelect('laborLawComplianceFiles')"
-              >
-                <span class="add-employee-modal__add-link-icon">+</span>
-                <span>Add</span>
-              </button>
-            </div>
+            <label class="field field--full">
+              <span class="field__label">Local labor laws and regulations compliance</span>
+            </label>
             <div class="add-employee-modal__dropzone" @dragover.prevent="legalUploadContext = 'laborLawComplianceFiles'" @drop.prevent="legalUploadContext = 'laborLawComplianceFiles'; handleDrop($event)">
               <button type="button" class="add-employee-modal__dropzone-button" @click="triggerLegalFileSelect('laborLawComplianceFiles')">
                 <span class="add-employee-modal__upload-icon" aria-hidden="true">
@@ -1735,6 +1893,14 @@ const handleSaveRestrictedAccess = (payload) => {
                 <span class="add-employee-modal__attachment-name">{{ file.name }}</span>
                 <button type="button" class="add-employee-modal__attachment-remove" @click="removeLegalAttachment('laborLawComplianceFiles', file.name)">Remove</button>
               </div>
+              <button
+                type="button"
+                class="add-employee-modal__add-link add-employee-modal__add-link--inline"
+                @click="triggerLegalFileSelect('laborLawComplianceFiles')"
+              >
+                <span class="add-employee-modal__add-link-icon">+</span>
+                <span>Add</span>
+              </button>
             </div>
           </div>
 
@@ -1801,11 +1967,13 @@ const handleSaveRestrictedAccess = (payload) => {
   position: relative;
   width: min(860px, calc(100vw - 56px));
   max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
   background: #ffffff;
   border: 1px solid #f2dbe5;
   border-radius: 16px;
   box-shadow: 0 22px 48px rgba(32, 19, 26, 0.16);
-  overflow: auto;
+  overflow: hidden;
   scrollbar-gutter: stable;
 }
 
@@ -1887,10 +2055,13 @@ const handleSaveRestrictedAccess = (payload) => {
 .add-employee-modal__step {
   position: relative;
   padding-top: 10px;
-  color: #a89aa2;
+  color: var(--step-color);
   font-size: 10px;
   line-height: 1.2;
-  text-transform: lowercase;
+  text-transform: none;
+  opacity: 0.34;
+  cursor: default;
+  transition: opacity 0.18s ease, color 0.18s ease, font-weight 0.18s ease;
 }
 
 .add-employee-modal__step::before {
@@ -1900,20 +2071,51 @@ const handleSaveRestrictedAccess = (payload) => {
   left: 0;
   right: 10px;
   height: 2px;
-  background: #f6d8e4;
+  background: var(--step-color);
+  opacity: 0.34;
 }
 
 .add-employee-modal__step--active {
-  color: #ef5a96;
-  font-weight: 600;
+  opacity: 1;
 }
 
 .add-employee-modal__step--active::before {
-  background: #ef5a96;
+  opacity: 1;
+}
+
+.add-employee-modal__step--completed {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.add-employee-modal__step--completed::before {
+  opacity: 1;
+}
+
+.add-employee-modal__step--reviewable {
+  opacity: 0.88;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.add-employee-modal__step--reviewable::before {
+  opacity: 0.88;
+}
+
+.add-employee-modal__step--reviewable:hover {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.add-employee-modal__step--reviewable:hover::before {
+  opacity: 1;
 }
 
 .add-employee-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 16px 20px 8px;
+  overflow: auto;
 }
 
 .add-employee-modal__work-step {
@@ -1946,12 +2148,57 @@ const handleSaveRestrictedAccess = (payload) => {
   grid-column: span 2;
 }
 
+.field--span-3 {
+  grid-column: span 3;
+}
+
+.field--actions {
+  grid-column: span 1;
+  justify-content: flex-end;
+}
+
 .field__label {
   color: #8f8790;
   font-size: 11px;
   line-height: 1.2;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 0.04em;
+}
+
+.field__label--hidden {
+  visibility: hidden;
+}
+
+.add-employee-modal__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.add-employee-modal__add-row,
+.add-employee-modal__remove-row {
+  min-width: 36px;
+  height: 36px;
+  border: 1px solid #f0d7e3;
+  border-radius: 10px;
+  background: #fff7fa;
+  color: #ea4f8d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.add-employee-modal__add-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.add-employee-modal__repeat-row {
+  margin-top: 10px;
 }
 
 .field__control,
@@ -1970,7 +2217,7 @@ const handleSaveRestrictedAccess = (payload) => {
   font-weight: 400;
   line-height: 1;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
   box-sizing: border-box;
   box-shadow: none;
   vertical-align: top;
@@ -2060,6 +2307,11 @@ const handleSaveRestrictedAccess = (payload) => {
   text-transform: uppercase;
 }
 
+.field :deep(.dropdown__option) {
+  font-size: 10px;
+  line-height: 1;
+}
+
 .field__control:focus,
 .field :deep(.dropdown__trigger:focus-visible),
 .field :deep(.date-picker__trigger:focus-visible) {
@@ -2120,6 +2372,11 @@ const handleSaveRestrictedAccess = (payload) => {
   color: #ef5a96;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.add-employee-modal__add-link--inline {
+  margin-top: 2px;
+  justify-self: start;
 }
 
 .add-employee-modal__add-link-icon {
@@ -2383,6 +2640,10 @@ const handleSaveRestrictedAccess = (payload) => {
   }
 
   .field--span-2 {
+    grid-column: span 1;
+  }
+
+  .field--span-3 {
     grid-column: span 1;
   }
 

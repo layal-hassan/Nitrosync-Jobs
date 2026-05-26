@@ -59,7 +59,7 @@ const mapEmployeeRow = (employee, index) => {
     joiningDate: toDisplayDate(
       employee?.joining_date ?? employee?.joiningDate ?? employee?.created_at ?? employee?.createdAt,
     ),
-    status: normalizeLabel(employee?.status, 'Active'),
+    status: normalizeLabel(employee?.status, 'Verified'),
     location: normalizeLabel(
       employee?.location ??
         employee?.address ??

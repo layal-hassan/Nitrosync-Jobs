@@ -12,6 +12,7 @@ import {
   buildNitroSyncEndpoint,
   nitroSyncRequestTimeoutMs,
 } from '../../composables/nitroSyncApi'
+import { changeNitroSyncJobStatus } from '../../composables/useNitroSyncChangeJobStatus'
 import { fetchNitroSyncCompany } from '../../composables/useNitroSyncCompanies'
 import { getNitroSyncEmployees } from '../../composables/useNitroSyncEmployees'
 import AdditionalInformation from '../../components/jobPosting/AdditionalInformation.vue'
@@ -54,6 +55,14 @@ const currentJobUuid = ref('')
 const completionModal = ref({
   open: false,
   variant: 'save',
+})
+const currentJobMeta = ref({
+  status: '',
+  publishAt: '',
+  closeAt: '',
+  expiryDate: '',
+  updatedAt: '',
+  createdAt: '',
 })
 const applicationFormId = ref('')
 const resolvedCompanyName = ref('')
@@ -115,6 +124,58 @@ const previewForm = ref({
   },
 })
 
+const normalizeJobStatus = (value) => {
+  const normalized = String(value || '').trim().toLowerCase().replace(/\s+/g, '_')
+
+  if (['1', 'draft', 'pending', 'scheduled'].includes(normalized)) return 'draft'
+  if (['2', 'active', 'published', 'open', 'live'].includes(normalized)) return 'active'
+  if (['3', 'expired', 'expire'].includes(normalized)) return 'expired'
+  if (['4', 'on_hold', 'hold', 'paused', 'pause'].includes(normalized)) return 'on_hold'
+  if (['5', 'closed', 'close', 'filled'].includes(normalized)) return 'closed'
+  if (['6', 'archived', 'archive'].includes(normalized)) return 'archived'
+
+  return normalized
+}
+const formatJobDateTime = (value) => {
+  const rawValue = String(value || '').trim()
+  if (!rawValue) return ''
+
+  const parsed = new Date(rawValue)
+  if (Number.isNaN(parsed.getTime())) return rawValue
+
+  return parsed.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+const isPublishedJobState = computed(() =>
+  ['published', 'active', 'open', 'live'].includes(normalizeJobStatus(currentJobMeta.value.status)),
+)
+
+const jobPublishSummary = computed(() => {
+  const publishedAt = formatJobDateTime(currentJobMeta.value.publishAt || currentJobMeta.value.createdAt)
+  const closeAt = formatJobDateTime(currentJobMeta.value.closeAt)
+  const status = normalizeJobStatus(currentJobMeta.value.status)
+
+  if (publishedAt && isPublishedJobState.value) {
+    return closeAt
+      ? `Published on ${publishedAt}. Closing on ${closeAt}.`
+      : `Published on ${publishedAt}.`
+  }
+
+  if (publishedAt && status === 'scheduled') {
+    return closeAt
+      ? `Scheduled to publish on ${publishedAt}. Closing on ${closeAt}.`
+      : `Scheduled to publish on ${publishedAt}.`
+  }
+
+  return ''
+})
+
 const appearanceForm = ref({
   coverPhoto: null,
   photo: null,
@@ -138,6 +199,8 @@ const intelligentScreenForm = ref({
 const jobStagesForm = ref({
   screen: 0,
   showWorkflowDesigner: false,
+  openedFromStagesDots: false,
+  targetedWorkflowStage: '',
   newStageName: '',
   selectedScoreCard: '',
   scoreCardDraft: {
@@ -150,11 +213,9 @@ const jobStagesForm = ref({
     commentsObservation: 'Use this section for final interviewer notes, decision context, and clear recommendations before the candidate advances.',
   },
   stageRows: [
-    { jobStageUuid: '', label: 'New', enabled: true },
     { jobStageUuid: '', label: 'Screen', enabled: true },
     { jobStageUuid: '', label: 'Testing', enabled: true },
     { jobStageUuid: '', label: 'Interview', enabled: false },
-    { jobStageUuid: '', label: 'Shortlisted', enabled: true },
     { jobStageUuid: '', label: 'Hired', enabled: false },
   ],
   questionInput: '',
@@ -299,6 +360,29 @@ const postingTabs = [
 ]
 
 const normalizeTemplateText = (value) => String(value ?? '').trim()
+const normalizeTextInput = (value) => {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).trim()
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeTextInput(item)).filter(Boolean).join('\n').trim()
+  }
+
+  if (value && typeof value === 'object') {
+    return normalizeTextInput(
+      value.text
+      ?? value.value
+      ?? value.answer
+      ?? value.content
+      ?? value.html
+      ?? value.description
+      ?? '',
+    )
+  }
+
+  return ''
+}
 const recruiterStorageKey = 'nitrosync-job-recruiters'
 const jobStagesStorageKeyPrefix = 'nitrosync-job-stages:'
 const wizardDraftStorageKeyPrefix = 'nitrosync-post-job-draft:'
@@ -493,7 +577,7 @@ const createTemplateDraft = (item = {}) => ({
   department: normalizeTemplateText(item?.department?.department_name ?? item?.department_name ?? item?.department),
   country: normalizeTemplateText(item?.country?.name ?? item?.country_name ?? item?.country),
   city: normalizeTemplateText(item?.city?.name ?? item?.city_name ?? item?.city),
-  description: normalizeTemplateText(item?.description),
+  description: normalizeTextInput(item?.description),
   degree_level: normalizeTemplateText(item?.degree_level),
   career_level: normalizeTemplateText(item?.career_level),
   industry: normalizeTemplateText(item?.industry?.industry_name ?? item?.industry_name ?? item?.industry),
@@ -507,7 +591,7 @@ const createTemplateDraft = (item = {}) => ({
   recruiter: normalizeTemplateText(item?.recruiter_name ?? item?.recruiter),
   team: normalizeTemplateText(item?.team_name ?? item?.team ?? item?.department_name ?? item?.department),
   job_title_seo: normalizeTemplateText(item?.job_title_seo ?? item?.seo_title),
-  job_description_seo: normalizeTemplateText(item?.job_description_seo ?? item?.seo_description),
+  job_description_seo: normalizeTextInput(item?.job_description_seo ?? item?.seo_description),
 })
 
 const normalizeRecruiterUuid = (employee = {}) =>
@@ -750,6 +834,14 @@ const completionModalContent = computed(() => {
     }
   }
 
+  if (completionModal.value.variant === 'unpublish') {
+    return {
+      title: 'Job Unpublished',
+      text: 'The job was moved back to draft successfully. You can return to the jobs list and edit or publish it later.',
+      button: 'Back to Jobs',
+    }
+  }
+
   return {
     title: 'Draft Saved',
     text: 'The job was saved successfully as a draft. You can return to the jobs list and complete it later.',
@@ -776,7 +868,7 @@ const applyTemplateDraft = (draft) => {
     department: draft.department || '',
     country: draft.country || '',
     city: draft.city || '',
-    description: draft.description || '',
+    description: normalizeTextInput(draft.description),
   }
 
   additionalInfoForm.value = {
@@ -806,7 +898,7 @@ const applyTemplateDraft = (draft) => {
 
   metaDataForm.value = {
     seoTitle: draft.job_title_seo || draft.job_title || '',
-    seoDescription: draft.job_description_seo || draft.description || '',
+    seoDescription: normalizeTextInput(draft.job_description_seo || draft.description),
     seoPhoto: null,
   }
 }
@@ -919,6 +1011,14 @@ const startWizard = () => {
   isEditMode.value = false
   isViewMode.value = false
   editingJobUuid.value = ''
+  currentJobMeta.value = {
+    status: '',
+    publishAt: '',
+    closeAt: '',
+    expiryDate: '',
+    updatedAt: '',
+    createdAt: '',
+  }
   applicationFormId.value = ''
   currentJobUuid.value = createUuid()
   sessionStorage.removeItem('nitrosync-edit-job')
@@ -970,6 +1070,8 @@ const startWizard = () => {
   jobStagesForm.value = {
     screen: 0,
     showWorkflowDesigner: false,
+    openedFromStagesDots: false,
+    targetedWorkflowStage: '',
     newStageName: '',
     selectedScoreCard: '',
     scoreCardDraft: {
@@ -982,11 +1084,9 @@ const startWizard = () => {
       commentsObservation: 'Use this section for final interviewer notes, decision context, and clear recommendations before the candidate advances.',
     },
     stageRows: [
-      { jobStageUuid: '', label: 'New', enabled: true },
       { jobStageUuid: '', label: 'Screen', enabled: true },
       { jobStageUuid: '', label: 'Testing', enabled: true },
       { jobStageUuid: '', label: 'Interview', enabled: false },
-      { jobStageUuid: '', label: 'Shortlisted', enabled: true },
       { jobStageUuid: '', label: 'Hired', enabled: false },
     ],
     questionInput: '',
@@ -1188,7 +1288,11 @@ const fetchAndApplyJobStageRelations = async (jobUuid, stageRows = []) => {
 const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   const requestedStep = String(route.query.step || '').trim().toLowerCase()
   const openJobStagesStep = requestedStep === 'job-stages' || requestedStep === 'job_stages'
-  const initialMainStep = mode === 'view' ? 5 : openJobStagesStep ? 3 : 0
+  const openedFromStagesDots = String(route.query.source || '').trim().toLowerCase() === 'table-stages'
+  const targetedWorkflowStage = String(route.query.target_stage || '').trim()
+  const allowStoredWizardUiState = mode !== 'view'
+  const allowStoredJobStagesUiState = mode !== 'view'
+  const initialMainStep = openJobStagesStep ? 3 : 0
   const jobUuid = String(draft.job_uuid || route.query.job_uuid || '').trim()
   companyId = String(draft.related_company || draft.company_uuid || companyId || defaultCompanyId).trim() || defaultCompanyId
   isEditMode.value = mode === 'edit'
@@ -1205,6 +1309,14 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   intelligentQuestionTypes.value = []
   validationMessage.value = ''
   submissionMessage.value = ''
+  currentJobMeta.value = {
+    status: String(draft.status ?? draft.job_status ?? draft.active_status ?? '').trim(),
+    publishAt: String(draft.publish_at ?? draft.published_at ?? '').trim(),
+    closeAt: String(draft.close_at ?? '').trim(),
+    expiryDate: String(draft.expiry_date ?? '').trim(),
+    updatedAt: String(draft.updated_at ?? '').trim(),
+    createdAt: String(draft.created_at ?? '').trim(),
+  }
   const storedRecruiter = getStoredRecruiterForJob(jobUuid)
   const recruiterName = String(
     draft.recruiter_name
@@ -1219,7 +1331,7 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
     department: draft.department || '',
     country: draft.country || '',
     city: draft.city || '',
-    description: draft.description || '',
+    description: normalizeTextInput(draft.description),
   }
 
   additionalInfoForm.value = {
@@ -1248,7 +1360,7 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
 
   metaDataForm.value = {
     seoTitle: draft.job_title_seo || '',
-    seoDescription: draft.job_description_seo || '',
+    seoDescription: normalizeTextInput(draft.job_description_seo),
     seoPhoto: null,
   }
 
@@ -1277,11 +1389,22 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
     jobStagesForm.value = buildJobStagesFormFromDraft(draft)
   }
 
+  jobStagesForm.value = {
+    ...jobStagesForm.value,
+    screen: 0,
+    showWorkflowDesigner: openJobStagesStep && mode !== 'view',
+    openedFromStagesDots: mode !== 'view' && openedFromStagesDots,
+    targetedWorkflowStage: mode !== 'view' ? targetedWorkflowStage : '',
+  }
+
   const storedJobStagesForm = getStoredJobStagesForm(editingJobUuid.value || draft.job_uuid || route.query.job_uuid || '')
-  if (storedJobStagesForm) {
+  if (storedJobStagesForm && allowStoredJobStagesUiState) {
     jobStagesForm.value = {
       ...jobStagesForm.value,
       ...sanitizeJobStagesForm(storedJobStagesForm),
+      showWorkflowDesigner: openJobStagesStep,
+      openedFromStagesDots,
+      targetedWorkflowStage,
     }
   }
 
@@ -1289,8 +1412,15 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
     mode,
     jobUuid: editingJobUuid.value || draft.job_uuid || route.query.job_uuid || '',
   })
-  if (storedWizardDraft) {
+  if (storedWizardDraft && allowStoredWizardUiState) {
     applyStoredWizardDraft(storedWizardDraft)
+
+    jobStagesForm.value = {
+      ...jobStagesForm.value,
+      showWorkflowDesigner: openJobStagesStep,
+      openedFromStagesDots,
+      targetedWorkflowStage,
+    }
   }
 
   loadCurrentCompanyName()
@@ -1403,6 +1533,85 @@ const loadViewDraft = () => {
   }
 }
 
+const buildCurrentJobSessionDraft = () => ({
+  job_uuid: editingJobUuid.value || currentJobUuid.value || route.query.job_uuid || '',
+  related_company: companyId,
+  job_title: jobDetailsForm.value.jobTitle,
+  job_code: jobDetailsForm.value.jobCode,
+  department: jobDetailsForm.value.department,
+  country: jobDetailsForm.value.country,
+  city: jobDetailsForm.value.city,
+  description: normalizeTextInput(jobDetailsForm.value.description),
+  industry: additionalInfoForm.value.industry,
+  contract_type: additionalInfoForm.value.contractType,
+  currency: additionalInfoForm.value.currency,
+  start_from: String(additionalInfoForm.value.salaryFrom || ''),
+  end_to: String(additionalInfoForm.value.salaryTo || ''),
+  expiry_date: currentJobMeta.value.expiryDate,
+  career_level: additionalInfoForm.value.careerLevel,
+  degree_level: additionalInfoForm.value.degreeLevel,
+  status: currentJobMeta.value.status,
+  published_at: currentJobMeta.value.publishAt,
+  publish_at: currentJobMeta.value.publishAt,
+  close_at: currentJobMeta.value.closeAt,
+  updated_at: currentJobMeta.value.updatedAt,
+  created_at: currentJobMeta.value.createdAt,
+  job_title_seo: metaDataForm.value.seoTitle,
+  job_description_seo: normalizeTextInput(metaDataForm.value.seoDescription),
+  tags: [...tagsForm.value.selectedTags],
+  recruiter: hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
+  team: hiringTeamForm.value.team || '',
+  additional_users: Array.isArray(hiringTeamForm.value.additionalUsers) ? [...hiringTeamForm.value.additionalUsers] : [],
+  job_stages: Array.isArray(jobStagesForm.value.stageRows) ? [...jobStagesForm.value.stageRows] : [],
+  jobs_stages: Array.isArray(jobStagesForm.value.stageRows) ? [...jobStagesForm.value.stageRows] : [],
+})
+
+const openViewedJobInEditMode = () => {
+  const rawViewDraft = sessionStorage.getItem('nitrosync-view-job')
+  const nextDraft = rawViewDraft ? JSON.parse(rawViewDraft) : buildCurrentJobSessionDraft()
+
+  sessionStorage.setItem('nitrosync-edit-job', JSON.stringify(nextDraft))
+  router.push({
+    path: '/jobs/post',
+    query: {
+      mode: 'edit',
+      job_uuid: nextDraft.job_uuid || editingJobUuid.value || route.query.job_uuid || '',
+    },
+  })
+}
+
+const unpublishViewedJob = async () => {
+  const jobUuid = String(editingJobUuid.value || currentJobUuid.value || route.query.job_uuid || '').trim()
+  if (!jobUuid) {
+    validationMessage.value = 'This job is missing job_uuid, so it cannot be unpublished.'
+    return
+  }
+
+  submittingJob.value = true
+  validationMessage.value = ''
+  submissionMessage.value = ''
+
+  try {
+    const requestPayload = buildUnpublishJobRequest()
+    const requestBody = buildMultipartRequestBody(requestPayload)
+    const response = await axios.post(editJobEndpoint, requestBody.data, {
+      headers: requestBody.headers,
+      timeout: nitroSyncRequestTimeoutMs,
+    })
+    assertNitroSyncRequestSucceeded(response, 'Failed to unpublish the job.')
+
+    currentJobMeta.value = {
+      ...currentJobMeta.value,
+      status: '1',
+    }
+    openCompletionModal('unpublish')
+  } catch (error) {
+    validationMessage.value = error?.message || 'Failed to unpublish the job.'
+  } finally {
+    submittingJob.value = false
+  }
+}
+
 if (route.query.mode !== 'edit' && route.query.mode !== 'view') {
   resetCreateEntryState()
 }
@@ -1440,7 +1649,16 @@ const buildDateTime = (date, time) => {
 
 const toIsoDateTime = (date, time) => {
   const value = buildDateTime(date, time)
-  return value ? value.toISOString() : null
+  if (!value) return null
+
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  const hours = String(value.getHours()).padStart(2, '0')
+  const minutes = String(value.getMinutes()).padStart(2, '0')
+  const seconds = String(value.getSeconds()).padStart(2, '0')
+
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
 const getJobDetailsErrors = () => {
@@ -1603,17 +1821,9 @@ const goBackStep = () => {
 }
 
 const isCurrentStepValid = computed(() => {
+  if (mainStep.value === 0) return true
+
   switch (currentStep.value) {
-    case 0:
-      return Object.keys(getJobDetailsErrors()).length === 0
-    case 1:
-      return Object.keys(getAdditionalInfoErrors()).length === 0
-    case 5:
-      return Object.keys(getMetaDataErrors()).length === 0
-    case 2:
-      return tagsForm.value.selectedTags.length > 0
-    case 3:
-      return recruiterForm.value.selectedRecruiters.length > 0
     default:
       return true
   }
@@ -1624,9 +1834,7 @@ const isAppFormValid = computed(() =>
 )
 
 const maxIntelligentStage = computed(() => intelligentQuestionTypes.value.length + 2)
-const isHiringTeamValid = computed(() =>
-  Object.keys(getHiringTeamErrors()).length === 0,
-)
+const isHiringTeamValid = computed(() => true)
 const createUuid = () =>
   globalThis.crypto?.randomUUID?.()
     ?? `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`.replace(/[xy]/g, (char) => {
@@ -1643,9 +1851,36 @@ const createPlaceholderFile = (filename, mimeType = 'image/png') =>
   new File(['placeholder'], filename, { type: mimeType })
 
 const buildStatusFromAction = () => {
-  if (previewForm.value.publishAction === 'schedule_saved') return 'scheduled'
-  if (previewForm.value.publishAction === 'save_only') return 'draft'
-  return 'published'
+  if (previewForm.value.publishAction === 'schedule_saved') return '1'
+  if (previewForm.value.publishAction === 'save_only') return '1'
+  return '2'
+}
+
+const buildWithPublishValue = () => {
+  if (previewForm.value.publishAction === 'save_only') return 'no'
+  if (previewForm.value.publishAction === 'save_and_publish' || previewForm.value.publishAction === 'publish') return 'yes'
+  if (previewForm.value.publishAction === 'schedule_saved') return 'no'
+  return isPublishedJobState.value ? 'yes' : 'no'
+}
+
+const buildExpiryDateValue = (closeAt = '') =>
+  String(
+    closeAt
+    || previewForm.value.schedule.closePublishDate
+    || currentJobMeta.value.expiryDate
+    || currentJobMeta.value.closeAt,
+  ).trim()
+
+const validateExpiryDateBeforeSubmit = (requestPayload = {}) => {
+  const expiryDate = String(requestPayload?.expiry_date ?? '').trim()
+
+  if (expiryDate) {
+    return true
+  }
+
+  validationMessage.value = 'Expiry date is required. Open Schedule Publish and set Publish Closing Date before saving or publishing.'
+  submissionMessage.value = ''
+  return false
 }
 
 const buildApplicationFormPayload = (jobUuid = currentJobUuid.value) => ({
@@ -1679,6 +1914,103 @@ const buildEmbeddedApplicationFormPayload = () => ({
   upload_cv: appForm.value.cvStatus,
   upload_cover_letter: appForm.value.coverLetterStatus,
 })
+
+const buildJobSubmissionPayload = ({
+  jobUuid,
+  withPublish,
+  publishAt = '',
+  closeAt = '',
+  includePlaceholderImages = false,
+  includeWithPublish = true,
+  includeScheduleFields = false,
+} = {}) => {
+  const recruiterValue = normalizeHiringTeamField(
+    hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
+  )
+  const hiringTeamValue = normalizeHiringTeamField(hiringTeamForm.value.team)
+  const recruiterRecord = resolveRecruiterRecord(recruiterValue)
+  const recruiterUuid = normalizeRecruiterUuid(recruiterRecord)
+  const recruiterName = normalizeRecruiterName(recruiterRecord) || recruiterValue
+  const stageDefinitions = buildStageDefinitions()
+  const primaryStageUuid = stageDefinitions[0]?.job_stage_uuid || createUuid()
+  const stageRelations = buildStageRelations(stageDefinitions)
+
+  const payload = {
+    job_title: jobDetailsForm.value.jobTitle,
+    job_code: jobDetailsForm.value.jobCode,
+    expiry_date: buildExpiryDateValue(closeAt),
+    department: jobDetailsForm.value.department,
+    country: jobDetailsForm.value.country,
+    city: jobDetailsForm.value.city,
+    description: normalizeTextInput(jobDetailsForm.value.description),
+    related_company: companyId,
+    job_uuid: jobUuid,
+    degree_level: additionalInfoForm.value.degreeLevel,
+    career_level: additionalInfoForm.value.careerLevel,
+    industry: additionalInfoForm.value.industry,
+    contract_type: additionalInfoForm.value.contractType,
+    currency: additionalInfoForm.value.currency,
+    start_from: normalizeSalaryValue(additionalInfoForm.value.salaryFrom),
+    end_to: normalizeSalaryValue(additionalInfoForm.value.salaryTo),
+    cover_photo: includePlaceholderImages
+      ? appearanceForm.value.coverPhoto || createPlaceholderFile('cover-photo.png')
+      : appearanceForm.value.coverPhoto,
+    photo: includePlaceholderImages
+      ? appearanceForm.value.photo || createPlaceholderFile('job-photo.png')
+      : appearanceForm.value.photo,
+    job_title_seo: metaDataForm.value.seoTitle,
+    job_description_seo: normalizeTextInput(metaDataForm.value.seoDescription),
+    job_photo_seo: includePlaceholderImages
+      ? appearanceForm.value.photo || createPlaceholderFile('job-photo-seo.png')
+      : null,
+    recruiter_uuid: recruiterUuid || recruiterValue || '',
+    tags: tagsForm.value.selectedTags.map((tag) => ({
+      tag_name: tag,
+    })),
+    application_form: [
+      buildEmbeddedApplicationFormPayload(),
+    ],
+    jobs_stages: stageDefinitions.length
+      ? stageDefinitions.map((stage) => ({ job_stage_uuid: stage.job_stage_uuid }))
+      : [{ job_stage_uuid: primaryStageUuid }],
+    intelligent_screen_move_criterias: intelligentScreenForm.value.criteriaList
+      .filter((item) => item.name || item.moveTo || item.selectedConditionId)
+      .map((item) => ({
+        name: item.name || 'Move criteria',
+        score_range: formatScoreRange(item),
+        action: item.moveTo || 'screen',
+      })),
+    job_hiring_team: [
+      {
+        team: hiringTeamValue,
+        recruiter: recruiterName,
+        additional_users: hiringTeamForm.value.additionalUsers.map((name) => ({ name })),
+      },
+    ],
+    automated_actions: stageRelations.automatedActions,
+    score_cards: stageRelations.scoreCards,
+    assessments: stageRelations.assessments.length
+      ? stageRelations.assessments
+      : [
+        {
+          assessment_uuid: `default-${primaryStageUuid}`,
+          job_stage_uuid: primaryStageUuid,
+        },
+    ],
+    intelligent_screen_job_questions: buildIntelligentScreenQuestionsPayload(),
+  }
+
+  if (includeWithPublish) {
+    payload.with_publish = withPublish
+  }
+
+  if (includeScheduleFields) {
+    payload.publish_at = publishAt
+    payload.close_at = closeAt
+  }
+
+  return payload
+}
 
 const saveApplicationForm = async (jobUuid) => {
   const payload = buildApplicationFormPayload(jobUuid)
@@ -1852,6 +2184,7 @@ const formatJobSubmissionError = (error) => {
     error?.response?.data?.message ||
     error?.response?.data?.detail ||
     error?.response?.data?.msg ||
+    error?.message ||
     ''
 
   if (rawMessage.includes('intelligent_screen_job_questions')) {
@@ -1859,6 +2192,50 @@ const formatJobSubmissionError = (error) => {
   }
 
   return rawMessage || 'Failed to create the job. Check the API payload and try again.'
+}
+
+const getNitroSyncResponseMessage = (payload, fallbackMessage = '') =>
+  String(
+    payload?.message
+    ?? payload?.detail
+    ?? payload?.msg
+    ?? payload?.error
+    ?? fallbackMessage,
+  ).trim()
+
+const assertNitroSyncRequestSucceeded = (response, fallbackMessage) => {
+  const payload = response?.data ?? {}
+  const responseCode = String(payload?.code ?? '').trim()
+  const responseStatus = payload?.status
+  const responseSuccess = payload?.success
+  const responseError = payload?.error
+  const responseErrors = payload?.errors
+  const responseMessage = getNitroSyncResponseMessage(payload, fallbackMessage)
+
+  const hasStructuredErrors =
+    Array.isArray(responseErrors)
+      ? responseErrors.length > 0
+      : responseErrors && typeof responseErrors === 'object'
+        ? Object.keys(responseErrors).length > 0
+        : Boolean(responseErrors)
+
+  const isFailure =
+    responseCode === '0'
+    || responseStatus === false
+    || String(responseStatus ?? '').trim().toLowerCase() === 'false'
+    || responseSuccess === false
+    || String(responseSuccess ?? '').trim().toLowerCase() === 'false'
+    || Boolean(responseError)
+    || hasStructuredErrors
+
+  if (isFailure) {
+    throw new Error(responseMessage || fallbackMessage)
+  }
+
+  return {
+    payload,
+    message: responseMessage || fallbackMessage,
+  }
 }
 
 const buildStageDefinitions = () =>
@@ -2032,124 +2409,51 @@ const ensureJobStagesValid = () => {
 }
 
 const buildCreateJobRequest = () => {
-  const recruiterValue = normalizeHiringTeamField(
-    hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
-  )
-  const hiringTeamValue = normalizeHiringTeamField(hiringTeamForm.value.team)
-  const recruiterRecord = resolveRecruiterRecord(recruiterValue)
-  const recruiterUuid = normalizeRecruiterUuid(recruiterRecord)
-  const recruiterName = normalizeRecruiterName(recruiterRecord) || recruiterValue
-  const stageDefinitions = buildStageDefinitions()
-  const primaryStageUuid = stageDefinitions[0]?.job_stage_uuid || createUuid()
-  const stageRelations = buildStageRelations(stageDefinitions)
-
-  return {
-    job_title: jobDetailsForm.value.jobTitle,
-    job_code: jobDetailsForm.value.jobCode,
-    department: jobDetailsForm.value.department,
-    country: jobDetailsForm.value.country,
-    city: jobDetailsForm.value.city,
-    description: jobDetailsForm.value.description,
-    degree_level: additionalInfoForm.value.degreeLevel,
-    career_level: additionalInfoForm.value.careerLevel,
-    industry: additionalInfoForm.value.industry,
-    contract_type: additionalInfoForm.value.contractType,
-    currency: additionalInfoForm.value.currency,
-    start_from: normalizeSalaryValue(additionalInfoForm.value.salaryFrom),
-    end_to: normalizeSalaryValue(additionalInfoForm.value.salaryTo),
-    cover_photo: appearanceForm.value.coverPhoto || createPlaceholderFile('cover-photo.png'),
-    photo: appearanceForm.value.photo || createPlaceholderFile('job-photo.png'),
-    job_title_seo: metaDataForm.value.seoTitle,
-    job_description_seo: metaDataForm.value.seoDescription,
-    job_photo_seo: metaDataForm.value.seoPhoto || createPlaceholderFile('job-photo-seo.png'),
-    related_company: companyId,
-    status: buildStatusFromAction(),
-    job_uuid: currentJobUuid.value,
-    recruiter_uuid: recruiterUuid || recruiterValue || createUuid(),
-    tags: tagsForm.value.selectedTags.map((tag) => ({
-      tag_name: tag,
-    })),
-    application_form: [
-      buildEmbeddedApplicationFormPayload(),
-    ],
-    jobs_stages: stageDefinitions.length
-      ? stageDefinitions.map((stage) => ({ job_stage_uuid: stage.job_stage_uuid }))
-      : [{ job_stage_uuid: primaryStageUuid }],
-    intelligent_screen_move_criterias: intelligentScreenForm.value.criteriaList
-      .filter((item) => item.name || item.moveTo || item.selectedConditionId)
-      .map((item) => ({
-        name: item.name || 'Move criteria',
-        score_range: formatScoreRange(item),
-        action: item.moveTo || 'screen',
-      })),
-      job_hiring_team: [
-        {
-          team: hiringTeamValue,
-          recruiter: recruiterName,
-          additional_users: hiringTeamForm.value.additionalUsers.map((name) => ({ name })),
-        },
-      ],
-    automated_actions: stageRelations.automatedActions,
-    score_cards: stageRelations.scoreCards,
-    assessments: stageRelations.assessments.length
-      ? stageRelations.assessments
-      : [
-        {
-          assessment_uuid: `default-${primaryStageUuid}`,
-          job_stage_uuid: primaryStageUuid,
-        },
-      ],
-    intelligent_screen_job_questions: buildIntelligentScreenQuestionsPayload(),
-  }
+  return buildJobSubmissionPayload({
+    jobUuid: currentJobUuid.value,
+    withPublish: buildWithPublishValue(),
+    includePlaceholderImages: true,
+    includeWithPublish: true,
+  })
 }
 
 const buildEditJobRequest = () => {
-  const stageDefinitions = buildStageDefinitions()
-  const stageRelations = buildStageRelations(stageDefinitions)
-
-  return {
-    job_uuid: editingJobUuid.value || route.query.job_uuid || '',
-    related_company: companyId,
-    job_title: jobDetailsForm.value.jobTitle,
-    description: jobDetailsForm.value.description,
-    industry: additionalInfoForm.value.industry,
-    contract_type: additionalInfoForm.value.contractType,
-    currency: additionalInfoForm.value.currency,
-    start_from: normalizeSalaryValue(additionalInfoForm.value.salaryFrom),
-    end_to: normalizeSalaryValue(additionalInfoForm.value.salaryTo),
-    career_level: additionalInfoForm.value.careerLevel,
-    degree_level: additionalInfoForm.value.degreeLevel,
-    job_title_seo: metaDataForm.value.seoTitle,
-    job_description_seo: metaDataForm.value.seoDescription,
-    tags: [...tagsForm.value.selectedTags],
-    recruiter: normalizeHiringTeamField(hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || ''),
-    jobs_stages: stageDefinitions.map((stage) => ({ job_stage_uuid: stage.job_stage_uuid })),
-    automated_actions: stageRelations.automatedActions,
-    score_cards: stageRelations.scoreCards,
-    assessments: stageRelations.assessments,
-    intelligent_screen_move_criterias: intelligentScreenForm.value.criteriaList
-      .filter((item) => item.name || item.moveTo || item.selectedConditionId)
-      .map((item) => ({
-        name: item.name || 'Move criteria',
-        score_range: formatScoreRange(item),
-        action: item.moveTo || 'screen',
-      })),
-    intelligent_screen_job_questions: buildIntelligentScreenQuestionsPayload(),
-  }
+  return buildJobSubmissionPayload({
+    jobUuid: editingJobUuid.value || route.query.job_uuid || '',
+    withPublish: buildWithPublishValue(),
+    includePlaceholderImages: false,
+    includeWithPublish: true,
+  })
 }
 
-const buildSchedulePublishRequest = () => ({
-  related_company: companyId,
-  job_uuid: editingJobUuid.value || currentJobUuid.value || route.query.job_uuid || '',
-  publish_at: toIsoDateTime(
+const buildUnpublishJobRequest = () =>
+  buildJobSubmissionPayload({
+    jobUuid: editingJobUuid.value || currentJobUuid.value || route.query.job_uuid || '',
+    withPublish: 'no',
+    includePlaceholderImages: false,
+    includeWithPublish: true,
+  })
+
+const buildSchedulePublishRequest = () => {
+  const publishAt = toIsoDateTime(
     previewForm.value.schedule.publishDate,
     previewForm.value.schedule.publishTime,
-  ),
-  close_at: toIsoDateTime(
+  )
+  const closeAt = toIsoDateTime(
     previewForm.value.schedule.closePublishDate,
     previewForm.value.schedule.closePublishTime,
-  ),
-})
+  )
+
+  return buildJobSubmissionPayload({
+    jobUuid: editingJobUuid.value || currentJobUuid.value || route.query.job_uuid || '',
+    withPublish: 'no',
+    publishAt,
+    closeAt,
+    includePlaceholderImages: !isEditMode.value,
+    includeWithPublish: false,
+    includeScheduleFields: true,
+  })
+}
 
 const fileFieldKeys = new Set(['cover_photo', 'photo', 'job_photo_seo'])
 
@@ -2166,6 +2470,9 @@ const appendMultipartValue = (formData, key, value) => {
 
   if (Array.isArray(value)) {
     if (!value.length) {
+      if (key.endsWith('[additional_users]')) {
+        formData.append(key, '')
+      }
       return
     }
 
@@ -2190,8 +2497,34 @@ const buildCreateJobRequestBody = () => {
   const formData = new FormData()
 
   Object.entries(payload).forEach(([key, value]) => {
+    if (fileFieldKeys.has(key)) {
+      if (value instanceof File) {
+        formData.append(key, value)
+      }
+      return
+    }
+
+    appendMultipartValue(formData, key, value)
+  })
+
+  return {
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }
+}
+
+const buildMultipartRequestBody = (payload) => {
+  const formData = new FormData()
+
+  Object.entries(payload).forEach(([key, value]) => {
     if (fileFieldKeys.has(key) && value instanceof File) {
       formData.append(key, value)
+      return
+    }
+
+    if (fileFieldKeys.has(key)) {
       return
     }
 
@@ -2307,6 +2640,17 @@ onBeforeUnmount(() => {
 })
 
 const submitCurrentStep = () => {
+  if (isViewMode.value) {
+    validationMessage.value = ''
+    submissionMessage.value = ''
+
+    if (mainStep.value < wizardSteps.length - 1) {
+      mainStep.value += 1
+    }
+
+    return
+  }
+
   if (mainStep.value === 1) {
     if (appFormStage.value === 0 && !isAppFormValid.value) {
       appFormErrors.value = getAppFormErrors()
@@ -2329,11 +2673,6 @@ const submitCurrentStep = () => {
   }
 
   if (mainStep.value === 2) {
-    if (intelligentStage.value === 1 && !intelligentQuestionTypes.value.length) {
-      validationMessage.value = 'Please select at least one question type before continuing.'
-      return
-    }
-
     validationMessage.value = ''
 
     if (intelligentStage.value < maxIntelligentStage.value) {
@@ -2348,15 +2687,6 @@ const submitCurrentStep = () => {
   }
 
   if (!isCurrentStepValid.value) {
-    if (currentStep.value === 0) jobDetailsErrors.value = getJobDetailsErrors()
-    if (currentStep.value === 1) additionalInfoErrors.value = getAdditionalInfoErrors()
-    if (currentStep.value === 5) metaDataErrors.value = getMetaDataErrors()
-    validationMessage.value =
-      currentStep.value === 2
-        ? 'Please select at least one tag before continuing.'
-        : currentStep.value === 3
-          ? 'Please select at least one recruiter before continuing.'
-          : 'Please complete all required fields before continuing.'
     return
   }
 
@@ -2376,12 +2706,6 @@ const submitCurrentStep = () => {
   }
 
   if (mainStep.value < wizardSteps.length - 1) {
-    if (mainStep.value === 4 && !isHiringTeamValid.value) {
-      hiringTeamErrors.value = getHiringTeamErrors()
-      validationMessage.value = 'Please select a hiring team and recruiter before continuing.'
-      return
-    }
-
     hiringTeamErrors.value = {}
     mainStep.value += 1
   }
@@ -2445,14 +2769,10 @@ const validateScheduleBeforeSubmit = () => {
 
 const submitJob = async (successMessage, successVariant) => {
   const requestPayload = isEditMode.value ? buildEditJobRequest() : buildCreateJobRequest()
-  const requestBody = isEditMode.value
-    ? {
-        data: requestPayload,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    : buildCreateJobRequestBody()
+  if (!validateExpiryDateBeforeSubmit(requestPayload)) {
+    return false
+  }
+  const requestBody = isEditMode.value ? buildMultipartRequestBody(requestPayload) : buildCreateJobRequestBody()
   const endpoint = isEditMode.value ? editJobEndpoint : createJobEndpoint
 
   submittingJob.value = true
@@ -2464,16 +2784,14 @@ const submitJob = async (successMessage, successVariant) => {
       headers: requestBody.headers,
       timeout: nitroSyncRequestTimeoutMs,
     })
+    const successfulResponse = assertNitroSyncRequestSucceeded(response, successMessage)
 
     if (isEditMode.value) {
       try {
         await saveApplicationForm(editingJobUuid.value || route.query.job_uuid || '')
       } catch (applicationFormError) {
         submissionMessage.value =
-          response?.data?.message ||
-          response?.data?.detail ||
-          response?.data?.msg ||
-          successMessage
+          successfulResponse.message
 
         validationMessage.value =
           applicationFormError?.response?.data?.message ||
@@ -2492,10 +2810,7 @@ const submitJob = async (successMessage, successVariant) => {
       }
 
     submissionMessage.value =
-      response?.data?.message ||
-      response?.data?.detail ||
-      response?.data?.msg ||
-      successMessage
+      successfulResponse.message
 
       const recruiterValue = normalizeHiringTeamField(
         hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
@@ -2533,27 +2848,25 @@ const submitJob = async (successMessage, successVariant) => {
 
 const submitSchedulePublish = async () => {
   const requestPayload = buildSchedulePublishRequest()
+  if (!validateExpiryDateBeforeSubmit(requestPayload)) {
+    return false
+  }
+  const requestBody = buildMultipartRequestBody(requestPayload)
 
   submittingJob.value = true
   validationMessage.value = ''
   submissionMessage.value = ''
 
   try {
-    const response = await axios.post(schedulePublishEndpoint, requestPayload, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
+    const response = await axios.post(schedulePublishEndpoint, requestBody.data, {
+      headers: requestBody.headers,
       timeout: nitroSyncRequestTimeoutMs,
     })
+    const successfulResponse = assertNitroSyncRequestSucceeded(response, 'Job schedule saved successfully.')
 
     submissionMessage.value = ''
     openCompletionModal('schedule')
-    return Boolean(
-      response?.data?.message
-      || response?.data?.detail
-      || response?.data?.msg
-      || 'Job schedule saved successfully.',
-    )
+    return Boolean(successfulResponse.message)
   } catch (error) {
     validationMessage.value =
       error?.response?.data?.message ||
@@ -2573,8 +2886,30 @@ const submitSchedulePublish = async () => {
 }
 
 const handlePreviewAction = async (action) => {
-  if (isViewMode.value) return
   if (submittingJob.value) return
+
+  if (isViewMode.value) {
+    if (action === 'edit_view') {
+      openViewedJobInEditMode()
+      return
+    }
+
+    if (action === 'unpublish_view') {
+      await unpublishViewedJob()
+    }
+
+    return
+  }
+
+  if (action === 'unpublish_edit') {
+    await unpublishViewedJob()
+    return
+  }
+
+  if (action === 'save_changes') {
+    await submitJob('Job updated successfully.', 'save')
+    return
+  }
 
   if ((action === 'save_only' || action === 'save_and_publish' || action === 'publish') && !ensureJobStagesValid()) {
     mainStep.value = 3
@@ -2666,6 +3001,7 @@ const handlePreviewAction = async (action) => {
             'wizard-card--app-form': mainStep === 1,
             'wizard-card--intelligent': mainStep === 2,
             'wizard-card--job-stages': mainStep === 3,
+            'wizard-card--readonly': isViewMode && mainStep !== 5,
           }"
         >
           <h2 v-if="mainStep === 0" class="wizard-card__title">
@@ -2753,6 +3089,7 @@ const handlePreviewAction = async (action) => {
                 :form="jobStagesForm"
                 :validation="jobStagesValidation"
                 :related-company="companyId"
+                :is-view-mode="isViewMode"
                 @back="goBackStep"
                 @complete="completeJobStages"
               />
@@ -2773,7 +3110,11 @@ const handlePreviewAction = async (action) => {
               :selected-recruiters="recruiterForm.selectedRecruiters"
               :hiring-team="hiringTeamForm"
               :preview-state="previewForm"
-              :submitting="submittingJob || isViewMode"
+              :submitting="submittingJob"
+              :is-view-mode="isViewMode"
+              :is-edit-mode="isEditMode"
+              :is-published-job="isPublishedJobState"
+              :publish-summary="jobPublishSummary"
               @preview-action="handlePreviewAction"
             />
 
@@ -2786,7 +3127,15 @@ const handlePreviewAction = async (action) => {
           <p v-if="validationMessage" class="wizard-validation">{{ validationMessage }}</p>
           <p v-if="submissionMessage" class="wizard-submission">{{ submissionMessage }}</p>
 
-          <div v-if="!isViewMode && mainStep !== 3 && (hasWizardBack || (mainStep !== 3 && mainStep !== 5))" class="wizard-actions">
+          <div v-if="isViewMode && mainStep !== 5" class="wizard-actions">
+            <button v-if="hasWizardBack" type="button" class="wizard-actions__back" @click="goBackStep">Back</button>
+
+            <div class="wizard-actions__primary">
+              <button type="button" class="wizard-actions__next" @click="submitCurrentStep">Next</button>
+            </div>
+          </div>
+
+          <div v-else-if="!isViewMode && mainStep !== 3 && (hasWizardBack || (mainStep !== 3 && mainStep !== 5))" class="wizard-actions">
             <button v-if="hasWizardBack" type="button" class="wizard-actions__back" @click="goBackStep">Back</button>
 
             <div v-if="mainStep !== 3 && mainStep !== 5" class="wizard-actions__primary">
@@ -2836,8 +3185,9 @@ const handlePreviewAction = async (action) => {
 
 <style scoped>
 .page-container--post-job {
-  max-width: 1120px;
+  max-width: 1280px;
   --wizard-shell-max: 700px;
+  --job-stages-shell-max: 1120px;
   --job-form-title: 20px;
   --job-form-subtitle: 13px;
   --job-form-label: 12px;
@@ -3027,9 +3377,14 @@ const handlePreviewAction = async (action) => {
 }
 
 .wizard-card--job-stages {
-  max-width: var(--wizard-shell-max);
+  max-width: var(--job-stages-shell-max);
   min-height: 400px;
-  padding: 20px;
+  padding: 20px 22px 24px;
+}
+
+.wizard-card--readonly .wizard-panel,
+.wizard-card--readonly .wizard-panel * {
+  pointer-events: none !important;
 }
 
 .wizard-card__title {

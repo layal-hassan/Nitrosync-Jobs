@@ -35,6 +35,22 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  isViewMode: {
+    type: Boolean,
+    default: false,
+  },
+  isEditMode: {
+    type: Boolean,
+    default: false,
+  },
+  isPublishedJob: {
+    type: Boolean,
+    default: false,
+  },
+  publishSummary: {
+    type: String,
+    default: '',
+  },
 })
 
 const emit = defineEmits(['preview-action'])
@@ -49,7 +65,7 @@ const closePublishTimeInputRef = ref(null)
 
 const tagPalette = ['#ea4f8d', '#4f7dff', '#6b21d8', '#f1b32a', '#48d873', '#f08db2', '#8ea7ff', '#c4a1e8', '#f3d78f']
 
-const previewTitle = computed(() => 'Preview Job')
+const previewTitle = computed(() => (props.isViewMode ? 'View Job' : 'Preview Job'))
 const titleFieldValue = computed(() => props.jobDetails.jobTitle || 'Jobtitle will be shown here')
 const previewDescription = computed(() =>
   props.jobDetails.description
@@ -58,8 +74,25 @@ const previewDescription = computed(() =>
 )
 const previewSeoTitle = computed(() => props.metaData.seoTitle || 'Meta title')
 const fullAddressValue = computed(() => props.jobDetails.jobTitle || 'Ex: Accountant in a Bank')
-const salaryFromValue = computed(() => props.additionalInfo.salaryFrom || 'Ex: 0F2144')
-const salaryToValue = computed(() => props.additionalInfo.salaryTo || 'Ex: 0F2144')
+const normalizeCurrencyLabel = (value) => String(value || '').trim()
+const formatSalaryValue = (value) => {
+  const rawValue = String(value || '').trim()
+  if (!rawValue) return 'Ex: 0F2144'
+
+  const cleanedNumber = rawValue
+    .replace(/\[.*?\]/g, '')
+    .replace(/[^\d.,\s-]/g, '')
+    .trim()
+
+  const currency = normalizeCurrencyLabel(props.additionalInfo.currency)
+  if (!cleanedNumber) {
+    return currency ? `0 ${currency}` : rawValue
+  }
+
+  return currency ? `${cleanedNumber} ${currency}` : cleanedNumber
+}
+const salaryFromValue = computed(() => formatSalaryValue(props.additionalInfo.salaryFrom))
+const salaryToValue = computed(() => formatSalaryValue(props.additionalInfo.salaryTo))
 const previewTags = computed(() =>
   (props.selectedTags.length ? props.selectedTags : ['High Salary', 'Finance']).map((label, index) => ({
     label,
@@ -67,6 +100,9 @@ const previewTags = computed(() =>
   })),
 )
 const previewRecruiter = computed(() => props.hiringTeam.recruiter || props.selectedRecruiters[0] || 'Manal Oraby')
+const showViewActions = computed(() => props.isViewMode)
+const showEditPublishedActions = computed(() => props.isEditMode && props.isPublishedJob)
+const showEditDraftActions = computed(() => props.isEditMode && !props.isPublishedJob)
 
 const toggleActionMenu = () => {
   actionMenuOpen.value = !actionMenuOpen.value
@@ -146,6 +182,7 @@ onBeforeUnmount(() => {
             Make smarter hiring decisions. Our Intelligent Screening and Advancement system automates evaluations
             based on your criteria, ensuring efficient and fair assessments for every candidate.
           </p>
+          <p v-if="publishSummary" class="job-preview-card__status-note">{{ publishSummary }}</p>
         </div>
 
         <div class="job-preview-card__header-side">
@@ -161,13 +198,42 @@ onBeforeUnmount(() => {
             </button>
 
             <div v-if="actionMenuOpen" class="job-preview-card__menu">
-              <button type="button" @click="closeActionMenu">View</button>
-              <button type="button" @click="closeActionMenu">Edit</button>
-              <button type="button" class="job-preview-card__menu-item" @click="closeActionMenu">
-                <span>Export</span>
-                <span class="job-preview-card__menu-arrow"></span>
-              </button>
-              <button type="button" class="job-preview-card__menu-item--publish" :disabled="submitting" @click="closeActionMenu(); emit('preview-action', 'publish')">Publish</button>
+              <template v-if="showViewActions">
+                <button type="button" @click="closeActionMenu(); emit('preview-action', 'edit_view')">Edit</button>
+                <button
+                  type="button"
+                  class="job-preview-card__menu-item--publish"
+                  :disabled="submitting"
+                  @click="closeActionMenu(); emit('preview-action', 'unpublish_view')"
+                >
+                  Unpublish
+                </button>
+              </template>
+              <template v-else-if="showEditPublishedActions">
+                <button type="button" :disabled="submitting" @click="closeActionMenu(); emit('preview-action', 'save_changes')">Save changes</button>
+                <button
+                  type="button"
+                  class="job-preview-card__menu-item--publish"
+                  :disabled="submitting"
+                  @click="closeActionMenu(); emit('preview-action', 'unpublish_edit')"
+                >
+                  Unpublish
+                </button>
+              </template>
+              <template v-else-if="showEditDraftActions">
+                <button type="button" :disabled="submitting" @click="closeActionMenu(); emit('preview-action', 'save_only')">Save changes</button>
+                <button type="button" :disabled="submitting" @click="closeActionMenu(); emit('preview-action', 'save_and_publish')">Publish now</button>
+                <button type="button" :disabled="submitting" @click="closeActionMenu(); openScheduleModal()">Schedule publish</button>
+              </template>
+              <template v-else>
+                <button type="button" @click="closeActionMenu">View</button>
+                <button type="button" @click="closeActionMenu">Edit</button>
+                <button type="button" class="job-preview-card__menu-item" @click="closeActionMenu">
+                  <span>Export</span>
+                  <span class="job-preview-card__menu-arrow"></span>
+                </button>
+                <button type="button" class="job-preview-card__menu-item--publish" :disabled="submitting" @click="closeActionMenu(); emit('preview-action', 'publish')">Publish</button>
+              </template>
             </div>
           </div>
         </div>
@@ -263,7 +329,7 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="job-preview-card__field">
-                <label>to</label>
+                <label>To</label>
                 <div class="job-preview-card__value">{{ salaryToValue }}</div>
               </div>
             </div>
@@ -334,21 +400,56 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="job-preview-card__actions">
-          <div ref="publishMenuRef" class="job-preview-card__publish-wrap">
-            <button type="button" class="job-preview-card__primary job-preview-card__primary--menu" :disabled="submitting" @click="togglePublishMenu">
-              <span>{{ submitting ? 'Publishing...' : 'Publish Job' }}</span>
-              <span class="job-preview-card__primary-arrow"></span>
+          <template v-if="showViewActions">
+            <button type="button" class="job-preview-card__ghost job-preview-card__ghost--secondary" :disabled="submitting" @click="emit('preview-action', 'edit_view')">
+              Edit
+            </button>
+            <button type="button" class="job-preview-card__primary" :disabled="submitting" @click="emit('preview-action', 'unpublish_view')">
+              {{ submitting ? 'Saving...' : 'Unpublish' }}
+            </button>
+          </template>
+          <template v-else-if="showEditPublishedActions">
+            <button type="button" class="job-preview-card__ghost job-preview-card__ghost--secondary" :disabled="submitting" @click="emit('preview-action', 'save_changes')">
+              {{ submitting ? 'Saving...' : 'Save changes' }}
+            </button>
+            <button type="button" class="job-preview-card__primary" :disabled="submitting" @click="emit('preview-action', 'unpublish_edit')">
+              {{ submitting ? 'Saving...' : 'Unpublish' }}
+            </button>
+          </template>
+          <template v-else-if="showEditDraftActions">
+            <button type="button" class="job-preview-card__ghost job-preview-card__ghost--secondary" :disabled="submitting" @click="emit('preview-action', 'save_only')">
+              {{ submitting ? 'Saving...' : 'Save changes' }}
             </button>
 
-              <div v-if="publishMenuOpen" class="job-preview-card__publish-menu">
-                <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_and_publish')">Save and publish</button>
-                <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_only')">Save only</button>
-              </div>
-          </div>
+            <div ref="publishMenuRef" class="job-preview-card__publish-wrap">
+              <button type="button" class="job-preview-card__primary job-preview-card__primary--menu" :disabled="submitting" @click="togglePublishMenu">
+                <span>{{ submitting ? 'Publishing...' : 'Publish Job' }}</span>
+                <span class="job-preview-card__primary-arrow"></span>
+              </button>
 
-          <button type="button" class="job-preview-card__ghost" :disabled="submitting" @click="openScheduleModal">
-            {{ submitting ? 'Saving...' : 'Schedule Publish' }}
-          </button>
+              <div v-if="publishMenuOpen" class="job-preview-card__publish-menu">
+                <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_and_publish')">Publish now</button>
+                <button type="button" :disabled="submitting" @click="closePublishMenu(); openScheduleModal()">Schedule publish</button>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <div ref="publishMenuRef" class="job-preview-card__publish-wrap">
+              <button type="button" class="job-preview-card__primary job-preview-card__primary--menu" :disabled="submitting" @click="togglePublishMenu">
+                <span>{{ submitting ? 'Publishing...' : 'Publish Job' }}</span>
+                <span class="job-preview-card__primary-arrow"></span>
+              </button>
+
+                <div v-if="publishMenuOpen" class="job-preview-card__publish-menu">
+                  <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_and_publish')">Save and publish</button>
+                  <button type="button" :disabled="submitting" @click="closePublishMenu(); emit('preview-action', 'save_only')">Save only</button>
+                </div>
+            </div>
+
+            <button type="button" class="job-preview-card__ghost" :disabled="submitting" @click="openScheduleModal">
+              {{ submitting ? 'Saving...' : 'Schedule Publish' }}
+            </button>
+          </template>
         </div>
       </div>
     </section>
@@ -464,6 +565,7 @@ onBeforeUnmount(() => {
 .job-preview-card__header-side { display: flex; align-items: flex-start; gap: 10px; }
 .job-preview-card__title { margin: 0; font-size: 16px; font-weight: 600; color: #17111b; }
 .job-preview-card__text { margin: 8px 0 0; max-width: 620px; font-size: var(--ui-small-font); line-height: 1.6; color: var(--hint-soft); }
+.job-preview-card__status-note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: #9c6d7f; }
 .job-preview-card__menu-wrap { position: relative; flex: 0 0 auto; }
 .job-preview-card__menu-trigger { min-width: 28px; height: 28px; border-radius: 999px; color: #a98a97; font-size: 18px; line-height: 1; }
 .job-preview-card__menu-trigger--open { background: #fff3f7; color: #ea4f8d; }
@@ -512,6 +614,7 @@ onBeforeUnmount(() => {
 .job-preview-card__publish-wrap { position: relative; }
 .job-preview-card__ghost, .job-preview-card__primary { min-width: 120px; height: var(--ui-button-sm-height); padding: 0 14px; border-radius: 10px; font-size: var(--ui-meta-font); font-weight: 600; }
 .job-preview-card__ghost { background: #ea4f8d; color: #fff; }
+.job-preview-card__ghost--secondary { background: #ffffff; color: #ea4f8d; border: 1px solid #f2bfd2; }
 .job-preview-card__primary { background: #ea4f8d; color: #fff; }
 .job-preview-card__primary--menu { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; }
 .job-preview-card__primary-arrow { width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translateY(-1px); flex: 0 0 auto; }

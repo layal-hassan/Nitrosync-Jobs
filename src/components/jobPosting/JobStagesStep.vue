@@ -18,7 +18,10 @@ import {
 } from '../../composables/useNitroSyncAutomatedActions'
 import {
   createNitroSyncJobStage,
+  deleteNitroSyncJobStage,
+  fetchNitroSyncJobStage,
   fetchNitroSyncJobStages,
+  updateNitroSyncJobStage,
 } from '../../composables/useNitroSyncJobStages'
 import JobStagesWorkflowStep from './JobStagesWorkflowStep.vue'
 import Dropdown from '../ui/Dropdown.vue'
@@ -40,6 +43,10 @@ const props = defineProps({
   relatedCompany: {
     type: String,
     default: 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+  },
+  isViewMode: {
+    type: Boolean,
+    default: false,
   },
 })
 
@@ -80,9 +87,11 @@ const deletingAutomatedActionUuid = ref('')
 const automatedActionMessage = ref('')
 const automatedActionError = ref('')
 const showWorkflowDesigner = ref(Boolean(props.form.showWorkflowDesigner))
+const openedFromStagesDots = computed(() => Boolean(props.form.openedFromStagesDots))
 const stagesLoading = ref(false)
 const stageActionMessage = ref('')
 const stageActionError = ref('')
+const openStageMenuKey = ref('')
 
 const stageRows = ref(props.form.stageRows)
 const stageManagementByStage = ref(props.form.stageManagementByStage || {})
@@ -131,7 +140,7 @@ const scoreCardJobTitleOptions = ['Please select', 'Graphic Designer', 'HR Manag
 const scoreCardInterviewerOptions = ['Please select', 'Interviewer', 'Hiring manager']
 
 const automatedAssignOptions = ['Please select', 'Recruiter', 'Hiring manager', 'Team lead']
-const automatedStageOptions = ['Please select', 'Screen', 'Interview', 'Shortlisted']
+const automatedStageOptions = ['Please select', 'Screen', 'Testing', 'Interview', 'Hired']
 const automatedPrimaryActionOptions = ['Please select', 'Send email', 'Notify manager', 'Assign interviewer']
 const addStageNameRequiredMessage = 'Enter a stage name before adding a new stage.'
 
@@ -275,6 +284,10 @@ const getStageScoreCards = (stage) => {
     .filter(Boolean)
 }
 
+const selectedStageScoreCardCount = computed(() =>
+  currentStageKey.value ? getStageScoreCards(currentStageKey.value).length : 0,
+)
+
 const getStageAssessments = (stage) => {
   const management = getStageManagement(stage)
   return management.assessmentTitles
@@ -417,6 +430,106 @@ const fetchScoreCards = async () => {
 const openWorkflowDesigner = () => {
   showWorkflowDesigner.value = true
   props.form.showWorkflowDesigner = true
+}
+
+const toggleInlineStageMenu = (stage) => {
+  const key = getStageKey(stage)
+  openStageMenuKey.value = openStageMenuKey.value === key ? '' : key
+}
+
+const closeInlineStageMenu = () => {
+  openStageMenuKey.value = ''
+}
+
+const openStageInWorkflow = (stage) => {
+  setCurrentStage(stage)
+  props.form.targetedWorkflowStage = String(stage?.label || '').trim()
+  closeInlineStageMenu()
+  openWorkflowDesigner()
+}
+
+const renameStageFromBoard = async (stage) => {
+  const jobStageUuid = String(stage?.jobStageUuid || '').trim()
+  if (!jobStageUuid) {
+    stageActionError.value = 'This stage does not have a job_stage_uuid yet.'
+    stageActionMessage.value = ''
+    return
+  }
+
+  stageActionError.value = ''
+  stageActionMessage.value = ''
+  stagesLoading.value = true
+
+  try {
+    const current = await fetchNitroSyncJobStage({
+      job_stage_uuid: jobStageUuid,
+      related_company: companyId.value,
+    })
+    const currentName = String(current?.data?.stage_name || current?.data?.label || stage?.label || '').trim()
+    const nextName = window.prompt('Edit stage name', currentName)
+
+    if (nextName == null) {
+      closeInlineStageMenu()
+      return
+    }
+
+    const normalizedName = String(nextName || '').trim()
+    if (!normalizedName) {
+      stageActionError.value = 'Stage name is required.'
+      stageActionMessage.value = ''
+      return
+    }
+
+    const result = await updateNitroSyncJobStage({
+      job_stage_uuid: jobStageUuid,
+      related_company: companyId.value,
+      stage_name: normalizedName,
+    })
+
+    await fetchStages()
+    stageActionMessage.value = result.message || 'Stage updated successfully.'
+    closeInlineStageMenu()
+  } catch (error) {
+    console.error('Failed to update stage', error)
+    stageActionError.value = getNitroSyncErrorMessage(error, 'Failed to update stage.')
+  } finally {
+    stagesLoading.value = false
+  }
+}
+
+const deleteStageFromBoard = async (stage) => {
+  const jobStageUuid = String(stage?.jobStageUuid || '').trim()
+  if (!jobStageUuid) {
+    stageActionError.value = 'This stage does not have a job_stage_uuid yet.'
+    stageActionMessage.value = ''
+    return
+  }
+
+  const confirmed = window.confirm(`Delete "${stage?.label || 'this stage'}"?`)
+  if (!confirmed) {
+    closeInlineStageMenu()
+    return
+  }
+
+  stageActionError.value = ''
+  stageActionMessage.value = ''
+  stagesLoading.value = true
+
+  try {
+    const result = await deleteNitroSyncJobStage({
+      job_stage_uuid: jobStageUuid,
+      related_company: companyId.value,
+    })
+
+    await fetchStages()
+    stageActionMessage.value = result.message || 'Stage deleted successfully.'
+    closeInlineStageMenu()
+  } catch (error) {
+    console.error('Failed to delete stage', error)
+    stageActionError.value = getNitroSyncErrorMessage(error, 'Failed to delete stage.')
+  } finally {
+    stagesLoading.value = false
+  }
 }
 
 const closeWorkflowDesigner = () => {
@@ -897,16 +1010,22 @@ const removeAutomatedAction = async (item) => {
 
 const buildScoreCardPayload = () => {
   const scoreCardUuid = editingScoreCardUuid.value || createUuid()
+  const tags = parseDraftList(scoreCardDraft.value.tags)
+  const questions = selectedQuestions.value.map((item) => String(item?.label || '').trim()).filter(Boolean)
+  const competenciesTraits = manualCompetencyMode.value && manualCompetencyTitle.value.trim()
+    ? [manualCompetencyTitle.value.trim()]
+    : selectedCompetencies.value.map((item) => String(item?.label || '').trim()).filter(Boolean)
+  const skills = parseDraftList(normalizedScoreCardSkills.value)
 
   return {
     name: scoreCardDraft.value.name.trim(),
     job_title: scoreCardDraft.value.jobTitle.trim(),
     interviewer: scoreCardDraft.value.interviewer.trim(),
-    tags: scoreCardDraft.value.tags.trim(),
+    tags,
     instruction_message: scoreCardDraft.value.instructionMessage.trim(),
-    questions: normalizedScoreCardQuestions.value,
-    competencies_traits: normalizedScoreCardCompetencies.value,
-    skills: normalizedScoreCardSkills.value,
+    questions,
+    competencies_traits: competenciesTraits,
+    skills,
     evaluation_criteria: scoreCardDraft.value.evaluationCriteria.trim(),
     comments_observation: scoreCardDraft.value.commentsObservation.trim(),
     score_card_uuid: scoreCardUuid,
@@ -918,11 +1037,11 @@ const getScoreCardValidationError = (payload) => {
   if (!payload.name) return 'Score card name is required.'
   if (!payload.job_title || payload.job_title === 'Please select') return 'Job title is required.'
   if (!payload.interviewer || payload.interviewer === 'Please select') return 'Interviewer is required.'
-  if (!payload.tags) return 'Tags are required.'
+  if (!payload.tags.length) return 'Tags are required.'
   if (!payload.instruction_message) return 'Instruction message is required.'
-  if (!payload.questions) return 'At least one question is required.'
-  if (!payload.competencies_traits) return 'Competencies and traits are required.'
-  if (!payload.skills) return 'Skills are required.'
+  if (!payload.questions.length) return 'At least one question is required.'
+  if (!payload.competencies_traits.length) return 'Competencies and traits are required.'
+  if (!payload.skills.length) return 'Skills are required.'
   if (!payload.evaluation_criteria) return 'Evaluation criteria is required.'
   if (!payload.comments_observation) return 'Comments and observation are required.'
   if (!payload.related_company) return 'Related company is required.'
@@ -962,11 +1081,11 @@ const saveScoreCard = async () => {
         action: 'Edit card',
         jobTitle: payload.job_title,
         interviewer: payload.interviewer,
-        tags: payload.tags,
+        tags: payload.tags.join(', '),
         instructionMessage: payload.instruction_message,
-        questions: payload.questions,
-        competenciesTraits: payload.competencies_traits,
-        skills: payload.skills,
+        questions: payload.questions.join('\n'),
+        competenciesTraits: payload.competencies_traits.join(', '),
+        skills: payload.skills.join(', '),
         evaluationCriteria: payload.evaluation_criteria,
         commentsObservation: payload.comments_observation,
       },
@@ -1063,7 +1182,9 @@ const handleScoreCardMenuDelete = async (item) => {
 const handleDocumentPointerDown = (event) => {
   if (!(event.target instanceof Element)) return
   if (event.target.closest('.scorecard-summary-card__menu-wrap')) return
+  if (event.target.closest('.stage-shell__actions')) return
   closeScoreCardMenu()
+  closeInlineStageMenu()
 }
 
 const handleScoreCardStep = () => {
@@ -1074,6 +1195,17 @@ const handleScoreCardStep = () => {
 
   resetScoreCardFeedback()
   screen.value += 1
+}
+
+const handleScoreCardBack = () => {
+  resetScoreCardFeedback()
+
+  if (screen.value <= 4) {
+    returnToScoreCardManager()
+    return
+  }
+
+  screen.value -= 1
 }
 
 watch(screen, (value) => {
@@ -1169,11 +1301,12 @@ syncStageManagement(visibleStageRows.value)
       </div>
 
       <button
+        v-if="!openedFromStagesDots"
         type="button"
         class="job-stages-step__ghost"
-        @click="showWorkflowDesigner ? closeWorkflowDesigner() : openWorkflowDesigner()"
+        disabled
       >
-        {{ showWorkflowDesigner ? 'Back to stages' : 'Configure workflow' }}
+        Configure workflow
       </button>
     </div>
 
@@ -1181,6 +1314,7 @@ syncStageManagement(visibleStageRows.value)
       <JobStagesWorkflowStep
         :related-company="companyId"
         :stage-rows="stageRows"
+        :targeted-stage="props.form.targetedWorkflowStage || ''"
         @stage-rows-updated="syncStageRowsFromWorkflow"
       />
     </div>
@@ -1217,6 +1351,31 @@ syncStageManagement(visibleStageRows.value)
                 <span>{{ item.label }}</span>
               </span>
             </button>
+            <div class="stage-shell__actions">
+              <button
+                type="button"
+                class="stage-shell__menu-trigger"
+                aria-label="Open stage menu"
+                @click.stop="toggleInlineStageMenu(item)"
+              >
+                <span></span><span></span><span></span>
+              </button>
+              <div
+                v-if="openStageMenuKey === getStageKey(item)"
+                class="stage-shell__menu"
+                @click.stop
+              >
+                <button type="button" class="stage-shell__menu-item stage-shell__menu-item--danger" @click="deleteStageFromBoard(item)">
+                  Delete
+                </button>
+                <button type="button" class="stage-shell__menu-item" @click="renameStageFromBoard(item)">
+                  Edit Stage Name
+                </button>
+                <button type="button" class="stage-shell__menu-item" @click="openStageInWorkflow(item)">
+                  Show candidate stage
+                </button>
+              </div>
+            </div>
             <button
               type="button"
               class="stage-switch"
@@ -1231,10 +1390,6 @@ syncStageManagement(visibleStageRows.value)
               class="active-stage-card"
             >
               <div class="active-stage-card__head">
-                <div class="active-stage-card__identity">
-                  <span class="stage-shell__handle" aria-hidden="true"></span>
-                  <span class="active-stage-card__pill" :class="{ 'active-stage-card__pill--error': stageHasValidationError(item) }">{{ item.label }}</span>
-                </div>
                 <div class="active-stage-card__summary">
                   <span class="active-stage-card__meta">
                     {{ getStageScoreCards(item).length }} score cards, {{ getStageAssessments(item).length }} assessments, {{ getStageAutomatedActions(item).length }} actions
@@ -1410,7 +1565,7 @@ syncStageManagement(visibleStageRows.value)
         </div>
       </section>
 
-        <div class="job-stages-step__footer">
+        <div v-if="!props.isViewMode" class="job-stages-step__footer">
           <button
             type="button"
             class="job-stages-step__back"
@@ -1497,7 +1652,17 @@ syncStageManagement(visibleStageRows.value)
           <p v-if="scoreCardActionMessage" class="scorecard-api-feedback scorecard-api-feedback--success">{{ scoreCardActionMessage }}</p>
           <p v-if="scoreCardActionError" class="scorecard-api-feedback scorecard-api-feedback--error">{{ scoreCardActionError }}</p>
 
-          <button type="button" class="modal-primary" @click="openStageScoreCardBuilder(currentStageKey)">Create New Score Card</button>
+          <div class="modal-actions-row">
+            <button type="button" class="modal-secondary" @click="openStageScoreCardBuilder(currentStageKey)">Create New Score Card</button>
+            <button
+              type="button"
+              class="modal-primary"
+              :disabled="!selectedStageScoreCardCount"
+              @click="closeOverlayToBoard"
+            >
+              Done
+            </button>
+          </div>
         </template>
 
         <template v-else-if="screen >= 4 && screen <= 9">
@@ -1520,7 +1685,7 @@ syncStageManagement(visibleStageRows.value)
 
           <div v-if="screen === 4" class="modal-form modal-form--scorecard">
             <label>Pre-Saved Template</label>
-            <Dropdown model-value="" :options="['Please select', 'Manager interview template', 'Recruiter screening template']" placeholder="Please select" />
+            <Dropdown model-value="" :options="['Please select', 'Manager interview template', 'Recruiter screening template']" placeholder="Please select" menu-size="small" teleport />
 
             <label>Score Card Name</label>
             <input v-model="scoreCardDraft.name" type="text" />
@@ -1528,11 +1693,11 @@ syncStageManagement(visibleStageRows.value)
             <div class="modal-form__grid">
               <div>
                 <label>Job Title</label>
-                <Dropdown v-model="scoreCardDraft.jobTitle" :options="scoreCardJobTitleOptions" placeholder="Please select" />
+                <Dropdown v-model="scoreCardDraft.jobTitle" :options="scoreCardJobTitleOptions" placeholder="Please select" menu-size="small" teleport />
               </div>
               <div>
                 <label>Interviewer</label>
-                <Dropdown v-model="scoreCardDraft.interviewer" :options="scoreCardInterviewerOptions" placeholder="Please select" />
+                <Dropdown v-model="scoreCardDraft.interviewer" :options="scoreCardInterviewerOptions" placeholder="Please select" menu-size="small" teleport />
               </div>
             </div>
 
@@ -1577,6 +1742,8 @@ syncStageManagement(visibleStageRows.value)
               v-model="selectedCompetency"
               :options="['Please Select', 'Technical Skills', 'Experience', 'Problem-Solving Ability', 'Communication Skills']"
               placeholder="Please Select"
+              menu-size="small"
+              teleport
               @update:model-value="addSelectedCompetency"
             />
 
@@ -1605,7 +1772,7 @@ syncStageManagement(visibleStageRows.value)
 
           <div v-else-if="screen === 7" class="modal-form">
             <label>Please select</label>
-            <Dropdown model-value="" :options="['Please select', 'Figma', 'Adobe Illustrator', 'Presentation skills']" placeholder="Please select" />
+            <Dropdown model-value="" :options="['Please select', 'Figma', 'Adobe Illustrator', 'Presentation skills']" placeholder="Please select" menu-size="small" teleport />
 
             <div v-if="!manualSkillMode" class="skill-tag-grid">
               <span
@@ -1641,14 +1808,17 @@ syncStageManagement(visibleStageRows.value)
           <p v-if="scoreCardActionMessage" class="scorecard-api-feedback scorecard-api-feedback--success">{{ scoreCardActionMessage }}</p>
           <p v-if="scoreCardActionError" class="scorecard-api-feedback scorecard-api-feedback--error">{{ scoreCardActionError }}</p>
 
-          <button
-            type="button"
-            class="modal-primary"
-            :disabled="scoreCardSubmitting"
-            @click="handleScoreCardStep"
-          >
-            {{ screen === 9 ? (scoreCardSubmitting ? 'Saving...' : 'Finish and Save') : 'Next' }}
-          </button>
+          <div class="modal-actions-row">
+            <button type="button" class="modal-secondary" @click="handleScoreCardBack">Back</button>
+            <button
+              type="button"
+              class="modal-primary"
+              :disabled="scoreCardSubmitting"
+              @click="handleScoreCardStep"
+            >
+              {{ screen === 9 ? (scoreCardSubmitting ? 'Saving...' : 'Finish and Save') : 'Next' }}
+            </button>
+          </div>
         </template>
 
         <template v-else-if="screen === 10">
@@ -1762,10 +1932,10 @@ syncStageManagement(visibleStageRows.value)
             </p>
 
             <label>when moving a candidate to</label>
-            <Dropdown v-model="automatedActionDraft.condition" :options="automatedStageOptions" placeholder="Please select" />
+            <Dropdown v-model="automatedActionDraft.condition" :options="automatedStageOptions" placeholder="Please select" menu-size="small" teleport />
 
             <label>Do this action</label>
-            <Dropdown v-model="automatedActionDraft.primaryAction" :options="automatedPrimaryActionOptions" placeholder="Please select" />
+            <Dropdown v-model="automatedActionDraft.primaryAction" :options="automatedPrimaryActionOptions" placeholder="Please select" menu-size="small" teleport />
 
             <div class="modal-separator modal-separator--automated">Or</div>
             <button type="button" class="automated-add" @click="openNewAutomatedAction">
@@ -1808,7 +1978,7 @@ syncStageManagement(visibleStageRows.value)
               </div>
 
               <label>Recruiter</label>
-              <Dropdown v-model="automatedActionDraft.assignedRecruiter" :options="automatedAssignOptions" placeholder="Please select" />
+              <Dropdown v-model="automatedActionDraft.assignedRecruiter" :options="automatedAssignOptions" placeholder="Please select" menu-size="small" teleport />
 
               <label>Assign Message</label>
               <textarea v-model="automatedActionDraft.assignMessage" placeholder="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam eu turpis molestie, dictum est a, mattis tellus. Sed dignissim, metus nec fringilla accumsan, risus sem sollicitudin lacus"></textarea>
@@ -1882,15 +2052,21 @@ syncStageManagement(visibleStageRows.value)
   flex: 0 0 auto;
 }
 
+.job-stages-step__ghost:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
 .job-stages-step__canvas {
   position: relative;
 }
 
 .job-stages-step__workflow-shell {
-  padding: var(--surface-pad);
-  border: 1px solid #f1d8e3;
-  border-radius: var(--surface-radius-lg);
-  background: linear-gradient(180deg, #fff7fa 0%, #ffffff 100%);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .job-stages-step__canvas--dimmed .stage-shell,
@@ -1995,6 +2171,62 @@ syncStageManagement(visibleStageRows.value)
 
 .stage-shell__label--current {
   color: #ea4f8d;
+}
+
+.stage-shell__actions {
+  position: relative;
+  flex: 0 0 auto;
+  margin-right: 10px;
+}
+
+.stage-shell__menu-trigger {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff4f8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+
+.stage-shell__menu-trigger span {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: #ea4f8d;
+}
+
+.stage-shell__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 188px;
+  background: #ffffff;
+  border: 1px solid #eedfe6;
+  border-radius: 18px;
+  box-shadow: 0 18px 34px rgba(120, 84, 98, 0.18);
+  padding: 8px 0;
+  z-index: 12;
+}
+
+.stage-shell__menu-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 11px 16px;
+  color: #81586a;
+  font-size: 14px;
+}
+
+.stage-shell__menu-item:hover {
+  background: #fdf7fa;
+}
+
+.stage-shell__menu-item--danger {
+  color: #e24a87;
 }
 
 .stage-switch {
@@ -2551,11 +2783,41 @@ syncStageManagement(visibleStageRows.value)
   font-weight: 600;
 }
 
+.modal-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .job-stages-modal > .modal-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-top: 24px;
+}
+
+.modal-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+  width: 100%;
+}
+
+.modal-secondary {
+  min-width: 78px;
+  height: var(--ui-button-sm-height);
+  padding: 0 14px;
+  border: 1px solid #ecdde4;
+  border-radius: var(--ui-radius-sm);
+  background: #ffffff;
+  color: #9f9098;
+  font-size: var(--ui-small-font);
+  font-weight: 600;
+}
+
+.modal-actions-row .modal-primary {
+  margin-top: 0;
 }
 
 .modal-primary--small {
@@ -3005,6 +3267,13 @@ syncStageManagement(visibleStageRows.value)
   bottom: 18px;
 }
 
+.job-stages-modal--questions .modal-actions-row .modal-primary {
+  position: static;
+  left: auto;
+  bottom: auto;
+  margin-left: auto;
+}
+
 .modal-form--scorecard label {
   margin: 0 0 8px;
   font-size: 12px;
@@ -3064,6 +3333,25 @@ syncStageManagement(visibleStageRows.value)
   font-size: 12px;
 }
 
+.job-stages-modal--scorecard-compact .modal-form--scorecard :deep(.dropdown__value),
+.job-stages-modal--scorecard-compact .modal-form--scorecard :deep(.dropdown__option) {
+  font-size: 11px;
+}
+
+.job-stages-modal :deep(.dropdown__menu--small .dropdown__option) {
+  min-height: 32px;
+  font-size: 9px;
+}
+
+.job-stages-modal :deep(.dropdown__menu--small .dropdown__check) {
+  transform: scale(0.9);
+  transform-origin: center;
+}
+
+.job-stages-modal :deep(.dropdown__menu) {
+  z-index: 1200;
+}
+
 .job-stages-modal--scorecard-compact .modal-form--scorecard textarea {
   min-height: 110px;
 }
@@ -3076,6 +3364,26 @@ syncStageManagement(visibleStageRows.value)
 
 .modal-options--questions {
   margin-top: 10px;
+}
+
+.modal-options--questions .modal-option {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 5px;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.modal-options--questions .modal-option__check {
+  width: 18px;
+  height: 18px;
+}
+
+.modal-options--questions .modal-option__check::after {
+  left: 5px;
+  top: 3px;
+  width: 4px;
+  height: 7px;
 }
 
 .modal-empty {
@@ -3142,9 +3450,16 @@ syncStageManagement(visibleStageRows.value)
   color: #8f8189;
   display: grid;
   place-items: center;
+  color: transparent;
   font-size: 22px;
   line-height: 1;
   transform: translateY(-50%);
+}
+
+.question-pick__add::before {
+  content: '+';
+  color: #8f8189;
+  transform: translateY(-1.5px);
 }
 
 .modal-pills,
@@ -3208,14 +3523,14 @@ syncStageManagement(visibleStageRows.value)
 .automated-title {
   margin: 0 0 6px;
   color: #ea4f8d;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
 .automated-copy {
   margin: 0 0 14px;
   color: #c1b2ba;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.35;
 }
 
@@ -3234,12 +3549,12 @@ syncStageManagement(visibleStageRows.value)
   align-items: center;
   justify-content: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .automated-toggle-card {
   margin-top: 10px;
-  padding: 14px 14px 12px;
+  padding: 12px 12px 10px;
   border: 1px solid #f1e6ea;
   border-radius: 10px;
   background: #fffdfd;
@@ -3255,7 +3570,29 @@ syncStageManagement(visibleStageRows.value)
   justify-content: space-between;
   gap: 12px;
   color: #8a7881;
-  font-size: 12px;
+  font-size: 11px;
+}
+
+.modal-form--automated label,
+.modal-form--automated-form label {
+  font-size: 10px;
+}
+
+.modal-form--automated :deep(.dropdown__trigger),
+.modal-form--automated-form :deep(.dropdown__trigger) {
+  min-height: 38px;
+  font-size: 11px;
+}
+
+.modal-form--automated :deep(.dropdown__value),
+.modal-form--automated-form :deep(.dropdown__value) {
+  font-size: 10px;
+}
+
+.job-stages-modal--automated-manage :deep(.dropdown__menu--small .dropdown__option),
+.job-stages-modal--automated-form :deep(.dropdown__menu--small .dropdown__option) {
+  min-height: 30px;
+  font-size: 9px;
 }
 
 

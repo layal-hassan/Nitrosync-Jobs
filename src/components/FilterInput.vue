@@ -1,9 +1,10 @@
 <script setup>
+import { computed, ref } from 'vue'
 import Dropdown from './ui/Dropdown.vue'
 
 const model = defineModel()
 
-defineProps({
+const props = defineProps({
   label: {
     type: String,
     required: true,
@@ -17,6 +18,24 @@ defineProps({
     default: () => [],
   },
 })
+
+const placeholder = props.type === 'date' ? 'MM/DD/YYYY' : props.label
+const dateInputMode = ref(Boolean(model.value) ? 'date' : 'text')
+const resolvedInputType = computed(() =>
+  props.type === 'date' ? dateInputMode.value : props.type,
+)
+
+const handleDateFocus = () => {
+  if (props.type !== 'date') return
+  dateInputMode.value = 'date'
+}
+
+const handleDateBlur = () => {
+  if (props.type !== 'date') return
+  if (!model.value) {
+    dateInputMode.value = 'text'
+  }
+}
 </script>
 
 <template>
@@ -25,15 +44,17 @@ defineProps({
     v-model="model"
     :label="label"
     :options="options"
-    :placeholder="label"
+    :placeholder="placeholder"
   />
 
   <label v-else class="filter-input">
     <input
       v-model="model"
-      :type="type"
-      :placeholder="label"
+      :type="resolvedInputType"
+      :placeholder="placeholder"
       class="filter-input__control"
+      @focus="handleDateFocus"
+      @blur="handleDateBlur"
     />
 
     <span

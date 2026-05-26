@@ -35,7 +35,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page-container">
+  <div class="page-container jobs-page-container">
     <div class="breadcrumb-row">
       <span class="crumb-home"></span>
       <span class="breadcrumb-sep"></span>

@@ -10,7 +10,7 @@ export const fallbackEmployees = [
     id: 'emp-1',
     name: 'Ellie Romi',
     role: 'Financial Manager',
-    status: 'Active',
+    status: 'Verified',
     email: 'elieromie@gmail.com',
     phone: '+963223454673',
     address: '2030 Romani St.',
@@ -24,7 +24,7 @@ export const fallbackEmployees = [
     id: 'emp-2',
     name: 'Nancy Karam',
     role: 'HR Manager',
-    status: 'Deactivated',
+    status: 'LoggedOut',
     email: 'nkaram@nitrosync.com',
     phone: '+963223454674',
     address: '2030 Romani St.',
@@ -38,7 +38,7 @@ export const fallbackEmployees = [
     id: 'emp-3',
     name: 'Mohamad Sami',
     role: 'Financial Manager',
-    status: 'Active',
+    status: 'LoggedIn',
     email: 'msami@nitrosync.com',
     phone: '+963223454675',
     address: '2030 Port',
@@ -52,7 +52,7 @@ export const fallbackEmployees = [
     id: 'emp-4',
     name: 'Michael Augo',
     role: 'Financial Manager',
-    status: 'Active',
+    status: 'Verified',
     email: 'maugo@nitrosync.com',
     phone: '+963223454676',
     address: '2030 Romani St.',
@@ -66,7 +66,7 @@ export const fallbackEmployees = [
     id: 'emp-5',
     name: 'Rami Bshara',
     role: 'Financial Manager',
-    status: 'Active',
+    status: 'Verified',
     email: 'rbshara@nitrosync.com',
     phone: '+963223454677',
     address: '2030 Romani St.',
@@ -80,7 +80,7 @@ export const fallbackEmployees = [
     id: 'emp-6',
     name: 'Ellie Romi',
     role: 'Financial Manager',
-    status: 'Active',
+    status: 'LoggedIn',
     email: 'elieromie@gmail.com',
     phone: '+963223454673',
     address: '2030 Romani St.',
@@ -94,7 +94,7 @@ export const fallbackEmployees = [
     id: 'emp-7',
     name: 'Ellie Romi',
     role: 'Financial Manager',
-    status: 'Deactivated',
+    status: 'UnVerified',
     email: 'elieromie@gmail.com',
     phone: '+963223454673',
     address: '2030 Romani St.',
@@ -108,7 +108,7 @@ export const fallbackEmployees = [
     id: 'emp-8',
     name: 'Ellie Romi',
     role: 'Financial Manager',
-    status: 'Active',
+    status: 'Verified',
     email: 'elieromie@gmail.com',
     phone: '+963223454673',
     address: '2030 Romani St.',
@@ -166,11 +166,13 @@ const normalizeEmploymentStatus = (employee = {}) => {
   for (const rawStatus of rawCandidates) {
     const lowered = rawStatus.toLowerCase()
 
-    if (['1', 'true', 'yes', 'active', 'enabled'].includes(lowered)) return 'Active'
-    if (['0', 'false', 'no', 'inactive', 'disabled', 'deactivated'].includes(lowered)) return 'Deactivated'
+    if (['1', 'loggedout', 'logged_out', 'logged out'].includes(lowered)) return 'LoggedOut'
+    if (['2', 'verified'].includes(lowered)) return 'Verified'
+    if (['3', 'loggedin', 'logged_in', 'logged in'].includes(lowered)) return 'LoggedIn'
+    if (['4', 'unverified', 'un_verified', 'un verified'].includes(lowered)) return 'UnVerified'
   }
 
-  return 'Active'
+  return 'Verified'
 }
 
 const buildEmployeeAddress = (employee = {}, baseEmployee = {}) => {
@@ -309,7 +311,7 @@ export const normalizeEmployee = (employee = {}, index = 0) => {
     avatarBg: baseEmployee.avatarBg,
     avatarAccent: baseEmployee.avatarAccent,
     avatarText: buildInitials(name),
-    online: status === 'Active',
+    online: status === 'LoggedIn',
     hireDate: normalizeLabel(
       employee?.hire_date
       ?? employee?.hireDate

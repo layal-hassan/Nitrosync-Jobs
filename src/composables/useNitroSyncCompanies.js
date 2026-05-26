@@ -4,7 +4,7 @@ import {
   nitroSyncRequestTimeoutMs,
 } from './nitroSyncApi'
 
-const getOneCompanyEndpoint = buildNitroSyncEndpoint('/v1/companies/getOne')
+const getOneCompanyEndpoint = buildNitroSyncEndpoint('/v1/companies/get-one')
 
 const normalizeCompanyName = (payload = {}) =>
   String(

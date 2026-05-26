@@ -1,6 +1,7 @@
 <script setup>
 import axios from 'axios'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ChevronDown } from 'lucide-vue-next'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import stageNotebookImage from '../../assets/jobPosting/stage-notebook.png'
 import hiredConfettiImage from '../../assets/jobPosting/hired-confetti.png'
 import hiredFigureImage from '../../assets/jobPosting/hired-figure.png'
@@ -36,6 +37,10 @@ const props = defineProps({
   stageRows: {
     type: Array,
     default: () => [],
+  },
+  targetedStage: {
+    type: String,
+    default: '',
   },
 })
 const emit = defineEmits(['stage-rows-updated'])
@@ -194,13 +199,14 @@ const listedTests = [
 ]
 
 const statusOptions = [
-  { label: 'Published', color: '#4f7dff' },
-  { label: 'Archived', color: '#6b21d8' },
-  { label: 'Closed', color: '#f4b21b' },
-  { label: 'Un-Published', color: '#41c86a' },
+  { label: 'published', color: '#4f7dff' },
+  { label: 'active', color: '#6b21d8' },
+  { label: 'closed', color: '#f4b21b' },
+  { label: 'un-published', color: '#41c86a' },
 ]
 
 const selectedStatus = ref(statusOptions[0])
+const stageSearchQuery = ref('')
 
 const candidateMenuItems = [
   'Send welcome email',
@@ -228,12 +234,6 @@ const candidateMenuItems = [
 
 const fallbackStageColumns = [
   {
-    title: 'new',
-    isOpen: false,
-    color: '#e94b8a',
-    cards: [],
-  },
-  {
     title: 'screen',
     isOpen: false,
     color: '#4f7dff',
@@ -252,20 +252,139 @@ const fallbackStageColumns = [
     cards: [],
   },
   {
-    title: 'shortlisted',
+    title: 'hired',
     isOpen: false,
     color: '#41c86a',
     cards: [],
   },
-  {
-    title: 'hired',
-    isOpen: false,
-    color: '#e94b8a',
-    cards: [],
-  },
 ]
 
-const stagePalette = ['#e94b8a', '#4f7dff', '#6b21d8', '#f4b21b', '#41c86a', '#ff8a4f']
+const stagePalette = ['#4f7dff', '#6b21d8', '#f4b21b', '#41c86a', '#ff8a4f']
+const stageCardsPerPage = 5
+const normalizeStageName = (value) => String(value || '').trim().toLowerCase()
+const formatStagePageNumber = (value) => String(Math.max(1, Number(value) || 1)).padStart(2, '0')
+const getStageColumnKey = (column) =>
+  String(column?.jobStageUuid || column?.displayTitle || column?.title || '').trim().toLowerCase()
+const stagePageByKey = ref({})
+const stagePreviewSeed = [
+  { name: 'Robert Fox', role: '4 stars', email: createCandidateEmail('Robert Fox') },
+  { name: 'Devon Lane', role: '4 stars', email: createCandidateEmail('Devon Lane') },
+  { name: 'Kristin Watson', role: '4 stars', email: createCandidateEmail('Kristin Watson') },
+  { name: 'Arlene McCoy', role: '4 stars', email: createCandidateEmail('Arlene McCoy') },
+  { name: 'Bessie Cooper', role: '4 stars', email: createCandidateEmail('Bessie Cooper') },
+]
+const candidateAccentByName = {
+  'robert fox': '#ff5b94',
+  'devon lane': '#4f7dff',
+  'kristin watson': '#7a33e8',
+  'arlene mccoy': '#f0aa20',
+  'bessie cooper': '#37cb67',
+}
+
+const syncStagePaginationState = (columns = stageColumns.value) => {
+  const nextPages = {}
+
+  columns.forEach((column) => {
+    const key = getStageColumnKey(column)
+    if (!key) return
+
+    const pageCount = Math.max(1, Math.ceil((Array.isArray(column.cards) ? column.cards.length : 0) / stageCardsPerPage))
+    const savedPage = Number(stagePageByKey.value[key]) || 1
+    nextPages[key] = Math.min(Math.max(savedPage, 1), pageCount)
+  })
+
+  stagePageByKey.value = nextPages
+}
+
+const getStagePageCount = (column) =>
+  Math.max(1, Math.ceil((Array.isArray(column?.cards) ? column.cards.length : 0) / stageCardsPerPage))
+
+const getStageCurrentPage = (column) => {
+  const key = getStageColumnKey(column)
+  const pageCount = getStagePageCount(column)
+  const currentPage = Number(stagePageByKey.value[key]) || 1
+  return Math.min(Math.max(currentPage, 1), pageCount)
+}
+
+const getVisibleStageCards = (column) => {
+  const currentPage = getStageCurrentPage(column)
+  const startIndex = (currentPage - 1) * stageCardsPerPage
+  return (Array.isArray(column?.cards) ? column.cards : []).slice(startIndex, startIndex + stageCardsPerPage)
+}
+
+const getStageCardsForDisplay = (column) => {
+  const visibleCards = getVisibleStageCards(column)
+  return visibleCards.length ? visibleCards : stagePreviewSeed
+}
+
+const getCandidateInitials = (value) =>
+  String(value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((chunk) => chunk[0]?.toUpperCase() || '')
+    .join('')
+
+const getCandidateAccentColor = (card, index) => {
+  const normalizedName = normalizeStageName(card?.name)
+  if (candidateAccentByName[normalizedName]) return candidateAccentByName[normalizedName]
+
+  const fallbackPalette = ['#ff5b94', '#4f7dff', '#7a33e8', '#f0aa20', '#37cb67']
+  const source = String(card?.candidate_uuid || card?.email || card?.name || index)
+  let total = 0
+  for (let cursor = 0; cursor < source.length; cursor += 1) total += source.charCodeAt(cursor)
+  return fallbackPalette[total % fallbackPalette.length]
+}
+
+const getCandidateSecondaryText = (card) => {
+  const role = String(card?.role || '').trim()
+  if (role) return role
+
+  const email = String(card?.email || '').trim()
+  if (!email) return 'candidate'
+
+  return email.split('@')[0].replace(/\./g, ' ')
+}
+
+const setStagePage = (column, nextPage) => {
+  const key = getStageColumnKey(column)
+  if (!key) return
+
+  const pageCount = getStagePageCount(column)
+  stagePageByKey.value = {
+    ...stagePageByKey.value,
+    [key]: Math.min(Math.max(Number(nextPage) || 1, 1), pageCount),
+  }
+}
+
+const goToPreviousStagePage = (column) => {
+  setStagePage(column, getStageCurrentPage(column) - 1)
+}
+
+const goToNextStagePage = (column) => {
+  setStagePage(column, getStageCurrentPage(column) + 1)
+}
+
+const focusTargetedStage = async () => {
+  const target = normalizeStageName(props.targetedStage)
+  if (!target || !Array.isArray(stageColumns.value) || !stageColumns.value.length) return
+
+  const hasMatch = stageColumns.value.some((column) =>
+    normalizeStageName(column.displayTitle || column.title) === target,
+  )
+  if (!hasMatch) return
+
+  stageColumns.value = stageColumns.value.map((column) => ({
+    ...column,
+    isOpen: normalizeStageName(column.displayTitle || column.title) === target,
+  }))
+
+  await nextTick()
+  document
+    .querySelector(`[data-workflow-stage="${target}"]`)
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 const mapStageRowsToColumns = (rows = []) => {
   if (!Array.isArray(rows) || !rows.length) {
@@ -276,13 +395,29 @@ const mapStageRowsToColumns = (rows = []) => {
     title: String(row.label || `Stage ${index + 1}`).toLowerCase(),
     displayTitle: String(row.label || `Stage ${index + 1}`),
     jobStageUuid: row.jobStageUuid || '',
-    isOpen: row.enabled ?? false,
+    isOpen: typeof row.isOpen === 'boolean' ? row.isOpen : row.enabled ?? false,
     color: stagePalette[index % stagePalette.length],
     cards: Array.isArray(row.cards) ? row.cards : [],
   }))
 }
 
 const stageColumns = ref(mapStageRowsToColumns(props.stageRows))
+syncStagePaginationState(stageColumns.value)
+const filteredStageColumns = computed(() => {
+  const query = normalizeStageName(stageSearchQuery.value)
+  if (!query) return stageColumns.value
+
+  return stageColumns.value.filter((column) => {
+    const title = normalizeStageName(column.displayTitle || column.title)
+    const cards = getStageCardsForDisplay(column)
+    return (
+      title.includes(query)
+      || cards.some((card) =>
+        normalizeStageName(card?.name).includes(query) || normalizeStageName(card?.role).includes(query),
+      )
+    )
+  })
+})
 
 const fetchWorkflowJobTitles = async () => {
   try {
@@ -386,19 +521,25 @@ const fetchWorkflowStages = async () => {
       )
 
       stageColumns.value = mapStageRowsToColumns(hydratedRows)
+      syncStagePaginationState(stageColumns.value)
       emit('stage-rows-updated', hydratedRows)
+      await focusTargetedStage()
       return
     }
 
     if (!stageColumns.value.length) {
       stageColumns.value = [...fallbackStageColumns]
+      syncStagePaginationState(stageColumns.value)
     }
+    await focusTargetedStage()
   } catch (error) {
     console.error('Failed to fetch workflow stages', error)
     if (!stageColumns.value.length) {
       stageColumns.value = [...fallbackStageColumns]
+      syncStagePaginationState(stageColumns.value)
       stageActionError.value = getNitroSyncErrorMessage(error, 'Could not load workflow stages.')
     }
+    await focusTargetedStage()
   } finally {
     stageActionLoading.value = false
   }
@@ -445,7 +586,15 @@ const addAnotherStage = () => {
 }
 
 const toggleStage = (column) => {
-  column.isOpen = !column.isOpen
+  const targetKey = getStageColumnKey(column)
+  stageColumns.value = stageColumns.value.map((item) =>
+    getStageColumnKey(item) === targetKey
+      ? {
+          ...item,
+          isOpen: !item.isOpen,
+        }
+      : item,
+  )
   emitCurrentStages()
 }
 
@@ -1350,6 +1499,8 @@ onMounted(() => {
   fetchWorkflowJobTitles()
   if (Array.isArray(props.stageRows) && props.stageRows.length) {
     stageColumns.value = mapStageRowsToColumns(props.stageRows)
+    syncStagePaginationState(stageColumns.value)
+    focusTargetedStage()
   }
   fetchWorkflowStages()
   document.addEventListener('click', handleDocumentClick)
@@ -1364,9 +1515,18 @@ watch(
   (rows) => {
     if (Array.isArray(rows) && rows.length) {
       stageColumns.value = mapStageRowsToColumns(rows)
+      syncStagePaginationState(stageColumns.value)
+      focusTargetedStage()
     }
   },
   { deep: true },
+)
+
+watch(
+  () => props.targetedStage,
+  () => {
+    focusTargetedStage()
+  },
 )
 
 watch(
@@ -1412,10 +1572,15 @@ watch(
       </div>
 
       <div class="workflow-toolbar__right">
-        <button type="button" class="workflow-toolbar__search">
+        <label class="workflow-toolbar__search">
           <span class="workflow-toolbar__search-icon"></span>
-          <span>Search</span>
-        </button>
+          <input
+            v-model.trim="stageSearchQuery"
+            type="search"
+            placeholder="Search"
+            aria-label="Search stages"
+          />
+        </label>
 
         <div class="workflow-toolbar__status-wrap">
           <button type="button" class="workflow-toolbar__status" @click.stop="toggleStatusMenu">
@@ -1450,14 +1615,16 @@ watch(
       </div>
     </div>
 
+    <div class="workflow-board">
     <p v-if="stageActionMessage" class="workflow-stage-feedback workflow-stage-feedback--success">{{ stageActionMessage }}</p>
     <p v-if="stageActionError" class="workflow-stage-feedback workflow-stage-feedback--error">{{ stageActionError }}</p>
 
     <div
-      v-for="column in stageColumns"
+      v-for="column in filteredStageColumns"
       :key="column.jobStageUuid || column.title"
       class="workflow-stage"
       :class="{ 'workflow-stage--collapsed': !column.isOpen }"
+      :data-workflow-stage="normalizeStageName(column.displayTitle || column.title)"
     >
       <div class="workflow-stage__header">
         <div class="workflow-stage__title-wrap">
@@ -1494,22 +1661,28 @@ watch(
           type="button"
           class="workflow-stage__action"
           :class="{ 'workflow-stage__action--collapsed': !column.isOpen }"
+          :aria-label="column.isOpen ? `Collapse ${column.displayTitle || column.title}` : `Expand ${column.displayTitle || column.title}`"
           @click="toggleStage(column)"
         >
-          ⌃
+          <ChevronDown class="workflow-stage__action-icon" />
         </button>
       </div>
 
       <div v-if="column.isOpen" class="workflow-stage__lane">
         <article
-          v-for="(card, index) in column.cards"
+          v-for="(card, index) in getStageCardsForDisplay(column)"
           :key="`${column.title}-${card.name}-${index}`"
           class="workflow-card"
         >
-          <span class="workflow-card__avatar"></span>
+          <span
+            class="workflow-card__avatar"
+            :style="{ '--candidate-accent': getCandidateAccentColor(card, index) }"
+          >
+            {{ getCandidateInitials(card.name) }}
+          </span>
           <div class="workflow-card__body">
-            <strong>{{ card.name }}</strong>
-            <span>{{ card.role }}</span>
+            <strong :style="{ color: getCandidateAccentColor(card, index) }">{{ card.name }}</strong>
+            <span>{{ getCandidateSecondaryText(card) }}</span>
           </div>
           <div class="workflow-card__menu-wrap">
             <button
@@ -1543,24 +1716,33 @@ watch(
             </div>
           </div>
         </article>
-
-        <div v-if="!column.cards.length" class="workflow-stage__empty">
-          No candidates loaded for this stage.
-        </div>
       </div>
 
-      <div v-if="column.isOpen && column.cards.length" class="workflow-stage__footer">
-        <span class="workflow-stage__footer-text">VIEW 01 of 03</span>
+      <div v-if="column.isOpen" class="workflow-stage__footer">
+        <span class="workflow-stage__footer-text">
+          View {{ formatStagePageNumber(getStageCurrentPage(column)) }} of {{ formatStagePageNumber(getStagePageCount(column)) }}
+        </span>
         <div class="workflow-stage__pagination" aria-label="Stage pagination">
-          <button type="button" class="workflow-stage__page-arrow workflow-stage__page-arrow--prev">
+          <button
+            type="button"
+            class="workflow-stage__page-arrow workflow-stage__page-arrow--prev"
+            :disabled="getStageCurrentPage(column) === 1"
+            @click="goToPreviousStagePage(column)"
+          >
             ‹
           </button>
           <span class="workflow-stage__page-dot"></span>
-          <button type="button" class="workflow-stage__page-arrow workflow-stage__page-arrow--next">
+          <button
+            type="button"
+            class="workflow-stage__page-arrow workflow-stage__page-arrow--next"
+            :disabled="getStageCurrentPage(column) === getStagePageCount(column)"
+            @click="goToNextStagePage(column)"
+          >
             ›
           </button>
         </div>
       </div>
+    </div>
     </div>
 
     <div v-if="showAddStageModal" class="workflow-modal-overlay">
@@ -2488,26 +2670,42 @@ watch(
 <style scoped>
 .job-stages-workflow {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .workflow-toolbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
+  padding: 0 2px;
+  margin-bottom: 6px;
+  position: relative;
+  z-index: 6;
+}
+
+.workflow-board {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 18px;
+  border: 1px solid #ece7ea;
+  border-radius: 24px;
+  background: #faf9fa;
 }
 
 .workflow-toolbar__left {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .workflow-toolbar__title {
-  font-size: 15px;
-  font-weight: 500;
-  color: #2f252b;
+  font-size: 12px;
+  font-weight: 600;
+  color: #524851;
+  text-transform: lowercase;
 }
 
 .workflow-toolbar__tags {
@@ -2517,24 +2715,24 @@ watch(
 }
 
 .workflow-toolbar__tag {
-  min-height: 26px;
-  padding: 0 10px;
-  border-radius: 4px;
-  border: 1px solid #f0dde5;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid #e8e3e7;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--muted-strong);
-  font-size: var(--ui-meta-font);
+  color: #767078;
+  font-size: 11px;
   white-space: nowrap;
 }
 
 .workflow-toolbar__tag--root {
-  background: #fff;
+  background: #f4f1f3;
 }
 
 .workflow-toolbar__tag--child {
-  background: #f8eef2;
+  background: #f1eef0;
 }
 
 .workflow-toolbar__tag-children {
@@ -2543,23 +2741,24 @@ watch(
   left: calc(100% + 4px);
   display: grid;
   gap: 4px;
+  z-index: 25;
 }
 
 .workflow-toolbar__tag-empty {
   padding: 8px 10px;
-  border: 1px solid #f0dfe6;
+  border: 1px solid #e7e2e6;
   border-radius: 10px;
   background: #fff;
-  color: #9f8d95;
+  color: #8d8790;
   font-size: 11px;
   white-space: nowrap;
 }
 
 .workflow-toolbar__tag-icon {
-  width: 7px;
-  height: 7px;
-  border-radius: 1px;
-  background: #2b2327;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #ef5a93;
   flex: 0 0 auto;
 }
 
@@ -2586,7 +2785,8 @@ watch(
 .workflow-toolbar__right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  margin-left: auto;
 }
 
 .workflow-toolbar__status-wrap {
@@ -2595,29 +2795,63 @@ watch(
 
 .workflow-toolbar__search,
 .workflow-toolbar__status {
-  min-width: 96px;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid #f0e3e8;
-  border-radius: 6px;
-  background: #fff;
+  min-width: 110px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #e7e3e7;
+  border-radius: 8px;
+  background: #ffffff;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: var(--hint);
-  font-size: var(--ui-meta-font);
+  color: #98919a;
+  font-size: 11px;
+  box-shadow: none;
 }
 
 .workflow-toolbar__search {
-  min-width: 148px;
+  min-width: 188px;
   justify-content: flex-start;
+  cursor: text;
+  padding: 0 12px;
+}
+
+.workflow-toolbar__search input {
+  display: block;
+  height: 100% !important;
+  width: 100%;
+  min-width: 0;
+  min-height: 0 !important;
+  margin: 0;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent;
+  box-shadow: none !important;
+  color: #84757e;
+  font-size: 11px;
+  line-height: 1 !important;
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  transform: none !important;
+}
+
+.workflow-toolbar__search input:focus {
+  outline: none;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.workflow-toolbar__search input::placeholder {
+  color: #a9a1a9;
 }
 
 .workflow-toolbar__search-icon {
-  width: 11px;
-  height: 11px;
-  border: 1.5px solid #dbc8d2;
+  width: 10px;
+  height: 10px;
+  border: 1.4px solid #d2ccd2;
   border-radius: 50%;
   position: relative;
   flex: 0 0 auto;
@@ -2631,15 +2865,15 @@ watch(
   width: 5px;
   height: 1.5px;
   border-radius: 999px;
-  background: #dbc8d2;
+  background: #d2ccd2;
   transform: rotate(45deg);
   transform-origin: center;
 }
 
 .workflow-toolbar__status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
   flex: 0 0 auto;
 }
 
@@ -2671,10 +2905,10 @@ watch(
   width: 100%;
   min-width: 118px;
   padding: 4px 0;
-  border: 1px solid #efe3e8;
+  border: 1px solid #e8e3e7;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 12px 28px rgba(38, 27, 35, 0.12);
+  box-shadow: 0 10px 24px rgba(38, 27, 35, 0.08);
   z-index: 20;
 }
 
@@ -2692,30 +2926,34 @@ watch(
 }
 
 .workflow-toolbar__status-option:hover {
-  background: #fbf7f9;
+  background: #f6f4f6;
 }
 
 .workflow-toolbar__add {
-  min-width: 116px;
-  height: 32px;
+  min-width: 98px;
+  height: 30px;
   padding: 0 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   background: #ea4f8d;
   color: #fff;
-  font-size: var(--ui-meta-font);
+  font-size: 11px;
   font-weight: 600;
+  box-shadow: 0 10px 18px rgba(234, 79, 141, 0.18);
 }
 
 .workflow-stage {
-  border-bottom: 1px solid #f1e6ea;
-  padding-bottom: 14px;
+  padding: 12px 14px 12px;
+  border: 1px solid #ece8eb;
+  border-radius: 18px;
+  background: #f7f6f7;
+  box-shadow: none;
 }
 
 .workflow-stage__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 18px;
 }
 
 .workflow-stage__title-wrap {
@@ -2723,13 +2961,14 @@ watch(
 }
 
 .workflow-stage__title-button {
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 500;
-  text-transform: lowercase;
+  text-transform: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   line-height: 1.1;
+  color: #69636a !important;
 }
 
 .workflow-stage__menu {
@@ -2801,81 +3040,69 @@ watch(
 }
 
 .workflow-stage__dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
   flex: 0 0 auto;
 }
 
 .workflow-stage__action {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
-  background: #fff3f7;
-  border: 1px solid #f8d6e4;
-  color: #e97aa9;
-  font-size: 0;
-  line-height: 0;
-  font-weight: 700;
+  background: #fbf1f6;
+  border: 1px solid #f2dbe6;
+  color: #ef8cb2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.18s ease, background-color 0.18s ease;
-  box-shadow: 0 2px 6px rgba(235, 107, 159, 0.08);
+  flex: 0 0 auto;
+  transition: transform 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+  box-shadow: 0 2px 8px rgba(235, 107, 159, 0.1);
 }
 
-.workflow-stage__action::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 1.8px solid currentColor;
-  border-bottom: 1.8px solid currentColor;
-  transform: rotate(45deg) translateY(-1px);
+.workflow-stage__action-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.2;
 }
 
 .workflow-stage__action--collapsed {
-  transform: rotate(180deg);
+  transform: rotate(-180deg);
 }
 
 .workflow-stage__lane {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.workflow-stage__empty {
-  grid-column: 1 / -1;
-  min-height: 64px;
-  padding: 18px 16px;
-  border: 1px dashed #efd7e2;
-  border-radius: 10px;
-  background: #fff;
-  color: var(--hint);
-  font-size: var(--ui-small-font);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
+  grid-template-columns: repeat(5, minmax(168px, 1fr));
+  gap: 16px;
 }
 
 .workflow-card {
-  min-height: 46px;
-  padding: 8px 10px;
-  border: 1px solid #f2e6eb;
-  border-radius: 6px;
-  background: #fff;
+  min-height: 50px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid #ebe7ea;
+  border-radius: 5px;
+  background: #ffffff;
   display: grid;
-  grid-template-columns: 22px 1fr 16px;
+  grid-template-columns: 30px minmax(0, 1fr) 16px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   position: relative;
+  box-shadow: none;
 }
 
 .workflow-card__avatar {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #f2b364, #e45893);
+  background: color-mix(in srgb, var(--candidate-accent) 18%, white);
+  border: 1px solid color-mix(in srgb, var(--candidate-accent) 26%, white);
+  color: var(--candidate-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .workflow-card__body {
@@ -2891,14 +3118,15 @@ watch(
 }
 
 .workflow-card__body strong {
-  font-size: var(--ui-meta-font);
+  font-size: 11px;
   font-weight: 600;
-  color: #58434d;
 }
 
 .workflow-card__body span {
-  font-size: var(--ui-tiny-font);
-  color: var(--hint-soft);
+  margin-top: 1px;
+  font-size: 10px;
+  color: #b8b1b7;
+  text-transform: none;
 }
 
 .workflow-card__menu-wrap {
@@ -2906,7 +3134,7 @@ watch(
 }
 
 .workflow-card__more {
-  color: var(--hint-soft);
+  color: #d3cdd2;
   font-size: 16px;
   line-height: 1;
 }
@@ -2951,7 +3179,7 @@ watch(
 }
 
 .workflow-stage__footer {
-  margin-top: 10px;
+  margin-top: 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2959,23 +3187,25 @@ watch(
 }
 
 .workflow-stage__footer-text {
-  font-size: var(--ui-meta-font);
-  color: var(--hint);
+  font-size: 13px;
+  color: #585259;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .workflow-stage__pagination {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   margin-left: auto;
 }
 
 .workflow-stage__page-arrow {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
-  background: #fff7fa;
-  color: #f0d4df;
+  background: transparent;
+  color: #f0d2dd;
   font-size: 0;
   line-height: 0;
   display: inline-flex;
@@ -2983,12 +3213,17 @@ watch(
   justify-content: center;
 }
 
+.workflow-stage__page-arrow:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .workflow-stage__page-arrow::before {
   content: "";
-  width: 6px;
-  height: 6px;
-  border-top: 1.8px solid currentColor;
-  border-right: 1.8px solid currentColor;
+  width: 5px;
+  height: 5px;
+  border-top: 1.4px solid currentColor;
+  border-right: 1.4px solid currentColor;
 }
 
 .workflow-stage__page-arrow--prev::before {
@@ -3000,14 +3235,14 @@ watch(
 }
 
 .workflow-stage__page-arrow--next {
-  color: #ea4f8d;
+  color: #f45b98;
 }
 
 .workflow-stage__page-dot {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: #ea4f8d;
+  background: #f05994;
 }
 
 .workflow-modal-overlay {
@@ -5145,6 +5380,41 @@ watch(
   font-size: 20px;
 }
 
+.workflow-modal .workflow-modal__close {
+  position: absolute;
+  top: 14px !important;
+  right: 14px !important;
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 999px !important;
+  background: #ea4e91 !important;
+  border: none !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  box-shadow: 0 8px 18px rgba(234, 78, 145, 0.18) !important;
+}
+
+.workflow-modal .workflow-modal__close::before,
+.workflow-modal .workflow-modal__close::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 10px !important;
+  left: 5px !important;
+  width: 12px !important;
+  height: 1.8px !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+}
+
+.workflow-modal .workflow-modal__close::before {
+  transform: rotate(45deg) !important;
+}
+
+.workflow-modal .workflow-modal__close::after {
+  transform: rotate(-45deg) !important;
+}
+
 .workflow-hired-success__confetti {
   display: block;
   width: calc(100% + 36px);
@@ -5190,5 +5460,52 @@ watch(
   color: #fff;
   font-size: 14px;
   font-weight: 500;
+}
+
+@media (max-width: 960px) {
+  .workflow-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workflow-toolbar__right {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .workflow-stage__lane {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .workflow-toolbar__right {
+    justify-content: stretch;
+  }
+
+  .workflow-toolbar__search,
+  .workflow-toolbar__status,
+  .workflow-toolbar__add {
+    width: 100%;
+  }
+
+  .workflow-stage {
+    padding: 12px;
+  }
+
+  .workflow-stage__lane {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .workflow-stage__lane {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-stage__footer {
+    flex-wrap: wrap;
+  }
 }
 </style>

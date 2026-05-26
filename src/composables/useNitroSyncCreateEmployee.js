@@ -171,7 +171,6 @@ export const buildCreateEmployeeFormData = (payload = {}, options = {}) => {
   if (!openAccess) {
     appendOptionalValue(formData, 'assign_access_level', accessLevel)
   }
-  appendOptionalValue(formData, 'password', payload.password)
 
   appendFiles(formData, 'files[]', payload.attachments)
   appendFiles(formData, 'non_disclosure_agreements[]', payload.ndaFiles)

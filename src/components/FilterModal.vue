@@ -12,46 +12,44 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  fieldOptions: {
+    type: Object,
+    default: () => ({}),
+  },
+  positionOptions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['close', 'update:filters', 'apply'])
 
-const filterFields = [
+const filterFields = computed(() => [
   {
     key: 'job_title',
-    label: 'Job Tittle',
+    label: 'Job title',
     type: 'select',
-    options: ['Site Engineer', 'Project Manager', 'Architect', 'Civil Engineer'],
+    options: props.fieldOptions.job_title || [],
   },
   { key: 'address', label: 'Address', type: 'text' },
   {
     key: 'country',
-    label: 'country',
+    label: 'Country',
     type: 'select',
-    options: ['Jordan', 'Saudi Arabia', 'UAE', 'Qatar'],
+    options: props.fieldOptions.country || [],
   },
   { key: 'job_id', label: 'Job ID', type: 'text' },
   {
     key: 'hiring_stage',
-    label: 'Hiring Stage',
+    label: 'Hiring stage',
     type: 'select',
-    options: ['Draft', 'Published', 'Screening', 'Interview', 'Closed'],
+    options: props.fieldOptions.hiring_stage || [],
   },
-  { key: 'rating', label: 'Raiting', type: 'select', options: ['1', '2', '3', '4', '5'] },
-  { key: 'created_date', label: 'Create Date', type: 'date' },
-  { key: 'recruiter', label: 'RECRUITER', type: 'text' },
+  { key: 'rating', label: 'Rating', type: 'text' },
+  { key: 'created_date', label: 'Create date', type: 'date' },
+  { key: 'recruiter', label: 'Recruiter', type: 'text' },
   { key: 'tags_text', label: 'Tags', type: 'text' },
-]
-
-const positionOptions = [
-  { label: 'Site engineer' },
-  { label: 'Project Manager' },
-  { label: 'Architect' },
-  { label: 'Structural Engineer' },
-  { label: 'Draftsman' },
-  { label: 'Senior Engineer' },
-  { label: 'Civil Engineer' },
-]
+])
 
 const createLocalFilters = (source = {}) => ({
   job_title: source.job_title ?? '',
@@ -158,10 +156,10 @@ const applyFilters = () => {
           <div class="filter-modal__chips">
             <PositionChip
               v-for="position in positionOptions"
-              :key="position.label"
-              :label="position.label"
-              :active="localFilters.positions.includes(position.label)"
-              @toggle="togglePosition(position.label)"
+              :key="position"
+              :label="position"
+              :active="localFilters.positions.includes(position)"
+              @toggle="togglePosition(position)"
             />
           </div>
         </section>
@@ -239,21 +237,24 @@ const applyFilters = () => {
 }
 
 .filter-modal__close {
-  width: 20px;
-  height: 20px;
-  border: 1px solid #b87f94;
+  width: 24px;
+  height: 24px;
+  border: 0;
   border-radius: 999px;
+  background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
   position: relative;
   flex: 0 0 auto;
+  box-shadow: 0 8px 16px rgba(234, 79, 141, 0.2);
 }
 
 .filter-modal__close span {
   position: absolute;
-  top: 9px;
-  left: 4px;
-  width: 10px;
-  height: 1px;
-  background: #b87f94;
+  top: 11px;
+  left: 6px;
+  width: 12px;
+  height: 1.5px;
+  background: #ffffff;
+  border-radius: 999px;
 }
 
 .filter-modal__close span:first-child {
