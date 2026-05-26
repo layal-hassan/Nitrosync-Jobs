@@ -5,7 +5,7 @@ import {
   nitroSyncRequestTimeoutMs,
 } from './nitroSyncApi'
 
-const getRolesEndpoint = buildNitroSyncEndpoint('/v1/roles/get-all')
+const getRolesEndpoint = buildNitroSyncEndpoint('/v1/system-roles/get-all')
 
 const normalizeRole = (item, index = 0) => {
   if (typeof item === 'string') {
@@ -53,7 +53,7 @@ export const fetchNitroSyncRoles = async (
     const response = await axios.post(
       getRolesEndpoint,
       {
-        related_company: String(relatedCompany || '').trim(),
+        company_uuid: String(relatedCompany || '').trim(),
       },
       {
         headers: {

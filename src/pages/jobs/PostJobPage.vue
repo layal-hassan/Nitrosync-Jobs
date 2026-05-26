@@ -1931,6 +1931,16 @@ const buildJobSubmissionPayload = ({
   const recruiterRecord = resolveRecruiterRecord(recruiterValue)
   const recruiterUuid = normalizeRecruiterUuid(recruiterRecord)
   const recruiterName = normalizeRecruiterName(recruiterRecord) || recruiterValue
+  const additionalHiringUsers = [
+    ...new Set(
+      (Array.isArray(hiringTeamForm.value.additionalUsers) ? hiringTeamForm.value.additionalUsers : [])
+        .map((name) => String(name || '').trim())
+        .filter(Boolean),
+    ),
+  ]
+  const serializedAdditionalUsers = (additionalHiringUsers.length ? additionalHiringUsers : [recruiterName])
+    .filter(Boolean)
+    .map((name) => ({ name }))
   const stageDefinitions = buildStageDefinitions()
   const primaryStageUuid = stageDefinitions[0]?.job_stage_uuid || createUuid()
   const stageRelations = buildStageRelations(stageDefinitions)
@@ -1984,7 +1994,7 @@ const buildJobSubmissionPayload = ({
       {
         team: hiringTeamValue,
         recruiter: recruiterName,
-        additional_users: hiringTeamForm.value.additionalUsers.map((name) => ({ name })),
+        additional_users: serializedAdditionalUsers,
       },
     ],
     automated_actions: stageRelations.automatedActions,
@@ -2471,7 +2481,8 @@ const appendMultipartValue = (formData, key, value) => {
   if (Array.isArray(value)) {
     if (!value.length) {
       if (key.endsWith('[additional_users]')) {
-        formData.append(key, '')
+        // Preserve the field as an array for backends that validate multipart keys by shape.
+        formData.append(`${key}[]`, '')
       }
       return
     }
