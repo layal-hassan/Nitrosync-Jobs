@@ -9,15 +9,66 @@ import {
 
 const jobs = ref([])
 const jobsGetAllEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-all')
+const defaultCompanyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
+
+const normalizeValue = (value) => String(value ?? '').trim()
+
+const getStoredCompanyId = () => {
+  const storageKeys = [
+    'nitrosync-user',
+    'nitrosync-profile',
+    'user',
+    'profile',
+    'auth-user',
+    'currentUser',
+  ]
+
+  for (const key of storageKeys) {
+    for (const storage of [globalThis.localStorage, globalThis.sessionStorage]) {
+      try {
+        const rawValue = storage?.getItem?.(key)
+        if (!rawValue) continue
+
+        const parsed = JSON.parse(rawValue)
+        const companyId = normalizeValue(
+          parsed?.related_company
+          ?? parsed?.company_uuid
+          ?? parsed?.company?.uuid
+          ?? parsed?.company?.company_uuid
+          ?? parsed?.organization_uuid
+          ?? parsed?.organization?.uuid,
+        )
+
+        if (companyId) {
+          return companyId
+        }
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return defaultCompanyId
+}
 
 const fetchJobs = async () => {
+  const relatedCompany = getStoredCompanyId()
+
+  if (!relatedCompany) {
+    jobs.value = []
+    return
+  }
+
   try {
     const response = await axios.post(
       jobsGetAllEndpoint,
       {
-        related_company: 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+        related_company: relatedCompany,
       },
       {
+        headers: {
+          'Content-Type': 'application/json',
+        },
         timeout: nitroSyncRequestTimeoutMs,
       },
     )

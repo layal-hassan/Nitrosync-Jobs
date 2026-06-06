@@ -598,6 +598,10 @@ const normalizeRecruiterUuid = (employee = {}) =>
   normalizeTemplateText(
     employee?.employee_uuid
     ?? employee?.employeeUuid
+    ?? employee?.user_id
+    ?? employee?.userId
+    ?? employee?.employee_additional_information?.employee_uuid
+    ?? employee?.employeeAdditionalInformation?.employee_uuid
     ?? employee?.uuid
     ?? employee?.id,
   )
@@ -614,6 +618,20 @@ const normalizeRecruiterName = (employee = {}) => {
   const lastName = normalizeTemplateText(employee?.last_name ?? employee?.lastName)
 
   return fullName || [firstName, lastName].filter(Boolean).join(' ').trim()
+}
+
+const getRecruiterOptionValue = (employee = {}) => {
+  const recruiterUuid = normalizeRecruiterUuid(employee)
+  const recruiterName = normalizeRecruiterName(employee)
+  return recruiterUuid || recruiterName
+}
+
+const resolveRecruiterLabel = (value) => {
+  const normalizedValue = normalizeTemplateText(value)
+  if (!normalizedValue) return ''
+
+  const recruiterRecord = resolveRecruiterRecord(normalizedValue)
+  return normalizeRecruiterName(recruiterRecord) || normalizedValue
 }
 
 const resolveRecruiterRecord = (value) => {
@@ -734,9 +752,17 @@ const currentCompanyName = computed(() =>
 )
 const recruiterOptions = computed(() => {
   const palette = ['#ff6a9d', '#f1b32a', '#4f7dff', '#48d873', '#7028e4']
+  const duplicateNameCounts = recruiterDirectory.value.reduce((counts, employee) => {
+    const name = normalizeRecruiterName(employee).toLowerCase()
+    if (!name) return counts
+    counts.set(name, (counts.get(name) || 0) + 1)
+    return counts
+  }, new Map())
+
   const baseOptions = recruiterDirectory.value
     .map((employee, index) => {
       const name = normalizeRecruiterName(employee)
+      const value = getRecruiterOptionValue(employee)
       if (!name) return null
 
       const role = normalizeTemplateText(
@@ -753,10 +779,33 @@ const recruiterOptions = computed(() => {
         .slice(0, 2)
         .map((part) => part[0]?.toUpperCase() || '')
         .join('')
+      const employeeNumber = normalizeTemplateText(
+        employee?.employee_id
+        ?? employee?.employee_number
+        ?? employee?.employee_code
+        ?? employee?.employee_additional_information?.employee_id
+        ?? employee?.employeeAdditionalInformation?.employee_id
+        ?? employee?.id,
+      )
+      const statusLabel = String(employee?.is_active ?? employee?.user_status ?? '').trim() === '0'
+        ? 'Inactive'
+        : 'Active'
+      const hasDuplicateName = (duplicateNameCounts.get(name.toLowerCase()) || 0) > 1
+      const detailParts = [role || 'Recruiter']
+
+      if (hasDuplicateName && employeeNumber) {
+        detailParts.push(`Employee #${employeeNumber}`)
+      }
+
+      if (hasDuplicateName) {
+        detailParts.push(statusLabel)
+      }
 
       return {
+        key: `${value || name}-${index}`,
         name,
-        type: role || 'Recruiter',
+        value: value || name,
+        type: detailParts.join(' • '),
         color: palette[index % palette.length],
         initials: initials || name.slice(0, 2).toUpperCase(),
       }
@@ -783,23 +832,34 @@ const recruiterOptions = computed(() => {
 
   recruiterForm.value.selectedRecruiters.forEach((name, index) => {
     const normalizedName = String(name || '').trim()
-    if (!normalizedName || existingNames.has(normalizedName.toLowerCase())) return
+    if (!normalizedName) return
+
+    const resolvedName = resolveRecruiterLabel(normalizedName) || normalizedName
+    if (existingNames.has(resolvedName.toLowerCase())) return
 
     merged.push({
-      name: normalizedName,
+      key: `${normalizedName}-${index}`,
+      name: resolvedName,
+      value: normalizedName,
       type: 'Selected Recruiter',
       color: palette[index % palette.length],
-      initials: normalizedName
+      initials: resolvedName
         .split(/\s+/)
         .filter(Boolean)
         .slice(0, 2)
         .map((part) => part[0]?.toUpperCase() || '')
-        .join('') || normalizedName.slice(0, 2).toUpperCase(),
+        .join('') || resolvedName.slice(0, 2).toUpperCase(),
     })
   })
 
   return merged
 })
+
+const selectedRecruiterNames = computed(() =>
+  recruiterForm.value.selectedRecruiters
+    .map((value) => resolveRecruiterLabel(value))
+    .filter(Boolean),
+)
 
 const pageModeLabel = computed(() => {
   if (isViewMode.value) return 'View Job'
@@ -1559,7 +1619,7 @@ const buildCurrentJobSessionDraft = () => ({
   job_title_seo: metaDataForm.value.seoTitle,
   job_description_seo: normalizeTextInput(metaDataForm.value.seoDescription),
   tags: [...tagsForm.value.selectedTags],
-  recruiter: hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
+  recruiter: hiringTeamForm.value.recruiter || selectedRecruiterNames.value[0] || '',
   team: hiringTeamForm.value.team || '',
   additional_users: Array.isArray(hiringTeamForm.value.additionalUsers) ? [...hiringTeamForm.value.additionalUsers] : [],
   job_stages: Array.isArray(jobStagesForm.value.stageRows) ? [...jobStagesForm.value.stageRows] : [],
@@ -1847,9 +1907,6 @@ if (!currentJobUuid.value) {
   currentJobUuid.value = createUuid()
 }
 
-const createPlaceholderFile = (filename, mimeType = 'image/png') =>
-  new File(['placeholder'], filename, { type: mimeType })
-
 const buildStatusFromAction = () => {
   if (previewForm.value.publishAction === 'schedule_saved') return '1'
   if (previewForm.value.publishAction === 'save_only') return '1'
@@ -1872,13 +1929,22 @@ const buildExpiryDateValue = (closeAt = '') =>
   ).trim()
 
 const validateExpiryDateBeforeSubmit = (requestPayload = {}) => {
+  const requiresClosingDate =
+    previewForm.value.publishAction === 'schedule_saved'
+    || Boolean(previewForm.value.schedule.closePublishDate)
+    || Boolean(previewForm.value.schedule.closePublishTime)
+
+  if (!requiresClosingDate) {
+    return true
+  }
+
   const expiryDate = String(requestPayload?.expiry_date ?? '').trim()
 
   if (expiryDate) {
     return true
   }
 
-  validationMessage.value = 'Expiry date is required. Open Schedule Publish and set Publish Closing Date before saving or publishing.'
+  validationMessage.value = 'Expiry date is required because a closing publish date is enabled. Complete Publish Closing Date before saving the schedule.'
   submissionMessage.value = ''
   return false
 }
@@ -1915,17 +1981,54 @@ const buildEmbeddedApplicationFormPayload = () => ({
   upload_cover_letter: appForm.value.coverLetterStatus,
 })
 
+const buildApplicationFormQuestionsPayload = () => {
+  const sections = Array.isArray(appForm.value.applicationSections)
+    ? appForm.value.applicationSections
+    : []
+  const groupedQuestions = {
+    experience: [],
+    languages: [],
+    education: [],
+  }
+  const sectionTypeMap = {
+    experience: 'experience',
+    language: 'languages',
+    languages: 'languages',
+    education: 'education',
+  }
+
+  sections.forEach((section) => {
+    const groupKey = sectionTypeMap[String(section?.apiType || '').trim().toLowerCase()]
+    if (!groupKey) return
+
+    ;(Array.isArray(section?.questions) ? section.questions : []).forEach((question) => {
+      const questionId = String(question?.id || '').trim()
+      const questionStatus = String(question?.status || '').trim().toLowerCase()
+      if (!questionId || questionStatus === 'off') return
+
+      groupedQuestions[groupKey].push({
+        question_id: questionId,
+      })
+    })
+  })
+
+  if (!groupedQuestions.experience.length && !groupedQuestions.languages.length && !groupedQuestions.education.length) {
+    return []
+  }
+
+  return [groupedQuestions]
+}
+
 const buildJobSubmissionPayload = ({
   jobUuid,
   withPublish,
   publishAt = '',
   closeAt = '',
-  includePlaceholderImages = false,
   includeWithPublish = true,
   includeScheduleFields = false,
 } = {}) => {
   const recruiterValue = normalizeHiringTeamField(
-    hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
+    hiringTeamForm.value.recruiter || selectedRecruiterNames.value[0] || '',
   )
   const hiringTeamValue = normalizeHiringTeamField(hiringTeamForm.value.team)
   const recruiterRecord = resolveRecruiterRecord(recruiterValue)
@@ -1944,11 +2047,11 @@ const buildJobSubmissionPayload = ({
   const stageDefinitions = buildStageDefinitions()
   const primaryStageUuid = stageDefinitions[0]?.job_stage_uuid || createUuid()
   const stageRelations = buildStageRelations(stageDefinitions)
+  const expiryDate = buildExpiryDateValue(closeAt)
 
   const payload = {
     job_title: jobDetailsForm.value.jobTitle,
     job_code: jobDetailsForm.value.jobCode,
-    expiry_date: buildExpiryDateValue(closeAt),
     department: jobDetailsForm.value.department,
     country: jobDetailsForm.value.country,
     city: jobDetailsForm.value.city,
@@ -1962,17 +2065,11 @@ const buildJobSubmissionPayload = ({
     currency: additionalInfoForm.value.currency,
     start_from: normalizeSalaryValue(additionalInfoForm.value.salaryFrom),
     end_to: normalizeSalaryValue(additionalInfoForm.value.salaryTo),
-    cover_photo: includePlaceholderImages
-      ? appearanceForm.value.coverPhoto || createPlaceholderFile('cover-photo.png')
-      : appearanceForm.value.coverPhoto,
-    photo: includePlaceholderImages
-      ? appearanceForm.value.photo || createPlaceholderFile('job-photo.png')
-      : appearanceForm.value.photo,
+    cover_photo: appearanceForm.value.coverPhoto,
+    photo: appearanceForm.value.photo,
     job_title_seo: metaDataForm.value.seoTitle,
     job_description_seo: normalizeTextInput(metaDataForm.value.seoDescription),
-    job_photo_seo: includePlaceholderImages
-      ? appearanceForm.value.photo || createPlaceholderFile('job-photo-seo.png')
-      : null,
+    job_photo_seo: metaDataForm.value.seoPhoto,
     recruiter_uuid: recruiterUuid || recruiterValue || '',
     tags: tagsForm.value.selectedTags.map((tag) => ({
       tag_name: tag,
@@ -1980,6 +2077,7 @@ const buildJobSubmissionPayload = ({
     application_form: [
       buildEmbeddedApplicationFormPayload(),
     ],
+    application_form_questions: buildApplicationFormQuestionsPayload(),
     jobs_stages: stageDefinitions.length
       ? stageDefinitions.map((stage) => ({ job_stage_uuid: stage.job_stage_uuid }))
       : [{ job_stage_uuid: primaryStageUuid }],
@@ -1999,19 +2097,16 @@ const buildJobSubmissionPayload = ({
     ],
     automated_actions: stageRelations.automatedActions,
     score_cards: stageRelations.scoreCards,
-    assessments: stageRelations.assessments.length
-      ? stageRelations.assessments
-      : [
-        {
-          assessment_uuid: `default-${primaryStageUuid}`,
-          job_stage_uuid: primaryStageUuid,
-        },
-    ],
+    assessments: stageRelations.assessments,
     intelligent_screen_job_questions: buildIntelligentScreenQuestionsPayload(),
   }
 
   if (includeWithPublish) {
     payload.with_publish = withPublish
+  }
+
+  if (expiryDate) {
+    payload.expiry_date = expiryDate
   }
 
   if (includeScheduleFields) {
@@ -2157,7 +2252,7 @@ const buildHiringTeamAiCommand = () => [
   `Job description: ${jobDetailsForm.value.description || 'not specified'}`,
   `Industry: ${additionalInfoForm.value.industry || 'not specified'}`,
   `Career level: ${additionalInfoForm.value.careerLevel || 'not specified'}`,
-  `Current recruiter choices: ${recruiterForm.value.selectedRecruiters.join(', ') || 'none'}`,
+  `Current recruiter choices: ${selectedRecruiterNames.value.join(', ') || 'none'}`,
   'Recommend the most suitable team, recruiter, and additional hiring participants.',
   'Use plain text and mention the suggested team and people by name.',
 ].join('\n')
@@ -2173,18 +2268,6 @@ const buildIntelligentScreenQuestionsPayload = () =>
       question: String(questionLabel || '').trim(),
       question_type: String(questionType || '').trim(),
       options_details: Array.isArray(draft.options) ? draft.options.filter(Boolean) : [],
-      option_classifications: Array.isArray(draft.optionClassifications)
-        ? draft.optionClassifications
-          .slice(0, Array.isArray(draft.options) ? draft.options.length : 0)
-          .map((item) => ({
-            label: item?.label || '',
-            value: item?.value || '',
-            color: item?.color || '',
-          }))
-        : [],
-      classification_label: '',
-      classification_value: '',
-      classification_color: '',
     }
   })
     .filter((item) => item.question && item.question_type)
@@ -2348,20 +2431,6 @@ const buildJobStagesValidation = () => {
   const stageManagementByStage = jobStagesForm.value.stageManagementByStage || {}
   const stageErrors = {}
   const details = []
-  let totalScoreCards = 0
-  let totalAssessments = 0
-  let totalAutomatedActions = 0
-
-  activeStages.forEach((stage) => {
-    const management = resolveStageManagement(stageManagementByStage, stage)
-    const scoreCardsCount = Array.isArray(management.scoreCardUuids) ? management.scoreCardUuids.filter(Boolean).length : 0
-    const assessmentsCount = Array.isArray(management.assessmentTitles) ? management.assessmentTitles.filter(Boolean).length : 0
-    const automatedActionsCount = Array.isArray(management.automatedActionUuids) ? management.automatedActionUuids.filter(Boolean).length : 0
-
-    totalScoreCards += scoreCardsCount
-    totalAssessments += assessmentsCount
-    totalAutomatedActions += automatedActionsCount
-  })
 
   if (!activeStages.length) {
     return {
@@ -2372,24 +2441,33 @@ const buildJobStagesValidation = () => {
     }
   }
 
-  const missingSections = [
-    !totalScoreCards ? 'Score Cards' : '',
-    !totalAssessments ? 'Assessments' : '',
-    !totalAutomatedActions ? 'Automated Actions' : '',
-  ].filter(Boolean)
+  activeStages.forEach((stage) => {
+    const management = resolveStageManagement(stageManagementByStage, stage)
+    const scoreCardsCount = Array.isArray(management.scoreCardUuids) ? management.scoreCardUuids.filter(Boolean).length : 0
+    const automatedActionsCount = Array.isArray(management.automatedActionUuids) ? management.automatedActionUuids.filter(Boolean).length : 0
+    const missingSections = [
+      !scoreCardsCount ? 'Score Cards' : '',
+      !automatedActionsCount ? 'Automated Actions' : '',
+    ].filter(Boolean)
 
-  if (missingSections.length) {
-    const firstStageKey = String(activeStages[0]?.jobStageUuid || activeStages[0]?.label || '').trim()
-    if (firstStageKey) {
-      stageErrors[firstStageKey] = {
-        scoreCards: !totalScoreCards,
-        assessments: !totalAssessments,
-        automatedActions: !totalAutomatedActions,
+    if (!missingSections.length) return
+
+    const stageKey = String(stage?.jobStageUuid || stage?.label || '').trim()
+    const stageLabel = String(stage?.label || stage?.jobStageUuid || 'Unnamed stage').trim()
+
+    if (stageKey) {
+      stageErrors[stageKey] = {
+        scoreCards: !scoreCardsCount,
+        assessments: false,
+        automatedActions: !automatedActionsCount,
         missingSections,
       }
     }
-    details.push(`Workflow: ${missingSections.join(', ')}`)
 
+    details.push(`${stageLabel}: ${missingSections.join(', ')}`)
+  })
+
+  if (details.length) {
     return {
       isValid: false,
       message: `Complete the missing setup in: ${details.join(' | ')}`,
@@ -2422,7 +2500,6 @@ const buildCreateJobRequest = () => {
   return buildJobSubmissionPayload({
     jobUuid: currentJobUuid.value,
     withPublish: buildWithPublishValue(),
-    includePlaceholderImages: true,
     includeWithPublish: true,
   })
 }
@@ -2431,7 +2508,6 @@ const buildEditJobRequest = () => {
   return buildJobSubmissionPayload({
     jobUuid: editingJobUuid.value || route.query.job_uuid || '',
     withPublish: buildWithPublishValue(),
-    includePlaceholderImages: false,
     includeWithPublish: true,
   })
 }
@@ -2440,7 +2516,6 @@ const buildUnpublishJobRequest = () =>
   buildJobSubmissionPayload({
     jobUuid: editingJobUuid.value || currentJobUuid.value || route.query.job_uuid || '',
     withPublish: 'no',
-    includePlaceholderImages: false,
     includeWithPublish: true,
   })
 
@@ -2459,7 +2534,6 @@ const buildSchedulePublishRequest = () => {
     withPublish: 'no',
     publishAt,
     closeAt,
-    includePlaceholderImages: !isEditMode.value,
     includeWithPublish: false,
     includeScheduleFields: true,
   })
@@ -2752,7 +2826,7 @@ const goToJobsPage = () => {
 }
 
 const validateScheduleBeforeSubmit = () => {
-  const { scheduleEnabled, closePublishEnabled, publishDate, publishTime, closePublishDate, closePublishTime } = previewForm.value.schedule
+  const { scheduleEnabled, publishDate, publishTime, closePublishDate, closePublishTime } = previewForm.value.schedule
 
   if (scheduleEnabled && (!publishDate || !publishTime)) {
     validationMessage.value = 'Please complete publish date and time before saving schedule.'
@@ -2760,7 +2834,7 @@ const validateScheduleBeforeSubmit = () => {
     return false
   }
 
-  if (closePublishEnabled && (!closePublishDate || !closePublishTime)) {
+  if (!closePublishDate || !closePublishTime) {
     validationMessage.value = 'Please complete closing date and time before saving schedule.'
     submissionMessage.value = ''
     return false
@@ -2769,7 +2843,7 @@ const validateScheduleBeforeSubmit = () => {
   const publishAt = buildDateTime(publishDate, publishTime)
   const closeAt = buildDateTime(closePublishDate, closePublishTime)
 
-  if (scheduleEnabled && closePublishEnabled && publishAt && closeAt && publishAt > closeAt) {
+  if (scheduleEnabled && publishAt && closeAt && publishAt > closeAt) {
     validationMessage.value = 'Closing publish date/time must be after publish date/time.'
     submissionMessage.value = ''
     return false
@@ -2824,7 +2898,7 @@ const submitJob = async (successMessage, successVariant) => {
       successfulResponse.message
 
       const recruiterValue = normalizeHiringTeamField(
-        hiringTeamForm.value.recruiter || recruiterForm.value.selectedRecruiters[0] || '',
+        hiringTeamForm.value.recruiter || selectedRecruiterNames.value[0] || '',
       )
     const recruiterRecord = resolveRecruiterRecord(recruiterValue)
     const persistedJobUuid = String(
@@ -3064,7 +3138,7 @@ const handlePreviewAction = async (action) => {
                 v-if="currentStep === 4"
                 :job-details="jobDetailsForm"
                 :additional-info="additionalInfoForm"
-                :recruiters="recruiterForm.selectedRecruiters"
+                :recruiters="selectedRecruiterNames"
                 :company-name="currentCompanyName"
                 :form="appearanceForm"
               />
@@ -3118,7 +3192,7 @@ const handlePreviewAction = async (action) => {
               :additional-info="additionalInfoForm"
               :meta-data="metaDataForm"
               :selected-tags="tagsForm.selectedTags"
-              :selected-recruiters="recruiterForm.selectedRecruiters"
+              :selected-recruiters="selectedRecruiterNames"
               :hiring-team="hiringTeamForm"
               :preview-state="previewForm"
               :submitting="submittingJob"

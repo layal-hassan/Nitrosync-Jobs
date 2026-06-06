@@ -166,6 +166,14 @@ const addSelectedType = () => {
 
 const typeLabel = (typeId) => questionTypes.find((item) => item.id === typeId)?.label ?? typeId
 const activeTypeLabel = computed(() => typeLabel(activeQuestionType.value))
+const questionTypeHelpText = {
+  checkboxes: 'Candidate can select more than one answer.',
+  multiple_choice: 'Candidate selects one answer from the list.',
+  record_video: 'Candidate records a video response for this prompt.',
+  open_text: 'Candidate writes a free-text answer reviewed manually.',
+  date_range: 'Candidate enters a start and end date or availability range.',
+  media_upload: 'Candidate uploads files for manual review.',
+}
 const selectedConditionLabel = (conditionId) => scoreRangeOptions.find((option) => option.id === conditionId)?.label ?? 'Please select a conditional score range'
 const defaultQuestionTitle = computed(() =>
   'Enter your question',
@@ -309,6 +317,15 @@ const getDraftOptionClassification = (index) => {
   return createDefaultOptionClassification()
 }
 
+const minimumOptionsByType = (typeId) => {
+  if (typeId === 'multiple_choice' || typeId === 'checkboxes') return 2
+  if (typeId === 'record_video') return 1
+  return 0
+}
+
+const canRemoveDraftOption = (typeId, options = []) =>
+  Array.isArray(options) && options.length > minimumOptionsByType(typeId)
+
 const addDraftOption = () => {
   if (!activeQuestionType.value) return
   const draft = ensureDraft(activeQuestionType.value)
@@ -322,8 +339,11 @@ const removeDraftOption = (index) => {
   const draft = ensureDraft(activeQuestionType.value)
   if (!draft) return
 
-  if (draft.options.length <= 1) {
-    draft.options = ['']
+  if (!canRemoveDraftOption(activeQuestionType.value, draft.options)) {
+    draft.options = Array.from(
+      { length: Math.max(minimumOptionsByType(activeQuestionType.value), 1) },
+      (_, optionIndex) => draft.options[optionIndex] || '',
+    )
     draft.optionClassifications = normalizeOptionClassifications([], draft.options)
     return
   }
@@ -341,6 +361,57 @@ const removeActiveQuestion = () => {
   if (!activeQuestionType.value) return
   removeType(activeQuestionType.value)
 }
+
+const countFilledOptions = (options = []) =>
+  options.filter((option) => String(option || '').trim()).length
+
+const countWeightedOptions = (draft = {}) =>
+  (Array.isArray(draft.optionClassifications) ? draft.optionClassifications : [])
+    .slice(0, Array.isArray(draft.options) ? draft.options.length : 0)
+    .filter((item, index) => String(draft.options?.[index] || '').trim() && String(item?.label || '').trim()).length
+
+const activeQuestionBadges = computed(() => {
+  const draft = activeDraft.value || {}
+  const options = Array.isArray(draft.options) ? draft.options : []
+  const filledOptions = countFilledOptions(options)
+  const weightedOptions = countWeightedOptions(draft)
+
+  switch (activeQuestionType.value) {
+    case 'multiple_choice':
+    case 'checkboxes':
+      return [
+        { tone: 'green', label: 'Options', value: `${filledOptions}/${options.length || 0}` },
+        { tone: 'blue', label: 'Weighted', value: `${weightedOptions}/${filledOptions || 0}` },
+        { tone: filledOptions >= 2 ? 'violet' : 'gold', label: 'Type', value: activeQuestionType.value === 'checkboxes' ? 'Multi-select' : 'Single-select' },
+      ]
+    case 'record_video':
+      return [
+        { tone: 'green', label: 'Prompts', value: `${filledOptions}/${options.length || 0}` },
+        { tone: 'blue', label: 'Weighted', value: `${weightedOptions}/${filledOptions || 0}` },
+        { tone: 'violet', label: 'Review', value: 'Manual' },
+      ]
+    case 'open_text':
+      return [
+        { tone: draft.title?.trim() ? 'green' : 'gold', label: 'Question', value: draft.title?.trim() ? 'Ready' : 'Missing' },
+        { tone: 'blue', label: 'Answer', value: 'Free text' },
+        { tone: 'violet', label: 'Review', value: 'Manual' },
+      ]
+    case 'date_range':
+      return [
+        { tone: draft.startDate?.trim() ? 'green' : 'gold', label: 'Start', value: draft.startDate?.trim() || 'Missing' },
+        { tone: draft.endDate?.trim() ? 'green' : 'gold', label: 'End', value: draft.endDate?.trim() || 'Missing' },
+        { tone: 'violet', label: 'Answer', value: 'Date range' },
+      ]
+    case 'media_upload':
+      return [
+        { tone: draft.title?.trim() ? 'green' : 'gold', label: 'Question', value: draft.title?.trim() ? 'Ready' : 'Missing' },
+        { tone: 'blue', label: 'Answer', value: 'File upload' },
+        { tone: 'violet', label: 'Review', value: 'Manual' },
+      ]
+    default:
+      return []
+  }
+})
 
 const toggleScoreMenu = (criteriaId) => {
   criteriaList.value = criteriaList.value.map((criteria) => ({
@@ -776,23 +847,23 @@ const sendAiCommand = async () => {
 
           <div class="question-builder__meta">
             <div class="question-builder__meta-field question-builder__meta-field--weight">
-              <label class="question-builder__meta-label">Question</label>
+              <label class="question-builder__meta-label">{{ activeTypeLabel }}</label>
               <div class="question-builder__weight question-builder__weight--muted">
-                Answer weights are set per answer below.
+                {{ questionTypeHelpText[activeQuestionType] || 'Answer weights are set per answer below.' }}
               </div>
             </div>
           </div>
 
           <div v-if="activeQuestionType === 'record_video'" class="question-builder__body">
-            <p class="question-builder__desc">Add the question, then enter the answers you want to show to the candidate.</p>
+            <p class="question-builder__desc">Add the video question, then define the answer prompts or scoring choices used during review.</p>
             <div v-for="(option, index) in activeDraft?.options || []" :key="`record-${index}`" class="question-builder__option-card">
-              <label class="question-builder__option">
+              <div class="question-builder__option">
                 <input type="radio" :checked="index === 0" />
                 <input
                   class="question-builder__option-input"
                   :value="option"
                   type="text"
-                  placeholder="Enter answer"
+                  placeholder="Enter review prompt"
                   @input="updateDraftOption(index, $event.target.value)"
                 />
                 <div class="question-builder__option-side">
@@ -802,11 +873,16 @@ const sendAiCommand = async () => {
                     placeholder="Select weight"
                     @update:model-value="updateDraftOptionClassification(index, $event)"
                   />
-                  <button type="button" class="question-builder__option-remove" @click="removeDraftOption(index)">
-                    Delete
+                  <button
+                    type="button"
+                    class="question-builder__option-remove"
+                    :disabled="!canRemoveDraftOption(activeQuestionType, activeDraft?.options || [])"
+                    @click.stop="removeDraftOption(index)"
+                  >
+                    Remove prompt
                   </button>
                 </div>
-              </label>
+              </div>
               <div
                 class="question-builder__answer-weight"
                 :style="{ '--answer-color': getDraftOptionClassification(index).color }"
@@ -815,7 +891,7 @@ const sendAiCommand = async () => {
                 <strong>{{ getDraftOptionClassification(index).value }}</strong>
               </div>
             </div>
-            <button type="button" class="question-builder__link" @click="addDraftOption">+ Add answer</button>
+            <button type="button" class="question-builder__link" @click="addDraftOption">+ Add prompt</button>
           </div>
 
           <div v-else-if="activeQuestionType === 'multiple_choice' || activeQuestionType === 'checkboxes'" class="question-builder__body">
@@ -824,13 +900,13 @@ const sendAiCommand = async () => {
               :key="`choice-${index}`"
               class="question-builder__option-card"
             >
-              <label class="question-builder__option">
+              <div class="question-builder__option">
                 <input :type="activeQuestionType === 'checkboxes' ? 'checkbox' : 'radio'" />
                 <input
                   class="question-builder__option-input"
                   :value="option"
                   type="text"
-                  placeholder="Enter answer"
+                  placeholder="Enter answer option"
                   @input="updateDraftOption(index, $event.target.value)"
                 />
                 <div class="question-builder__option-side">
@@ -840,11 +916,16 @@ const sendAiCommand = async () => {
                     placeholder="Select weight"
                     @update:model-value="updateDraftOptionClassification(index, $event)"
                   />
-                  <button type="button" class="question-builder__option-remove" @click="removeDraftOption(index)">
-                    Delete
+                  <button
+                    type="button"
+                    class="question-builder__option-remove"
+                    :disabled="!canRemoveDraftOption(activeQuestionType, activeDraft?.options || [])"
+                    @click.stop="removeDraftOption(index)"
+                  >
+                    Remove option
                   </button>
                 </div>
-              </label>
+              </div>
               <div
                 class="question-builder__answer-weight"
                 :style="{ '--answer-color': getDraftOptionClassification(index).color }"
@@ -853,17 +934,17 @@ const sendAiCommand = async () => {
                 <strong>{{ getDraftOptionClassification(index).value }}</strong>
               </div>
             </div>
-            <button type="button" class="question-builder__link" @click="addDraftOption">+ Add answer</button>
+            <button type="button" class="question-builder__link" @click="addDraftOption">+ Add option</button>
           </div>
 
           <div v-else-if="activeQuestionType === 'open_text'" class="question-builder__body">
-            <div class="upload-zone">Candidate writes the answer here</div>
+            <div class="upload-zone">Candidate writes a free-text answer here</div>
           </div>
 
           <div v-else-if="activeQuestionType === 'date_range'" class="question-builder__body question-builder__body--range">
             <div class="range-grid">
               <div>
-                <label>Start's in</label>
+                <label>Starts in</label>
                 <input :value="activeDraft?.startDate || ''" type="text" placeholder="Jun 2025, 2023" @input="ensureDraft(activeQuestionType).startDate = $event.target.value" />
               </div>
               <div>
@@ -871,7 +952,6 @@ const sendAiCommand = async () => {
                 <input :value="activeDraft?.endDate || ''" type="text" placeholder="Jun 2025, 2023" @input="ensureDraft(activeQuestionType).endDate = $event.target.value" />
               </div>
             </div>
-            <button type="button" class="question-builder__link">Add new date range</button>
           </div>
 
           <div v-else class="question-builder__body">
@@ -880,12 +960,17 @@ const sendAiCommand = async () => {
 
           <div class="question-builder__footer">
             <div class="question-builder__badges">
-              <span class="badge badge--green">Answered <small>85%</small></span>
-              <span class="badge badge--violet">Not recorded <small>15%</small></span>
+              <span
+                v-for="badge in activeQuestionBadges"
+                :key="`${badge.label}-${badge.value}`"
+                class="badge"
+                :class="`badge--${badge.tone}`"
+              >
+                {{ badge.label }} <small>{{ badge.value }}</small>
+              </span>
             </div>
             <div class="question-builder__actions">
-              <button type="button" @click="removeActiveQuestion">Delete</button>
-              <button type="button">Edit values</button>
+              <button type="button" @click="removeActiveQuestion">Delete question</button>
             </div>
           </div>
         </div>
@@ -1303,6 +1388,11 @@ const sendAiCommand = async () => {
   white-space: nowrap;
 }
 
+.question-builder__option-remove:disabled {
+  color: #c9b7c0;
+  cursor: not-allowed;
+}
+
 .question-builder__answer-weight {
   width: calc(100% - 38px);
   min-height: 42px;
@@ -1361,6 +1451,8 @@ const sendAiCommand = async () => {
 }
 
 .badge--green { background: #41d66b; }
+.badge--blue { background: #3f6fff; }
+.badge--gold { background: #f1b32a; color: #2d2200; }
 .badge--violet { background: #6b21d8; }
 
 .question-builder__actions {

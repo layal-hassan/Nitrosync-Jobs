@@ -23,6 +23,7 @@ import {
   fetchNitroSyncJobStages,
   updateNitroSyncJobStage,
 } from '../../composables/useNitroSyncJobStages'
+import { getNitroSyncEmployees } from '../../composables/useNitroSyncEmployees'
 import JobStagesWorkflowStep from './JobStagesWorkflowStep.vue'
 import Dropdown from '../ui/Dropdown.vue'
 
@@ -78,7 +79,7 @@ const automatedActionDraft = ref(props.form.automatedActionDraft || {
   inviteAutomatically: false,
   moveCandidateTo: '',
   notifyCandidate: false,
-  assignManager: true,
+  assignManager: false,
 })
 const savedAutomatedActions = ref(props.form.savedAutomatedActions || [])
 const automatedActionsLoading = ref(false)
@@ -86,6 +87,8 @@ const automatedActionSubmitting = ref(false)
 const deletingAutomatedActionUuid = ref('')
 const automatedActionMessage = ref('')
 const automatedActionError = ref('')
+const employeesLoading = ref(false)
+const employeeDirectory = ref([])
 const showWorkflowDesigner = ref(Boolean(props.form.showWorkflowDesigner))
 const openedFromStagesDots = computed(() => Boolean(props.form.openedFromStagesDots))
 const stagesLoading = ref(false)
@@ -139,9 +142,7 @@ const skillTags = [
 const scoreCardJobTitleOptions = ['Please select', 'Graphic Designer', 'HR Manager']
 const scoreCardInterviewerOptions = ['Please select', 'Interviewer', 'Hiring manager']
 
-const automatedAssignOptions = ['Please select', 'Recruiter', 'Hiring manager', 'Team lead']
-const automatedStageOptions = ['Please select', 'Screen', 'Testing', 'Interview', 'Hired']
-const automatedPrimaryActionOptions = ['Please select', 'Send email', 'Notify manager', 'Assign interviewer']
+const automatedPrimaryActionOptions = ['Please select', 'Send email', 'Send assessment', 'Send interview calendar']
 const addStageNameRequiredMessage = 'Enter a stage name before adding a new stage.'
 
 const overlayVisible = computed(() => screen.value >= 3)
@@ -169,6 +170,32 @@ const selectedScoreCardSummary = computed(() =>
 const currentStageLabel = computed(() =>
   visibleStageRows.value.find((item) => getStageKey(item) === currentStageKey.value)?.label || '',
 )
+const automatedStageOptions = computed(() => [
+  'Please select',
+  ...visibleStageRows.value
+    .map((item) => String(item?.label || '').trim())
+    .filter(Boolean),
+])
+const automatedAssignOptions = computed(() => {
+  const names = employeeDirectory.value
+    .map((employee) => {
+      const fullName = String(
+        employee?.full_name
+        ?? employee?.employee_name
+        ?? employee?.name
+        ?? '',
+      ).trim()
+      if (fullName) return fullName
+
+      const firstName = String(employee?.first_name ?? '').trim()
+      const lastName = String(employee?.last_name ?? '').trim()
+      return `${firstName} ${lastName}`.trim()
+    })
+    .filter(Boolean)
+
+  const merged = [...new Set(['Please select', ...names, automatedActionDraft.value.assignedRecruiter].filter(Boolean))]
+  return merged
+})
 const scoreCardQuestionsValue = computed(() =>
   selectedQuestions.value.map((item) => item.label).filter(Boolean).join('\n'),
 )
@@ -541,6 +568,7 @@ onMounted(() => {
   fetchStages()
   fetchScoreCards()
   fetchAutomatedActions()
+  fetchEmployees()
   document.addEventListener('mousedown', handleDocumentPointerDown)
 })
 
@@ -573,6 +601,19 @@ const fetchStages = async () => {
   }
 }
 
+const fetchEmployees = async () => {
+  employeesLoading.value = true
+
+  try {
+    const response = await getNitroSyncEmployees(companyId.value)
+    employeeDirectory.value = Array.isArray(response?.data) ? response.data : []
+  } catch (error) {
+    console.error('Failed to fetch employees for automated actions', error)
+  } finally {
+    employeesLoading.value = false
+  }
+}
+
 const nextFromSuccess = () => {
   screen.value = 11
   props.form.screen = screen.value
@@ -596,11 +637,6 @@ const closeOverlayToBoard = () => {
 
 const returnToScoreCardManager = () => {
   screen.value = 3
-  props.form.screen = screen.value
-}
-
-const returnToAutomatedActionsManager = () => {
-  screen.value = 13
   props.form.screen = screen.value
 }
 
@@ -863,22 +899,29 @@ const buildAutomatedActionsArray = () => {
   return [...new Set(actions)]
 }
 
-const buildAutomatedActionPayload = (uuid = automatedActionDraft.value.automatedActionUuid || createUuid()) => ({
-  condition: automatedActionDraft.value.condition,
-  automated_action_uuid: uuid,
-  related_company: companyId.value,
-  assigned_recruiter: automatedActionDraft.value.assignedRecruiter,
-  assign_message: automatedActionDraft.value.assignMessage.trim(),
-  actions: buildAutomatedActionsArray(),
-})
+const buildAutomatedActionPayload = (uuid = automatedActionDraft.value.automatedActionUuid || createUuid()) => {
+  const actions = buildAutomatedActionsArray()
+  const hasAssignmentAction = actions.includes('Assign manager')
+
+  return {
+    condition: automatedActionDraft.value.condition,
+    automated_action_uuid: uuid,
+    related_company: companyId.value,
+    assigned_recruiter: hasAssignmentAction ? automatedActionDraft.value.assignedRecruiter : '',
+    assign_message: hasAssignmentAction ? automatedActionDraft.value.assignMessage.trim() : '',
+    actions,
+  }
+}
 
 const getAutomatedActionValidationError = (payload) => {
   if (!payload.condition || payload.condition === 'Please select') return 'Condition is required.'
   if (!payload.automated_action_uuid) return 'Automated action UUID is required.'
   if (!payload.related_company) return 'Related company is required.'
-  if (!payload.assigned_recruiter || payload.assigned_recruiter === 'Please select') return 'Assigned recruiter is required.'
-  if (!payload.assign_message) return 'Assign message is required.'
   if (!payload.actions.length) return 'Select at least one action.'
+  if (payload.actions.includes('Assign manager')) {
+    if (!payload.assigned_recruiter || payload.assigned_recruiter === 'Please select') return 'Assigned recruiter is required.'
+    if (!payload.assign_message) return 'Assign message is required.'
+  }
   return ''
 }
 
@@ -892,14 +935,16 @@ const resetAutomatedActionDraft = () => {
     inviteAutomatically: false,
     moveCandidateTo: '',
     notifyCandidate: false,
-    assignManager: true,
+    assignManager: false,
   }
   props.form.automatedActionDraft = automatedActionDraft.value
 }
 
 const openNewAutomatedAction = () => {
   resetAutomatedActionFeedback()
+  const currentCondition = automatedActionDraft.value.condition
   resetAutomatedActionDraft()
+  automatedActionDraft.value.condition = currentCondition
   screen.value = 14
 }
 
@@ -968,7 +1013,7 @@ const saveAutomatedAction = async () => {
       }))
     }
     props.form.automatedActionDraft = automatedActionDraft.value
-    returnToAutomatedActionsManager()
+    closeOverlayToBoard()
   } catch (error) {
     console.error('Failed to save automated action', {
       payload,
@@ -1977,11 +2022,13 @@ syncStageManagement(visibleStageRows.value)
                 <button type="button" class="stage-switch" :class="{ 'stage-switch--on': automatedActionDraft.assignManager }" @click="automatedActionDraft.assignManager = !automatedActionDraft.assignManager"></button>
               </div>
 
-              <label>Recruiter</label>
-              <Dropdown v-model="automatedActionDraft.assignedRecruiter" :options="automatedAssignOptions" placeholder="Please select" menu-size="small" teleport />
+              <template v-if="automatedActionDraft.assignManager">
+                <label>Recruiter</label>
+                <Dropdown v-model="automatedActionDraft.assignedRecruiter" :options="automatedAssignOptions" placeholder="Please select" menu-size="small" teleport />
 
-              <label>Assign Message</label>
-              <textarea v-model="automatedActionDraft.assignMessage" placeholder="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam eu turpis molestie, dictum est a, mattis tellus. Sed dignissim, metus nec fringilla accumsan, risus sem sollicitudin lacus"></textarea>
+                <label>Assign Message</label>
+                <textarea v-model="automatedActionDraft.assignMessage" placeholder="Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam eu turpis molestie, dictum est a, mattis tellus. Sed dignissim, metus nec fringilla accumsan, risus sem sollicitudin lacus"></textarea>
+              </template>
             </div>
 
             <div class="modal-separator modal-separator--automated">Or</div>
@@ -1999,9 +2046,9 @@ syncStageManagement(visibleStageRows.value)
             type="button"
             class="modal-primary"
             :disabled="automatedActionSubmitting"
-            @click="screen === 13 ? screen = 14 : saveAutomatedAction()"
+            @click="screen === 13 ? openNewAutomatedAction() : saveAutomatedAction()"
           >
-            {{ automatedActionSubmitting ? 'Saving...' : 'Next' }}
+            {{ automatedActionSubmitting ? 'Saving...' : (screen === 13 ? 'Next' : 'Save action') }}
           </button>
         </template>
       </div>

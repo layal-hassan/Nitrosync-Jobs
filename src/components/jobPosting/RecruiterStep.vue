@@ -29,22 +29,24 @@ const recruiterOptions = computed(() => {
     : defaultRecruiterOptions
 
   const merged = [...baseOptions]
-  const existingNames = new Set(baseOptions.map((item) => String(item?.name || '').trim().toLowerCase()).filter(Boolean))
+  const existingValues = new Set(baseOptions.map((item) => String(item?.value ?? item?.name ?? '').trim().toLowerCase()).filter(Boolean))
 
-  props.selectedRecruiters.forEach((name, index) => {
-    const normalizedName = String(name || '').trim()
-    if (!normalizedName || existingNames.has(normalizedName.toLowerCase())) return
+  props.selectedRecruiters.forEach((value, index) => {
+    const normalizedValue = String(value || '').trim()
+    if (!normalizedValue || existingValues.has(normalizedValue.toLowerCase())) return
 
     merged.push({
-      name: normalizedName,
+      key: `${normalizedValue}-${index}`,
+      name: normalizedValue,
+      value: normalizedValue,
       type: 'Selected Recruiter',
       color: ['#ff6a9d', '#f1b32a', '#4f7dff', '#48d873', '#7028e4'][index % 5],
-      initials: normalizedName
+      initials: normalizedValue
         .split(/\s+/)
         .filter(Boolean)
         .slice(0, 2)
         .map((part) => part[0]?.toUpperCase() || '')
-        .join('') || normalizedName.slice(0, 2).toUpperCase(),
+        .join('') || normalizedValue.slice(0, 2).toUpperCase(),
     })
   })
 
@@ -53,7 +55,7 @@ const recruiterOptions = computed(() => {
 
 const selectedRecruiterObjects = computed(() =>
   props.selectedRecruiters
-    .map((name) => recruiterOptions.value.find((item) => item.name === name))
+    .map((value) => recruiterOptions.value.find((item) => (item.value ?? item.name) === value))
     .filter(Boolean),
 )
 
@@ -69,13 +71,13 @@ const visibleRecruiters = computed(() =>
   filteredRecruiters.value.slice(0, 5),
 )
 
-const selectRecruiter = (name) => {
-  if (!name) return
-  emit('update:selectedRecruiters', [name])
+const selectRecruiter = (value) => {
+  if (!value) return
+  emit('update:selectedRecruiters', [value])
 }
 
-const removeRecruiter = (name) => {
-  emit('update:selectedRecruiters', props.selectedRecruiters.filter((item) => item !== name))
+const removeRecruiter = (value) => {
+  emit('update:selectedRecruiters', props.selectedRecruiters.filter((item) => item !== value))
 }
 </script>
 
@@ -98,18 +100,18 @@ const removeRecruiter = (name) => {
     <div class="recruiter-step__grid">
       <button
         v-for="item in visibleRecruiters"
-        :key="item.name"
+        :key="item.key || item.value || item.name"
         type="button"
         class="recruiter-step__card"
-        :class="{ 'recruiter-step__card--selected': selectedRecruiters.includes(item.name) }"
-        @click="selectRecruiter(item.name)"
+        :class="{ 'recruiter-step__card--selected': selectedRecruiters.includes(item.value ?? item.name) }"
+        @click="selectRecruiter(item.value ?? item.name)"
       >
         <div class="recruiter-step__avatar" :style="{ '--avatar-color': item.color }">{{ item.initials }}</div>
         <div class="recruiter-step__meta">
           <div class="recruiter-step__name">{{ item.name }}</div>
           <div class="recruiter-step__type" :style="{ color: item.color }">{{ item.type }}</div>
         </div>
-        <span class="recruiter-step__selector" :class="{ 'recruiter-step__selector--active': selectedRecruiters.includes(item.name) }"></span>
+        <span class="recruiter-step__selector" :class="{ 'recruiter-step__selector--active': selectedRecruiters.includes(item.value ?? item.name) }"></span>
       </button>
     </div>
     <p v-if="searchQuery && !visibleRecruiters.length" class="recruiter-step__empty">No recruiters match this name</p>
@@ -118,16 +120,16 @@ const removeRecruiter = (name) => {
 
     <div class="recruiter-step__selected">
       <div class="recruiter-step__selected-chips">
-        <div v-for="item in selectedRecruiterObjects" :key="item.name" class="recruiter-step__selected-chip">
+        <div v-for="item in selectedRecruiterObjects" :key="item.key || item.value || item.name" class="recruiter-step__selected-chip">
           <span class="recruiter-step__selected-avatar" :style="{ '--avatar-color': item.color }">{{ item.initials }}</span>
           <span>{{ item.name }}</span>
-          <button type="button" class="recruiter-step__close" @click="removeRecruiter(item.name)">x</button>
+          <button type="button" class="recruiter-step__close" @click="removeRecruiter(item.value ?? item.name)">x</button>
         </div>
       </div>
     </div>
 
     <p class="recruiter-step__count">
-      {{ selectedRecruiters.length ? `Selected: ${selectedRecruiters[0]}` : 'No recruiter selected yet' }}
+      {{ selectedRecruiterObjects.length ? `Selected: ${selectedRecruiterObjects[0].name}` : 'No recruiter selected yet' }}
     </p>
   </div>
 </template>

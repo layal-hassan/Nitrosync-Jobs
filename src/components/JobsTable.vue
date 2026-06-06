@@ -691,12 +691,17 @@ const openEditJob = async (job) => {
     return
   }
 
+  if (!job.relatedCompany) {
+    window.alert('This job is missing related_company, so edit cannot be loaded.')
+    return
+  }
+
   try {
     const response = await axios.post(
       getOneJobEndpoint,
       {
         job_uuid: job.jobUuid,
-        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+        related_company: job.relatedCompany,
       },
       {
         headers: {
@@ -727,7 +732,7 @@ const openEditJob = async (job) => {
       endpoint: getOneJobEndpoint,
       payload: {
         job_uuid: job.jobUuid,
-        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+        related_company: job.relatedCompany,
       },
       error,
     })
@@ -813,6 +818,11 @@ const openViewJob = async (job) => {
     return
   }
 
+  if (!job.relatedCompany) {
+    window.alert('This job is missing related_company, so view cannot be loaded.')
+    return
+  }
+
   viewingJobUuid.value = job.jobUuid
 
   try {
@@ -820,7 +830,7 @@ const openViewJob = async (job) => {
       getOneJobEndpoint,
       {
         job_uuid: job.jobUuid,
-        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+        related_company: job.relatedCompany,
       },
         {
           headers: {
@@ -851,7 +861,7 @@ const openViewJob = async (job) => {
       endpoint: getOneJobEndpoint,
       payload: {
         job_uuid: job.jobUuid,
-        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+        related_company: job.relatedCompany,
       },
       error,
     })
@@ -870,6 +880,11 @@ const openViewJob = async (job) => {
 const deleteJob = async (job) => {
   if (!job.jobUuid) {
     deleteDialogError.value = 'This job is missing job_uuid, so delete cannot be sent.'
+    return
+  }
+
+  if (!job.relatedCompany) {
+    deleteDialogError.value = 'This job is missing related_company, so delete cannot be sent.'
     return
   }
 
@@ -895,7 +910,7 @@ const deleteJob = async (job) => {
       deleteJobEndpoint,
       {
         job_uuid: job.jobUuid,
-        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+        related_company: job.relatedCompany,
       },
         {
           headers: {
@@ -914,7 +929,7 @@ const deleteJob = async (job) => {
       endpoint: deleteJobEndpoint,
       payload: {
         job_uuid: job.jobUuid,
-        related_company: job.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
+        related_company: job.relatedCompany,
       },
       error,
     })

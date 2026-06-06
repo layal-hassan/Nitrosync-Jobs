@@ -55,7 +55,8 @@ const fieldGroups = [
   ],
 ]
 
-const createQuestion = (text, status = 'off') => ({
+const createQuestion = (text, status = 'off', id = '') => ({
+  id: String(id || '').trim(),
   text,
   status,
 })
@@ -96,7 +97,7 @@ const cloneSections = (source) =>
     section.color,
     section.apiType,
     Array.isArray(section.questions)
-      ? section.questions.map((question) => createQuestion(question.text, question.status))
+      ? section.questions.map((question) => createQuestion(question.text, question.status, question.id))
       : [],
     section.headerOnly,
   ))
@@ -119,6 +120,7 @@ const syncSectionsToForm = () => {
     apiType: section.apiType,
     headerOnly: section.headerOnly,
     questions: section.questions.map((question) => ({
+      id: question.id,
       text: question.text,
       status: question.status,
     })),
@@ -171,8 +173,13 @@ const mergeApiQuestions = (rows) => {
     const section = sections.find((entry) => entry.apiType === item.type)
     if (!section) return
 
-    if (section.questions.some((question) => question.text === item.question)) return
-    section.questions.push(createQuestion(item.question, 'off'))
+    const existingQuestion = section.questions.find((question) => question.text === item.question)
+    if (existingQuestion) {
+      existingQuestion.id = item.id
+      return
+    }
+
+    section.questions.push(createQuestion(item.question, 'off', item.id))
   })
   syncSectionsToForm()
 }
@@ -226,14 +233,11 @@ const saveCustomQuestion = async (section, value) => {
       question: value,
     })
 
-    if (!section.questions.some((question) => question.text === value)) {
-      section.questions.push(createQuestion(value, 'off'))
-    }
-
     section.customQuestion = ''
     section.addMode = false
     section.expanded = true
-    syncSectionsToForm()
+    const rows = await fetchNitroSyncApplicationQuestions()
+    mergeApiQuestions(rows)
   } catch (error) {
     console.error('Failed to create application question', {
       type: section.apiType,
