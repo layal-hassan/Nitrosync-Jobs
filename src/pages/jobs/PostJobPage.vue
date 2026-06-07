@@ -1352,7 +1352,7 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   const targetedWorkflowStage = String(route.query.target_stage || '').trim()
   const allowStoredWizardUiState = mode !== 'view'
   const allowStoredJobStagesUiState = mode !== 'view'
-  const initialMainStep = openJobStagesStep ? 3 : 0
+  const initialMainStep = mode === 'view' ? wizardSteps.length - 1 : openJobStagesStep ? 3 : 0
   const jobUuid = String(draft.job_uuid || route.query.job_uuid || '').trim()
   companyId = String(draft.related_company || draft.company_uuid || companyId || defaultCompanyId).trim() || defaultCompanyId
   isEditMode.value = mode === 'edit'
@@ -1530,6 +1530,16 @@ const fetchAndApplyApplicationForm = async (jobUuid) => {
   }
 }
 
+const applyDuplicatedApplicationFormDraft = (draft) => {
+  if (!draft) return
+
+  applyApplicationFormDraft({
+    ...draft,
+    id: '',
+  })
+  applicationFormId.value = ''
+}
+
 const storeEditWizardDraftForJob = (jobUuid) => {
   const normalizedJobUuid = String(jobUuid || '').trim()
   if (!normalizedJobUuid) return
@@ -1590,6 +1600,34 @@ const loadViewDraft = () => {
     fetchAndApplyApplicationForm(draft.job_uuid || route.query.job_uuid || '')
   } catch (error) {
     console.error('Failed to load view job draft', error)
+  }
+}
+
+const loadDuplicateDraft = () => {
+  if (route.query.mode !== 'duplicate') return
+
+  const rawDraft = sessionStorage.getItem('nitrosync-duplicate-job')
+  if (!rawDraft) return
+
+  try {
+    const draft = JSON.parse(rawDraft)
+    const duplicateJobUuid = createUuid()
+
+    applyJobDraft({
+      ...draft,
+      job_uuid: duplicateJobUuid,
+      status: '1',
+      published_at: '',
+      publish_at: '',
+      close_at: '',
+      updated_at: '',
+      created_at: '',
+    }, { mode: 'create' })
+
+    applyDuplicatedApplicationFormDraft(draft.application_form)
+    sessionStorage.removeItem('nitrosync-duplicate-job')
+  } catch (error) {
+    console.error('Failed to load duplicate job draft', error)
   }
 }
 
@@ -1666,18 +1704,19 @@ const unpublishViewedJob = async () => {
     }
     openCompletionModal('unpublish')
   } catch (error) {
-    validationMessage.value = error?.message || 'Failed to unpublish the job.'
+    validationMessage.value = formatJobSubmissionError(error) || 'Failed to unpublish the job.'
   } finally {
     submittingJob.value = false
   }
 }
 
-if (route.query.mode !== 'edit' && route.query.mode !== 'view') {
+if (route.query.mode !== 'edit' && route.query.mode !== 'view' && route.query.mode !== 'duplicate') {
   resetCreateEntryState()
 }
 
 loadEditDraft()
 loadViewDraft()
+loadDuplicateDraft()
 onMounted(() => {
   fetchTemplates()
   loadCurrentCompanyName()
@@ -2279,12 +2318,20 @@ const formatJobSubmissionError = (error) => {
     error?.response?.data?.msg ||
     error?.message ||
     ''
+  const validationDetails = error?.response?.data?.errors && typeof error.response.data.errors === 'object'
+    ? Object.entries(error.response.data.errors)
+      .flatMap(([field, messages]) => (Array.isArray(messages) ? messages : [messages])
+        .map((message) => String(message || '').trim())
+        .filter(Boolean)
+        .map((message) => `${field}: ${message}`))
+      .join(' | ')
+    : ''
 
   if (rawMessage.includes('intelligent_screen_job_questions')) {
     return 'One or more Intelligent Screen questions are incomplete. Review that step and make sure each selected question type has a valid question.'
   }
 
-  return rawMessage || 'Failed to create the job. Check the API payload and try again.'
+  return validationDetails || rawMessage || 'Failed to create the job. Check the API payload and try again.'
 }
 
 const getNitroSyncResponseMessage = (payload, fallbackMessage = '') =>
@@ -2953,11 +3000,7 @@ const submitSchedulePublish = async () => {
     openCompletionModal('schedule')
     return Boolean(successfulResponse.message)
   } catch (error) {
-    validationMessage.value =
-      error?.response?.data?.message ||
-      error?.response?.data?.detail ||
-      error?.response?.data?.msg ||
-      'Failed to save publish schedule.'
+    validationMessage.value = formatJobSubmissionError(error) || 'Failed to save publish schedule.'
 
     console.error('Failed to schedule publish', {
       endpoint: schedulePublishEndpoint,

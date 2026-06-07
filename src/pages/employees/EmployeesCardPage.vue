@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { LayoutGrid, LayoutList } from 'lucide-vue-next'
 import AddEmployeeModal from '../../components/modals/AddEmployeeModal.vue'
 import AvailableEmployeesModal from '../../components/modals/AvailableEmployeesModal.vue'
 import EmployeeDeleteModal from '../../components/modals/EmployeeDeleteModal.vue'
@@ -710,13 +711,17 @@ onBeforeUnmount(() => {
               class="employee-view-toggle__btn employee-view-toggle__btn--grid"
               :class="{ 'is-active': viewMode === 'grid' }"
               @click="viewMode = 'grid'"
-            ></button>
+            >
+              <LayoutGrid class="employee-view-toggle__icon" aria-hidden="true" />
+            </button>
             <button
               type="button"
               class="employee-view-toggle__btn employee-view-toggle__btn--list"
               :class="{ 'is-active': viewMode === 'list' }"
               @click="viewMode = 'list'"
-            ></button>
+            >
+              <LayoutList class="employee-view-toggle__icon" aria-hidden="true" />
+            </button>
           </div>
 
           <button type="button" class="employee-toolbar__bulk" @click="isAvailableEmployeesModalOpen = true">Bulk Edit</button>
@@ -1163,43 +1168,29 @@ onBeforeUnmount(() => {
 }
 
 .employee-view-toggle__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 38px;
   height: 26px;
   border-radius: 9px;
-  position: relative;
   background: transparent;
+  color: #ef5d97;
 }
 
 .employee-view-toggle__btn.is-active {
   background: #f4b8cc;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: #fff;
 }
 
-.employee-view-toggle__btn--list::before,
-.employee-view-toggle__btn--grid::before {
-  content: '';
-  position: absolute;
-  inset: 11px 10px;
+.employee-view-toggle__icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
 }
 
-.employee-view-toggle__btn--list::before {
-  background:
-    linear-gradient(currentColor, currentColor) left top/100% 2px no-repeat,
-    linear-gradient(currentColor, currentColor) left center/100% 2px no-repeat,
-    linear-gradient(currentColor, currentColor) left bottom/100% 2px no-repeat;
-  color: #ef5d97;
-}
-
-.employee-view-toggle__btn--grid::before {
-  background:
-    linear-gradient(currentColor, currentColor) left top/8px 8px no-repeat,
-    linear-gradient(currentColor, currentColor) right top/8px 8px no-repeat,
-    linear-gradient(currentColor, currentColor) left bottom/8px 8px no-repeat,
-    linear-gradient(currentColor, currentColor) right bottom/8px 8px no-repeat;
-  color: #ef5d97;
-}
-
-.employee-view-toggle__btn.is-active::before {
+.employee-view-toggle__btn.is-active .employee-view-toggle__icon {
   color: #fff;
 }
 
@@ -1263,7 +1254,7 @@ onBeforeUnmount(() => {
 
 .employee-table__header {
   color: #6b7280;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   background: #f4f5f8;
   border-bottom: 1px solid #f4e8ed;
@@ -1275,7 +1266,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   min-width: 0;
-  font-size: 10px;
+  font-size: 11px;
   text-align: center;
 }
 
@@ -1304,7 +1295,7 @@ onBeforeUnmount(() => {
 .employee-table__cell {
   min-width: 0;
   color: #2d252b;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.2;
   display: flex;
   align-items: center;
@@ -1353,13 +1344,13 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   min-width: 64px;
-  min-height: 24px;
+  min-height: 28px;
   padding: 0 10px;
   border-radius: 20px;
   background: #ffe9f1;
   color: #ef5d97;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .employee-table__status--inactive {

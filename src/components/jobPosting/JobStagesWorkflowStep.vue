@@ -10,11 +10,15 @@ import {
   changeNitroSyncCandidatesJobStage,
 } from '../../composables/useNitroSyncCandidatesActions'
 import {
+  addNitroSyncJobStageTeamMembers,
   createNitroSyncJobStage,
   deleteNitroSyncJobStage,
   fetchNitroSyncJobStage,
   fetchNitroSyncJobStageCandidates,
   fetchNitroSyncJobStages,
+  markNitroSyncCandidateHired,
+  shareNitroSyncJobStageCandidate,
+  verifyNitroSyncSharedCandidate,
   updateNitroSyncJobStage,
 } from '../../composables/useNitroSyncJobStages'
 import {
@@ -27,6 +31,7 @@ import { createNitroSyncCandidatesDisqualificant } from '../../composables/useNi
 import { createNitroSyncCandidatesInterview } from '../../composables/useNitroSyncCandidatesInterviews'
 import { createNitroSyncCandidatesNote } from '../../composables/useNitroSyncCandidatesNotes'
 import { createNitroSyncCandidatesTag } from '../../composables/useNitroSyncCandidatesTags'
+import { getNitroSyncEmployees } from '../../composables/useNitroSyncEmployees'
 import { sendNitroSyncEmail, emailTimeoutMs } from '../../composables/useNitroSyncEmail'
 
 const props = defineProps({
@@ -64,7 +69,7 @@ const showScheduleSuccessModal = ref(false)
 const showScheduleInterviewTypeMenu = ref(false)
 const showAssignModal = ref(false)
 const showAssignActionModal = ref(false)
-const showAssignAiMenu = ref(true)
+const showAssignAiMenu = ref(false)
 const activeAssignCandidateMenu = ref(null)
 const assignMenuTop = ref(16)
 const assignSubmenuTop = ref(98)
@@ -72,8 +77,9 @@ const newStageName = ref('')
 const editStageName = ref('')
 const selectedStageColumn = ref(null)
 const showStatusMenu = ref(false)
-const showJobTitleMenu = ref(true)
+const showJobTitleMenu = ref(false)
 const workflowJobTitles = ref([])
+const selectedWorkflowJobTitle = ref('')
 const activeCandidateMenu = ref(null)
 const activeStageMenu = ref(null)
 const jobsGetAllEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-all')
@@ -98,9 +104,22 @@ const tagSaving = ref(false)
 const tagMessage = ref('')
 const tagError = ref('')
 const createdTags = ref([...defaultCreatedTags])
-const shareProfilePermission = ref('candidate Profile')
-const shareProfileUrl = ref('https://www.youtube.com/watch?v=8rdUZDcL_XM')
-const teamMemberInput = ref('Member Name')
+const shareProfilePermission = ref('view')
+const shareProfileUrl = ref('')
+const shareProfileLoading = ref(false)
+const shareProfileMessage = ref('')
+const shareProfileError = ref('')
+const shareProfileUuid = ref('')
+const verifyShareLoading = ref(false)
+const verifyShareMessage = ref('')
+const verifyShareError = ref('')
+const teamMemberInput = ref('')
+const teamMembersLoading = ref(false)
+const teamMembersSaving = ref(false)
+const teamMembersMessage = ref('')
+const teamMembersError = ref('')
+const employeeDirectory = ref([])
+const selectedTeamMemberUuids = ref([])
 const noteAuthor = ref('Elias Diab')
 const disqualifyReason = ref('')
 const disqualifyPoolOption = ref('add')
@@ -174,16 +193,6 @@ const candidateActionError = ref('')
 const stageActionLoading = ref(false)
 const stageActionMessage = ref('')
 const stageActionError = ref('')
-const teamMembers = [
-  { name: 'Member Name', color: '#ff5c8a' },
-  { name: 'Member Name', color: '#35d06a' },
-  { name: 'Member Name', color: '#4f7dff' },
-  { name: 'Member Name', color: '#ff5c8a' },
-  { name: 'Member Name', color: '#6b21d8' },
-  { name: 'Member Name', color: '#4f7dff' },
-  { name: 'Member Name', color: '#f4b21b' },
-  { name: 'Member Name', color: '#6b21d8' },
-]
 const notes = ref([
   {
     title: 'Note title will be shown here.',
@@ -199,10 +208,10 @@ const listedTests = [
 ]
 
 const statusOptions = [
-  { label: 'published', color: '#4f7dff' },
-  { label: 'active', color: '#6b21d8' },
-  { label: 'closed', color: '#f4b21b' },
-  { label: 'un-published', color: '#41c86a' },
+  { label: 'Published', color: '#4f7dff' },
+  { label: 'Active', color: '#6b21d8' },
+  { label: 'Closed', color: '#f4b21b' },
+  { label: 'Un-published', color: '#41c86a' },
 ]
 
 const selectedStatus = ref(statusOptions[0])
@@ -262,17 +271,12 @@ const fallbackStageColumns = [
 const stagePalette = ['#4f7dff', '#6b21d8', '#f4b21b', '#41c86a', '#ff8a4f']
 const stageCardsPerPage = 5
 const normalizeStageName = (value) => String(value || '').trim().toLowerCase()
+const normalizeValue = (value) => String(value ?? '').trim()
 const formatStagePageNumber = (value) => String(Math.max(1, Number(value) || 1)).padStart(2, '0')
 const getStageColumnKey = (column) =>
   String(column?.jobStageUuid || column?.displayTitle || column?.title || '').trim().toLowerCase()
 const stagePageByKey = ref({})
-const stagePreviewSeed = [
-  { name: 'Robert Fox', role: '4 stars', email: createCandidateEmail('Robert Fox') },
-  { name: 'Devon Lane', role: '4 stars', email: createCandidateEmail('Devon Lane') },
-  { name: 'Kristin Watson', role: '4 stars', email: createCandidateEmail('Kristin Watson') },
-  { name: 'Arlene McCoy', role: '4 stars', email: createCandidateEmail('Arlene McCoy') },
-  { name: 'Bessie Cooper', role: '4 stars', email: createCandidateEmail('Bessie Cooper') },
-]
+const draggedWorkflowStageKey = ref('')
 const candidateAccentByName = {
   'robert fox': '#ff5b94',
   'devon lane': '#4f7dff',
@@ -314,7 +318,7 @@ const getVisibleStageCards = (column) => {
 
 const getStageCardsForDisplay = (column) => {
   const visibleCards = getVisibleStageCards(column)
-  return visibleCards.length ? visibleCards : stagePreviewSeed
+  return visibleCards
 }
 
 const getCandidateInitials = (value) =>
@@ -346,6 +350,92 @@ const getCandidateSecondaryText = (card) => {
 
   return email.split('@')[0].replace(/\./g, ' ')
 }
+
+const getEmployeeUuid = (employee = {}) =>
+  normalizeValue(
+    employee?.employee_uuid
+    ?? employee?.employeeUuid
+    ?? employee?.user_id
+    ?? employee?.userId
+    ?? employee?.employee_additional_information?.employee_uuid
+    ?? employee?.employeeAdditionalInformation?.employee_uuid
+    ?? employee?.uuid
+    ?? employee?.id,
+  )
+
+const getEmployeeName = (employee = {}) => {
+  const fullName = normalizeValue(
+    employee?.full_name
+    ?? employee?.fullName
+    ?? employee?.employee_name
+    ?? employee?.employeeName
+    ?? employee?.name,
+  )
+  const firstName = normalizeValue(employee?.first_name ?? employee?.firstName)
+  const lastName = normalizeValue(employee?.last_name ?? employee?.lastName)
+  return fullName || [firstName, lastName].filter(Boolean).join(' ').trim()
+}
+
+const getStoredUserUuid = () => {
+  const storageKeys = [
+    'nitrosync-user',
+    'nitrosync-profile',
+    'user',
+    'profile',
+    'auth-user',
+    'currentUser',
+  ]
+
+  for (const key of storageKeys) {
+    for (const storage of [globalThis.localStorage, globalThis.sessionStorage]) {
+      try {
+        const rawValue = storage?.getItem?.(key)
+        if (!rawValue) continue
+
+        const parsed = JSON.parse(rawValue)
+        const userUuid = normalizeValue(
+          parsed?.user_uuid
+          ?? parsed?.user?.user_uuid
+          ?? parsed?.employee_uuid
+          ?? parsed?.employee?.employee_uuid
+          ?? parsed?.user_id
+          ?? parsed?.user?.user_id
+          ?? parsed?.uuid
+          ?? parsed?.id,
+        )
+
+        if (userUuid) return userUuid
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return ''
+}
+
+const allTeamMembers = computed(() => {
+  const palette = ['#ff5c8a', '#35d06a', '#4f7dff', '#6b21d8', '#f4b21b']
+
+  return employeeDirectory.value
+    .map((employee, index) => ({
+      memberUuid: getEmployeeUuid(employee),
+      name: getEmployeeName(employee),
+      color: palette[index % palette.length],
+    }))
+    .filter((member) => member.memberUuid && member.name)
+})
+
+const teamMembers = computed(() => {
+  const query = normalizeValue(teamMemberInput.value).toLowerCase()
+  return allTeamMembers.value.filter((member) => !query || member.name.toLowerCase().includes(query))
+})
+
+const selectedTeamMembers = computed(() =>
+  selectedTeamMemberUuids.value
+    .map((memberUuid) => allTeamMembers.value.find((member) => member.memberUuid === memberUuid))
+    .filter(Boolean),
+)
 
 const setStagePage = (column, nextPage) => {
   const key = getStageColumnKey(column)
@@ -386,7 +476,7 @@ const focusTargetedStage = async () => {
     ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-const mapStageRowsToColumns = (rows = []) => {
+const mapStageRowsToColumns = (rows = [], { includeCards = false } = {}) => {
   if (!Array.isArray(rows) || !rows.length) {
     return fallbackStageColumns
   }
@@ -397,7 +487,7 @@ const mapStageRowsToColumns = (rows = []) => {
     jobStageUuid: row.jobStageUuid || '',
     isOpen: typeof row.isOpen === 'boolean' ? row.isOpen : row.enabled ?? false,
     color: stagePalette[index % stagePalette.length],
-    cards: Array.isArray(row.cards) ? row.cards : [],
+    cards: includeCards && Array.isArray(row.cards) ? row.cards : [],
   }))
 }
 
@@ -520,7 +610,7 @@ const fetchWorkflowStages = async () => {
         }),
       )
 
-      stageColumns.value = mapStageRowsToColumns(hydratedRows)
+      stageColumns.value = mapStageRowsToColumns(hydratedRows, { includeCards: true })
       syncStagePaginationState(stageColumns.value)
       emit('stage-rows-updated', hydratedRows)
       await focusTargetedStage()
@@ -598,6 +688,60 @@ const toggleStage = (column) => {
   emitCurrentStages()
 }
 
+const startWorkflowStageDrag = (column) => {
+  draggedWorkflowStageKey.value = getStageColumnKey(column)
+}
+
+const endWorkflowStageDrag = () => {
+  draggedWorkflowStageKey.value = ''
+}
+
+const allowWorkflowStageDrop = (event) => {
+  event.preventDefault()
+}
+
+const dropWorkflowStageAt = (column) => {
+  const fromKey = draggedWorkflowStageKey.value
+  const toKey = getStageColumnKey(column)
+
+  if (!fromKey || !toKey || fromKey === toKey) {
+    endWorkflowStageDrag()
+    return
+  }
+
+  const rows = [...stageColumns.value]
+  const fromIndex = rows.findIndex((item) => getStageColumnKey(item) === fromKey)
+  const toIndex = rows.findIndex((item) => getStageColumnKey(item) === toKey)
+
+  if (fromIndex < 0 || toIndex < 0) {
+    endWorkflowStageDrag()
+    return
+  }
+
+  const [movedRow] = rows.splice(fromIndex, 1)
+  rows.splice(toIndex, 0, movedRow)
+  stageColumns.value = rows
+  syncStagePaginationState(stageColumns.value)
+  emitCurrentStages()
+  endWorkflowStageDrag()
+}
+
+const fetchEmployees = async () => {
+  teamMembersLoading.value = true
+  teamMembersError.value = ''
+
+  try {
+    const response = await getNitroSyncEmployees(props.relatedCompany)
+    employeeDirectory.value = Array.isArray(response?.data) ? response.data : []
+  } catch (error) {
+    console.error('Failed to fetch employees for team members', error)
+    employeeDirectory.value = []
+    teamMembersError.value = getNitroSyncErrorMessage(error, 'Could not load employees.')
+  } finally {
+    teamMembersLoading.value = false
+  }
+}
+
 const toggleStageMenu = (stageTitle) => {
   activeStageMenu.value = activeStageMenu.value === stageTitle ? null : stageTitle
 }
@@ -657,6 +801,10 @@ const openEditStageModal = async (column) => {
     return
   }
 
+  activeStageMenu.value = null
+  selectedStageColumn.value = column
+  editStageName.value = String(column.displayTitle || column.title || '').trim()
+  showEditStageModal.value = true
   stageActionLoading.value = true
   stageActionMessage.value = ''
   stageActionError.value = ''
@@ -671,10 +819,10 @@ const openEditStageModal = async (column) => {
       current?.data?.label ||
       column.displayTitle ||
       column.title
-    activeStageMenu.value = null
-    selectedStageColumn.value = column
-    editStageName.value = String(currentName || '').trim()
-    showEditStageModal.value = true
+
+    if (selectedStageColumn.value?.jobStageUuid === column.jobStageUuid && showEditStageModal.value) {
+      editStageName.value = String(currentName || '').trim()
+    }
   } catch (error) {
     console.error('Failed to edit stage', error)
     stageActionError.value = getNitroSyncErrorMessage(error, 'Failed to edit stage.')
@@ -722,6 +870,7 @@ const editStage = async () => {
 }
 
 const toggleStatusMenu = () => {
+  showJobTitleMenu.value = false
   showStatusMenu.value = !showStatusMenu.value
 }
 
@@ -731,7 +880,13 @@ const selectStatus = (option) => {
 }
 
 const toggleJobTitleMenu = () => {
+  showStatusMenu.value = false
   showJobTitleMenu.value = !showJobTitleMenu.value
+}
+
+const selectWorkflowJobTitle = (title) => {
+  selectedWorkflowJobTitle.value = String(title || '').trim()
+  showJobTitleMenu.value = false
 }
 
 const toggleCandidateMenu = (menuKey) => {
@@ -739,9 +894,65 @@ const toggleCandidateMenu = (menuKey) => {
 }
 
 const getCandidateUuidFromCard = (card) =>
-  String(card?.candidate_uuid ?? card?.candidateUuid ?? '').trim()
+  String(
+    card?.candidate_strict_uuid
+    ?? card?.candidateStrictUuid
+    ?? card?.candidate_uuid
+    ?? card?.candidateUuid
+    ?? '',
+  ).trim()
 
-const handleCandidateMenuAction = (item, card) => {
+const markCandidateAsHired = async (card) => {
+  const candidateUuid = getCandidateUuidFromCard(card)
+
+  if (!candidateUuid) {
+    window.alert('This candidate is missing candidate_uuid, so hiring cannot be sent.')
+    return
+  }
+
+  if (!String(props.relatedCompany || '').trim()) {
+    window.alert('This workflow is missing related_company, so hiring cannot be sent.')
+    return
+  }
+
+  candidateActionLoading.value = true
+  candidateActionMessage.value = ''
+  candidateActionError.value = ''
+
+  try {
+    const result = await markNitroSyncCandidateHired({
+      candidate_uuid: candidateUuid,
+      related_company: props.relatedCompany,
+    })
+
+    const responseCode = String(result.code || '').trim()
+    if ((responseCode && responseCode !== '1') || result.data === false) {
+      throw new Error(result.message || 'Failed to mark candidate as hired.')
+    }
+
+    selectedCandidate.value = {
+      name: card.name,
+      role: '5 Stars',
+      email: card.email || createCandidateEmail(card.name),
+      candidateUuid,
+    }
+
+    await fetchWorkflowStages()
+    showScheduleSuccessModal.value = true
+  } catch (error) {
+    candidateActionError.value =
+      error?.response?.data?.message
+      || error?.response?.data?.detail
+      || error?.message
+      || 'Failed to mark candidate as hired.'
+
+    window.alert(candidateActionError.value)
+  } finally {
+    candidateActionLoading.value = false
+  }
+}
+
+const handleCandidateMenuAction = async (item, card, column = null) => {
   activeCandidateMenu.value = null
 
   if (item === 'Send Email') {
@@ -778,12 +989,34 @@ const handleCandidateMenuAction = (item, card) => {
   }
 
   if (item === 'Share Profile') {
-    selectedCandidate.value = { name: card.name, role: '5 Stars' }
+    selectedCandidate.value = {
+      name: card.name,
+      role: '5 Stars',
+      email: card.email || createCandidateEmail(card.name),
+      candidateUuid: getCandidateUuidFromCard(card),
+    }
+    shareProfilePermission.value = 'view'
+    shareProfileUrl.value = ''
+    shareProfileMessage.value = ''
+    shareProfileError.value = ''
+    shareProfileUuid.value = ''
+    verifyShareMessage.value = ''
+    verifyShareError.value = ''
     showShareProfileModal.value = true
   }
 
   if (item === 'Add team member') {
-    selectedCandidate.value = { name: card.name, role: '5 Stars' }
+    selectedCandidate.value = {
+      name: card.name,
+      role: '5 Stars',
+      email: card.email || createCandidateEmail(card.name),
+      candidateUuid: getCandidateUuidFromCard(card),
+      jobStageUuid: String(column?.jobStageUuid || '').trim(),
+    }
+    selectedTeamMemberUuids.value = []
+    teamMemberInput.value = ''
+    teamMembersMessage.value = ''
+    teamMembersError.value = ''
     showAddTeamMemberModal.value = true
   }
 
@@ -835,6 +1068,10 @@ const handleCandidateMenuAction = (item, card) => {
     assignActionMessage.value = ''
     assignActionError.value = ''
     showAssignActionModal.value = true
+  }
+
+  if (item === 'Mark as Hired') {
+    await markCandidateAsHired(card)
   }
 }
 
@@ -1009,10 +1246,190 @@ const saveNote = async () => {
 
 const closeShareProfileModal = () => {
   showShareProfileModal.value = false
+  shareProfilePermission.value = 'view'
+  shareProfileUrl.value = ''
+  shareProfileMessage.value = ''
+  shareProfileError.value = ''
+  shareProfileUuid.value = ''
+  verifyShareMessage.value = ''
+  verifyShareError.value = ''
+}
+
+const submitShareProfile = async () => {
+  const candidateUuid = normalizeValue(selectedCandidate.value?.candidateUuid)
+  const linkCreatorUuid = getStoredUserUuid()
+
+  if (!candidateUuid) {
+    shareProfileError.value = 'Candidate UUID is required.'
+    shareProfileMessage.value = ''
+    return
+  }
+
+  if (!linkCreatorUuid) {
+    shareProfileError.value = 'Could not resolve link_creator_uuid for the current user.'
+    shareProfileMessage.value = ''
+    return
+  }
+
+  if (!['view', 'edit'].includes(shareProfilePermission.value)) {
+    shareProfileError.value = 'Permission must be view or edit.'
+    shareProfileMessage.value = ''
+    return
+  }
+
+  shareProfileLoading.value = true
+  shareProfileMessage.value = ''
+  shareProfileError.value = ''
+
+  try {
+    const result = await shareNitroSyncJobStageCandidate({
+      related_company: props.relatedCompany,
+      candidate_uuid: candidateUuid,
+      permission: shareProfilePermission.value,
+      link_creator_uuid: linkCreatorUuid,
+    })
+
+    const responseCode = normalizeValue(result.code)
+    if (responseCode && responseCode !== '1') {
+      throw new Error(result.message || 'Failed to share candidate.')
+    }
+
+    shareProfileUuid.value = normalizeValue(
+      result?.data?.share_uuid
+      ?? result?.data?.uuid
+      ?? result?.data?.shareUuid
+      ?? '',
+    )
+    shareProfileMessage.value = result.message || 'Candidate shared successfully.'
+    stageActionMessage.value = shareProfileMessage.value
+    stageActionError.value = ''
+    closeShareProfileModal()
+  } catch (error) {
+    console.error('Failed to share candidate', error)
+    shareProfileError.value =
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      error?.message ||
+      'Failed to share candidate.'
+  } finally {
+    shareProfileLoading.value = false
+  }
+}
+
+const submitVerifySharedCandidate = async () => {
+  const shareUuid = normalizeValue(shareProfileUuid.value)
+
+  if (!shareUuid) {
+    verifyShareError.value = 'Share UUID is required.'
+    verifyShareMessage.value = ''
+    return
+  }
+
+  verifyShareLoading.value = true
+  verifyShareMessage.value = ''
+  verifyShareError.value = ''
+
+  try {
+    const result = await verifyNitroSyncSharedCandidate({
+      share_uuid: shareUuid,
+    })
+
+    const responseCode = normalizeValue(result.code)
+    if (responseCode && responseCode !== '1') {
+      throw new Error(result.message || 'Failed to verify shared candidate.')
+    }
+
+    verifyShareMessage.value = result.message || 'Shared candidate verified successfully.'
+    stageActionMessage.value = verifyShareMessage.value
+    stageActionError.value = ''
+  } catch (error) {
+    console.error('Failed to verify shared candidate', error)
+    verifyShareError.value =
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      error?.message ||
+      'Failed to verify shared candidate.'
+  } finally {
+    verifyShareLoading.value = false
+  }
 }
 
 const closeAddTeamMemberModal = () => {
   showAddTeamMemberModal.value = false
+  selectedTeamMemberUuids.value = []
+  teamMemberInput.value = ''
+  teamMembersMessage.value = ''
+  teamMembersError.value = ''
+}
+
+const toggleTeamMemberSelection = (memberUuid) => {
+  const normalizedMemberUuid = normalizeValue(memberUuid)
+  if (!normalizedMemberUuid) return
+
+  selectedTeamMemberUuids.value = selectedTeamMemberUuids.value.includes(normalizedMemberUuid)
+    ? selectedTeamMemberUuids.value.filter((item) => item !== normalizedMemberUuid)
+    : [...selectedTeamMemberUuids.value, normalizedMemberUuid]
+}
+
+const removeSelectedTeamMember = (memberUuid) => {
+  selectedTeamMemberUuids.value = selectedTeamMemberUuids.value.filter((item) => item !== memberUuid)
+}
+
+const submitAddTeamMembers = async () => {
+  const candidateUuid = normalizeValue(selectedCandidate.value?.candidateUuid)
+  const jobStageUuid = normalizeValue(selectedCandidate.value?.jobStageUuid)
+  const members = selectedTeamMemberUuids.value
+    .map((memberUuid) => ({ member_uuid: normalizeValue(memberUuid) }))
+    .filter((member) => member.member_uuid)
+
+  if (!candidateUuid) {
+    teamMembersError.value = 'Candidate UUID is required.'
+    teamMembersMessage.value = ''
+    return
+  }
+
+  if (!jobStageUuid) {
+    teamMembersError.value = 'Job stage UUID is required.'
+    teamMembersMessage.value = ''
+    return
+  }
+
+  if (!members.length) {
+    teamMembersError.value = 'Select at least one team member.'
+    teamMembersMessage.value = ''
+    return
+  }
+
+  teamMembersSaving.value = true
+  teamMembersMessage.value = ''
+  teamMembersError.value = ''
+
+  try {
+    const result = await addNitroSyncJobStageTeamMembers({
+      related_company: props.relatedCompany,
+      job_stage_uuid: jobStageUuid,
+      candidate_uuid: candidateUuid,
+      members,
+    })
+
+    const responseCode = normalizeValue(result.code)
+    if (responseCode && responseCode !== '1') {
+      throw new Error(result.message || 'Failed to add team members.')
+    }
+
+    stageActionMessage.value = result.message || 'Team members added successfully.'
+    stageActionError.value = ''
+    closeAddTeamMemberModal()
+  } catch (error) {
+    console.error('Failed to add team members', error)
+    teamMembersError.value =
+      error?.response?.data?.message ||
+      error?.response?.data?.detail ||
+      error?.message ||
+      'Failed to add team members.'
+  } finally {
+    teamMembersSaving.value = false
+  }
 }
 
 const closeSendTestModal = () => {
@@ -1497,6 +1914,7 @@ const handleDocumentClick = () => {
 
 onMounted(() => {
   fetchWorkflowJobTitles()
+  fetchEmployees()
   if (Array.isArray(props.stageRows) && props.stageRows.length) {
     stageColumns.value = mapStageRowsToColumns(props.stageRows)
     syncStagePaginationState(stageColumns.value)
@@ -1533,6 +1951,7 @@ watch(
   () => props.relatedCompany,
   (value, previousValue) => {
     if (!String(value || '').trim() || value === previousValue) return
+    fetchEmployees()
     fetchWorkflowStages()
   },
 )
@@ -1547,25 +1966,38 @@ watch(
           <button
             type="button"
             class="workflow-toolbar__tag workflow-toolbar__tag--root"
+            :class="{ 'workflow-toolbar__tag--active': showJobTitleMenu }"
             @click.stop="toggleJobTitleMenu"
           >
             <span class="workflow-toolbar__tag-icon"></span>
-            <span>Job titles</span>
-            <span class="workflow-toolbar__tag-chevron">⌄</span>
+            <span>{{ selectedWorkflowJobTitle || 'Job titles' }}</span>
+            <span class="workflow-toolbar__tag-chevron" :class="{ 'workflow-toolbar__tag-chevron--open': showJobTitleMenu }">⌄</span>
           </button>
 
           <div v-if="showJobTitleMenu" class="workflow-toolbar__tag-children" @click.stop>
-            <button
-              v-for="title in workflowJobTitles"
-              :key="title"
-              type="button"
-              class="workflow-toolbar__tag workflow-toolbar__tag--child"
-            >
-              <span class="workflow-toolbar__tag-icon"></span>
-              <span>{{ title }}</span>
-            </button>
-            <div v-if="!workflowJobTitles.length" class="workflow-toolbar__tag-empty">
-              No job titles found.
+            <div class="workflow-toolbar__tag-menu">
+              <div class="workflow-toolbar__tag-menu-head">
+                <strong>Available Job Titles</strong>
+                <span>{{ workflowJobTitles.length }}</span>
+              </div>
+
+              <div v-if="workflowJobTitles.length" class="workflow-toolbar__tag-menu-list">
+                <button
+                  v-for="title in workflowJobTitles"
+                  :key="title"
+                  type="button"
+                  class="workflow-toolbar__tag workflow-toolbar__tag--child"
+                  :class="{ 'workflow-toolbar__tag--selected': selectedWorkflowJobTitle === title }"
+                  @click="selectWorkflowJobTitle(title)"
+                >
+                  <span class="workflow-toolbar__tag-icon"></span>
+                  <span>{{ title }}</span>
+                </button>
+              </div>
+
+              <div v-else class="workflow-toolbar__tag-empty">
+                No job titles found.
+              </div>
             </div>
           </div>
         </div>
@@ -1623,11 +2055,23 @@ watch(
       v-for="column in filteredStageColumns"
       :key="column.jobStageUuid || column.title"
       class="workflow-stage"
-      :class="{ 'workflow-stage--collapsed': !column.isOpen }"
+      :class="{
+        'workflow-stage--collapsed': !column.isOpen,
+        'workflow-stage--dragging': draggedWorkflowStageKey === getStageColumnKey(column),
+      }"
       :data-workflow-stage="normalizeStageName(column.displayTitle || column.title)"
+      @dragover="allowWorkflowStageDrop"
+      @drop="dropWorkflowStageAt(column)"
     >
       <div class="workflow-stage__header">
         <div class="workflow-stage__title-wrap">
+          <span
+            class="workflow-stage__drag-handle"
+            draggable="true"
+            aria-label="Reorder stage"
+            @dragstart="startWorkflowStageDrag(column)"
+            @dragend="endWorkflowStageDrag"
+          ></span>
           <button
             type="button"
             class="workflow-stage__title-button"
@@ -1703,7 +2147,7 @@ watch(
                 :key="item"
                 type="button"
                 class="workflow-card__menu-item"
-                @click="handleCandidateMenuAction(item, card)"
+                @click="handleCandidateMenuAction(item, card, column)"
               >
                 <span>{{ item }}</span>
                 <span
@@ -1716,9 +2160,12 @@ watch(
             </div>
           </div>
         </article>
+        <div v-if="!getStageCardsForDisplay(column).length" class="workflow-stage__empty">
+          No candidates in this stage.
+        </div>
       </div>
 
-      <div v-if="column.isOpen" class="workflow-stage__footer">
+      <div v-if="column.isOpen && getStageCardsForDisplay(column).length" class="workflow-stage__footer">
         <span class="workflow-stage__footer-text">
           View {{ formatStagePageNumber(getStageCurrentPage(column)) }} of {{ formatStagePageNumber(getStagePageCount(column)) }}
         </span>
@@ -1746,7 +2193,7 @@ watch(
     </div>
 
     <div v-if="showAddStageModal" class="workflow-modal-overlay">
-      <div class="workflow-modal">
+      <div class="workflow-modal workflow-modal--stage-form">
         <button type="button" class="workflow-modal__close" @click="closeAddStageModal">×</button>
         <h4>Add stage</h4>
         <label>stage Name</label>
@@ -1780,7 +2227,7 @@ watch(
     </div>
 
     <div v-if="showEditStageModal" class="workflow-modal-overlay">
-      <div class="workflow-modal">
+      <div class="workflow-modal workflow-modal--stage-form">
         <button type="button" class="workflow-modal__close" @click="closeEditStageModal">أ—</button>
         <h4>Edit stage name</h4>
         <label>Stage name</label>
@@ -1988,32 +2435,71 @@ watch(
         <button v-else type="button" class="workflow-note-card__add" @click="openAddNoteForm">+ Add a new Note</button>
       </div>
     </div>
-<div v-if="showShareProfileModal" class="workflow-modal-overlay">
+    <div v-if="showShareProfileModal" class="workflow-modal-overlay">
       <div class="workflow-modal workflow-modal--compact">
-        <button type="button" class="workflow-modal__close" @click="closeShareProfileModal">×</button>
+        <button type="button" class="workflow-modal__close" @click="closeShareProfileModal">x</button>
         <div class="workflow-simple__title-row">
-          <span class="workflow-simple__icon">↻</span>
+          <span class="workflow-simple__icon">S</span>
           <h4>Share Profile</h4>
         </div>
 
         <div class="workflow-simple__section">
-          <label>Candidate URL</label>
+          <label>Candidate UUID</label>
           <div class="workflow-share-field">
-            <input v-model="shareProfileUrl" type="text" />
-            <button type="button" class="workflow-share-copy">⧉</button>
+            <input :value="selectedCandidate.candidateUuid || ''" type="text" readonly />
           </div>
         </div>
 
         <div class="workflow-simple__section">
-          <label>Anyone has link can view</label>
-          <button v-if="false" type="button" class="workflow-share-select">
-            <span>{{ shareProfilePermission }}</span>
-            <span>⌄</span>
-          </button>
+          <label>Permission</label>
+          <div class="workflow-share-permissions">
+            <button
+              type="button"
+              class="workflow-share-permission"
+              :class="{ 'workflow-share-permission--active': shareProfilePermission === 'view' }"
+              @click="shareProfilePermission = 'view'"
+            >
+              View
+            </button>
+            <button
+              type="button"
+              class="workflow-share-permission"
+              :class="{ 'workflow-share-permission--active': shareProfilePermission === 'edit' }"
+              @click="shareProfilePermission = 'edit'"
+            >
+              Edit
+            </button>
+          </div>
         </div>
 
-        <button type="button" class="workflow-modal__submit workflow-modal__submit--small" @click="closeShareProfileModal">
-          GOT IT
+        <p v-if="shareProfileError" class="workflow-email__feedback workflow-email__feedback--error">{{ shareProfileError }}</p>
+        <p v-if="shareProfileMessage" class="workflow-email__feedback workflow-email__feedback--success">{{ shareProfileMessage }}</p>
+
+        <div class="workflow-simple__section">
+          <label>Share UUID</label>
+          <div class="workflow-share-verify">
+            <input v-model.trim="shareProfileUuid" type="text" placeholder="Paste share UUID" />
+            <button
+              type="button"
+              class="workflow-share-permission workflow-share-permission--verify"
+              :disabled="verifyShareLoading"
+              @click="submitVerifySharedCandidate"
+            >
+              {{ verifyShareLoading ? 'Verifying...' : 'Verify' }}
+            </button>
+          </div>
+        </div>
+
+        <p v-if="verifyShareError" class="workflow-email__feedback workflow-email__feedback--error">{{ verifyShareError }}</p>
+        <p v-if="verifyShareMessage" class="workflow-email__feedback workflow-email__feedback--success">{{ verifyShareMessage }}</p>
+
+        <button
+          type="button"
+          class="workflow-modal__submit workflow-modal__submit--small"
+          :disabled="shareProfileLoading"
+          @click="submitShareProfile"
+        >
+          {{ shareProfileLoading ? "Sharing..." : "Share Candidate" }}
         </button>
       </div>
     </div>
@@ -2026,32 +2512,56 @@ watch(
           <h4>Add Team Member</h4>
         </div>
 
+        <p v-if="teamMembersError" class="workflow-email__feedback workflow-email__feedback--error">{{ teamMembersError }}</p>
+        <p v-else-if="teamMembersLoading" class="workflow-email__feedback">Loading employees...</p>
+
         <div class="workflow-team-grid">
           <article
             v-for="(member, index) in teamMembers"
-            :key="`${member.name}-${index}`"
+            :key="member.memberUuid || `${member.name}-${index}`"
             class="workflow-team-card"
           >
             <span class="workflow-team-card__avatar"></span>
             <span class="workflow-team-card__name" :style="{ color: member.color }">{{ member.name }}</span>
-            <button type="button" class="workflow-team-card__add" :style="{ color: member.color, borderColor: member.color }">+</button>
+            <button
+              type="button"
+              class="workflow-team-card__add"
+              :class="{ 'workflow-team-card__add--active': selectedTeamMemberUuids.includes(member.memberUuid) }"
+              :style="{ color: member.color, borderColor: member.color }"
+              @click="toggleTeamMemberSelection(member.memberUuid)"
+            >
+              {{ selectedTeamMemberUuids.includes(member.memberUuid) ? '✓' : '+' }}
+            </button>
           </article>
         </div>
 
         <div class="workflow-simple__section">
           <label>Name</label>
           <div class="workflow-team-input">
-            <div class="workflow-team-input__pill">
-              <span class="workflow-team-card__avatar"></span>
-              <span>{{ teamMemberInput }}</span>
-              <button type="button">×</button>
-            </div>
-            <button type="button" class="workflow-team-input__add">Add</button>
+            <input v-model.trim="teamMemberInput" type="text" placeholder="Search employee by name" />
           </div>
         </div>
 
-        <button type="button" class="workflow-modal__submit workflow-modal__submit--small" @click="closeAddTeamMemberModal">
-          GOT IT
+        <div v-if="selectedTeamMembers.length" class="workflow-team-selected">
+          <div
+            v-for="member in selectedTeamMembers"
+            :key="member.memberUuid"
+            class="workflow-team-input__pill"
+          >
+            <span class="workflow-team-card__avatar"></span>
+            <span>{{ member.name }}</span>
+            <button type="button" @click="removeSelectedTeamMember(member.memberUuid)">x</button>
+          </div>
+        </div>
+
+
+        <button
+          type="button"
+          class="workflow-modal__submit workflow-modal__submit--small"
+          :disabled="teamMembersSaving"
+          @click="submitAddTeamMembers"
+        >
+          {{ teamMembersSaving ? 'Saving...' : 'Add Team Members' }}
         </button>
       </div>
     </div>
@@ -2725,33 +3235,104 @@ watch(
   color: #767078;
   font-size: 11px;
   white-space: nowrap;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
 }
 
 .workflow-toolbar__tag--root {
-  background: #f4f1f3;
+  min-width: 126px;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.workflow-toolbar__tag--active {
+  border-color: #efbfd2;
+  background: #fff6fa;
+  box-shadow: 0 10px 22px rgba(239, 95, 150, 0.12);
 }
 
 .workflow-toolbar__tag--child {
-  background: #f1eef0;
+  width: 100%;
+  min-height: 38px;
+  justify-content: flex-start;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #f8f6f8;
+}
+
+.workflow-toolbar__tag--child:hover {
+  border-color: #ead7df;
+  background: #fff8fb;
+}
+
+.workflow-toolbar__tag--selected {
+  border-color: #efbfd2;
+  background: #fff1f7;
+  color: #d94d87;
 }
 
 .workflow-toolbar__tag-children {
   position: absolute;
-  top: 0;
-  left: calc(100% + 4px);
-  display: grid;
-  gap: 4px;
+  top: calc(100% + 10px);
+  left: 0;
   z-index: 25;
 }
 
+.workflow-toolbar__tag-menu {
+  width: min(320px, calc(100vw - 64px));
+  padding: 12px;
+  border: 1px solid #eddde5;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(34, 22, 29, 0.14);
+}
+
+.workflow-toolbar__tag-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.workflow-toolbar__tag-menu-head strong {
+  color: #433740;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workflow-toolbar__tag-menu-head span {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #fff1f7;
+  color: #d94d87;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.workflow-toolbar__tag-menu-list {
+  display: grid;
+  gap: 8px;
+  max-height: 248px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
 .workflow-toolbar__tag-empty {
-  padding: 8px 10px;
-  border: 1px solid #e7e2e6;
-  border-radius: 10px;
-  background: #fff;
+  padding: 14px 12px;
+  border: 1px dashed #e8dde3;
+  border-radius: 12px;
+  background: #fcfafb;
   color: #8d8790;
   font-size: 11px;
-  white-space: nowrap;
+  text-align: center;
 }
 
 .workflow-toolbar__tag-icon {
@@ -2780,6 +3361,10 @@ watch(
   border-right: 1.6px solid currentColor;
   border-bottom: 1.6px solid currentColor;
   transform: rotate(45deg) translateY(-1px);
+}
+
+.workflow-toolbar__tag-chevron--open::before {
+  transform: rotate(-135deg) translate(-1px, -1px);
 }
 
 .workflow-toolbar__right {
@@ -2949,6 +3534,10 @@ watch(
   box-shadow: none;
 }
 
+.workflow-stage--dragging {
+  opacity: 0.58;
+}
+
 .workflow-stage__header {
   display: flex;
   align-items: center;
@@ -2958,6 +3547,53 @@ watch(
 
 .workflow-stage__title-wrap {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workflow-stage__drag-handle {
+  display: inline-flex;
+  width: 18px;
+  height: 26px;
+  flex: 0 0 auto;
+  position: relative;
+  cursor: grab;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 0.18s ease, opacity 0.18s ease;
+}
+
+.workflow-stage__drag-handle::before,
+.workflow-stage__drag-handle::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #c8b7c0;
+  box-shadow:
+    0 5px 0 #c8b7c0,
+    0 10px 0 #c8b7c0,
+    0 15px 0 #c8b7c0;
+}
+
+.workflow-stage__drag-handle::before {
+  left: 5px;
+}
+
+.workflow-stage__drag-handle::after {
+  left: 11px;
+}
+
+.workflow-stage__drag-handle:hover {
+  background: rgba(234, 79, 141, 0.08);
+}
+
+.workflow-stage__drag-handle:active {
+  cursor: grabbing;
+  background: rgba(234, 79, 141, 0.12);
 }
 
 .workflow-stage__title-button {
@@ -3243,6 +3879,10 @@ watch(
   height: 4px;
   border-radius: 50%;
   background: #f05994;
+}
+
+.workflow-stage__empty {
+  white-space: nowrap;
 }
 
 .workflow-modal-overlay {
@@ -3657,6 +4297,16 @@ watch(
   font-size: var(--ui-meta-font);
 }
 
+.workflow-modal--stage-form input {
+  box-sizing: border-box;
+  height: 24px !important;
+  min-height: 24px !important;
+  max-height: 24px !important;
+  padding: 0 10px !important;
+  line-height: 24px;
+  font-size: 11px;
+}
+
 .workflow-modal__submit {
   display: block;
   width: 120px;
@@ -3775,6 +4425,44 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.workflow-share-field input[readonly] {
+  background: #f8f8fb;
+}
+
+.workflow-share-permissions {
+  display: flex;
+  gap: 8px;
+}
+
+.workflow-share-verify {
+  display: flex;
+  gap: 8px;
+}
+
+.workflow-share-verify input {
+  flex: 1 1 auto;
+}
+
+.workflow-share-permission {
+  min-width: 78px;
+  height: 32px;
+  border: 1px solid #efe3e8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #8b7580;
+  font-size: var(--ui-meta-font);
+}
+
+.workflow-share-permission--active {
+  border-color: #ea4f8d;
+  background: #fff1f6;
+  color: #ea4f8d;
+}
+
+.workflow-share-permission--verify {
+  min-width: 92px;
 }
 
 .workflow-share-copy {
@@ -3924,6 +4612,11 @@ watch(
   line-height: 1;
 }
 
+.workflow-team-card__add--active {
+  background: currentColor;
+  color: #ffffff !important;
+}
+
 .workflow-team-input {
   min-height: 34px;
   padding: 0 6px 0 8px;
@@ -3936,25 +4629,36 @@ watch(
   gap: 8px;
 }
 
+.workflow-team-input input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: var(--ui-tiny-font);
+}
+
+.workflow-team-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .workflow-team-input__pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #f4f7ff;
   color: #4f7dff;
   font-size: var(--ui-tiny-font);
 }
 
 .workflow-team-input__pill button {
   color: #9aa7ff;
-  font-size: var(--ui-tiny-font);
-}
-
-.workflow-team-input__add {
-  min-width: 32px;
-  height: 18px;
-  border-radius: 999px;
-  background: #fde9f1;
-  color: #ea4f8d;
   font-size: var(--ui-tiny-font);
 }
 

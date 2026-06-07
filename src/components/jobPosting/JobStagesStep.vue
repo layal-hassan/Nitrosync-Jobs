@@ -2162,19 +2162,50 @@ syncStageManagement(visibleStageRows.value)
 }
 
 .stage-shell__handle {
-  width: 12px;
-  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 26px;
   flex: 0 0 auto;
+  position: relative;
+  margin-right: 10px;
   cursor: grab;
-  background-image:
-    radial-gradient(circle, #d8c8d0 1.35px, transparent 1.5px),
-    radial-gradient(circle, #d8c8d0 1.35px, transparent 1.5px);
-  background-size: 6px 6px;
-  background-position: 0 0, 3px 3px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 0.18s ease, opacity 0.18s ease;
+}
+
+.stage-shell__handle::before,
+.stage-shell__handle::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #c8b7c0;
+  box-shadow:
+    0 5px 0 #c8b7c0,
+    0 10px 0 #c8b7c0,
+    0 15px 0 #c8b7c0;
+}
+
+.stage-shell__handle::before {
+  left: 5px;
+}
+
+.stage-shell__handle::after {
+  left: 11px;
+}
+
+.stage-shell__handle:hover {
+  background: rgba(234, 79, 141, 0.08);
 }
 
 .stage-shell__handle:active {
   cursor: grabbing;
+  background: rgba(234, 79, 141, 0.12);
 }
 
 .stage-shell__dot {

@@ -6,7 +6,11 @@ import {
 
 const getAllJobStagesEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/get-all')
 const getOneJobStageEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/get-one')
+const markCandidateHiredEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/mark-candidate-hired')
 const getStageCandidatesEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/get-stage-candidates')
+const addTeamMembersEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/add-team-members')
+const shareCandidateEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/share-candidate')
+const verifySharedCandidateEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/verify-shared-candidate')
 const createJobStageEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/create')
 const editJobStageEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/edit')
 const deleteJobStageEndpoint = buildNitroSyncEndpoint('/v1/jobs-stages/delete')
@@ -49,16 +53,22 @@ const getStageUuid = (item) =>
   )
 
 const normalizeCandidateCard = (item) => {
-  const candidateUuid = normalizeValue(
+  const strictCandidateUuid = normalizeValue(
     item?.candidate_uuid
+    ?? item?.candidate?.candidate_uuid
+    ?? item?.candidate_details?.candidate_uuid
+    ?? item?.candidate?.uuid
+    ?? item?.candidate_details?.uuid
+  )
+
+  const fallbackCandidateReference = normalizeValue(
+    item?.candidate_id
     ?? item?.uuid
     ?? item?.id
-    ?? item?.candidate_id
     ?? item?.application_form_id
-    ?? item?.candidate?.candidate_uuid
-    ?? item?.candidate?.uuid
     ?? item?.candidate?.id,
   )
+  const candidateUuid = strictCandidateUuid || fallbackCandidateReference
 
   if (!candidateUuid) return null
 
@@ -76,6 +86,8 @@ const normalizeCandidateCard = (item) => {
 
   return {
     candidate_uuid: candidateUuid,
+    candidate_strict_uuid: strictCandidateUuid,
+    candidate_reference: fallbackCandidateReference,
     name: fullName || [firstName, lastName].filter(Boolean).join(' ').trim() || 'Candidate',
     role: normalizeValue(
       item?.current_position
@@ -192,6 +204,19 @@ export const fetchNitroSyncJobStage = async (payload, { timeout = nitroSyncReque
   }
 }
 
+export const markNitroSyncCandidateHired = async (payload, { timeout = nitroSyncRequestTimeoutMs } = {}) => {
+  const response = await axios.post(markCandidateHiredEndpoint, payload, {
+    headers: jsonHeaders,
+    timeout,
+  })
+
+  return {
+    code: response?.data?.code || '',
+    message: response?.data?.message || '',
+    data: response?.data?.data ?? null,
+  }
+}
+
 export const fetchNitroSyncJobStageCandidates = async (jobStageUuid, { timeout = nitroSyncRequestTimeoutMs } = {}) => {
   const normalizedJobStageUuid = normalizeValue(jobStageUuid)
 
@@ -215,6 +240,45 @@ export const fetchNitroSyncJobStageCandidates = async (jobStageUuid, { timeout =
   }
 
   return normalizeCandidateRows(response)
+}
+
+export const addNitroSyncJobStageTeamMembers = async (payload, { timeout = nitroSyncRequestTimeoutMs } = {}) => {
+  const response = await axios.post(addTeamMembersEndpoint, payload, {
+    headers: jsonHeaders,
+    timeout,
+  })
+
+  return {
+    code: response?.data?.code || '',
+    message: response?.data?.message || '',
+    data: response?.data?.data ?? null,
+  }
+}
+
+export const shareNitroSyncJobStageCandidate = async (payload, { timeout = nitroSyncRequestTimeoutMs } = {}) => {
+  const response = await axios.post(shareCandidateEndpoint, payload, {
+    headers: jsonHeaders,
+    timeout,
+  })
+
+  return {
+    code: response?.data?.code || '',
+    message: response?.data?.message || '',
+    data: response?.data?.data ?? null,
+  }
+}
+
+export const verifyNitroSyncSharedCandidate = async (payload, { timeout = nitroSyncRequestTimeoutMs } = {}) => {
+  const response = await axios.post(verifySharedCandidateEndpoint, payload, {
+    headers: jsonHeaders,
+    timeout,
+  })
+
+  return {
+    code: response?.data?.code || '',
+    message: response?.data?.message || '',
+    data: response?.data?.data ?? null,
+  }
 }
 
 export const createNitroSyncJobStage = async (payload, { timeout = nitroSyncRequestTimeoutMs } = {}) => {
@@ -257,10 +321,14 @@ export const deleteNitroSyncJobStage = async (payload, { timeout = nitroSyncRequ
 }
 
 export {
+  addTeamMembersEndpoint,
   createJobStageEndpoint,
   deleteJobStageEndpoint,
   editJobStageEndpoint,
   getAllJobStagesEndpoint,
   getOneJobStageEndpoint,
+  markCandidateHiredEndpoint,
+  shareCandidateEndpoint,
+  verifySharedCandidateEndpoint,
   getStageCandidatesEndpoint,
 }

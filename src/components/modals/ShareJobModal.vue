@@ -30,6 +30,15 @@ const loadError = ref('')
 const shareError = ref('')
 const shareSuccess = ref('')
 
+const candidateAvatarPalette = [
+  { background: '#fbe3ec', color: '#e34b8c' },
+  { background: '#e4efff', color: '#3f6fd9' },
+  { background: '#e0f6ec', color: '#249161' },
+  { background: '#fff0d7', color: '#bb7a00' },
+  { background: '#ede6ff', color: '#7b4fe1' },
+  { background: '#e1f6f5', color: '#2e8f89' },
+]
+
 const jobUrl = computed(() => {
   const base =
     typeof window !== 'undefined' && window.location?.origin
@@ -42,6 +51,19 @@ const jobUrl = computed(() => {
 const normalizedQuery = computed(() => String(candidateQuery.value || '').trim().toLowerCase())
 
 const normalizeCandidateLabel = (value) => String(value || '').trim()
+const getCandidateAvatarColors = (candidate = {}) => {
+  const hashSource = [
+    candidate.candidate_uuid,
+    candidate.email,
+    candidate.name,
+  ]
+    .map((value) => normalizeCandidateLabel(value).toLowerCase())
+    .find(Boolean) || 'candidate'
+
+  const hash = hashSource.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return candidateAvatarPalette[hash % candidateAvatarPalette.length]
+}
+
 const normalizeCandidate = (candidate = {}) => {
   const raw = candidate.raw || candidate
   const firstName = normalizeCandidateLabel(candidate.first_name || raw?.first_name || raw?.candidate?.first_name)
@@ -67,6 +89,11 @@ const normalizeCandidate = (candidate = {}) => {
     ) || 'Candidate',
     email: normalizeCandidateLabel(candidate.email || raw?.email || raw?.candidate?.email),
     raw,
+    avatarColors: getCandidateAvatarColors({
+      candidate_uuid: candidate.candidate_uuid || raw?.candidate_uuid || raw?.candidate?.candidate_uuid || raw?.candidate?.uuid,
+      email: candidate.email || raw?.email || raw?.candidate?.email,
+      name: displayName,
+    }),
     searchText: [
       displayName,
       firstName,
@@ -348,7 +375,13 @@ const shareJobWithCandidate = async () => {
                 :class="{ 'is-active': selectedCandidate?.candidate_uuid === candidate.candidate_uuid }"
                 @click="selectCandidate(candidate)"
               >
-                <span class="share-modal__candidate-option-avatar">
+                <span
+                  class="share-modal__candidate-option-avatar"
+                  :style="{
+                    '--candidate-avatar-bg': candidate.avatarColors?.background,
+                    '--candidate-avatar-color': candidate.avatarColors?.color,
+                  }"
+                >
                   {{ String(candidate.name || 'C').slice(0, 1).toUpperCase() }}
                 </span>
                 <span class="share-modal__candidate-option-meta">
@@ -362,7 +395,15 @@ const shareJobWithCandidate = async () => {
             <p v-else class="share-modal__info">No candidates match your search.</p>
 
             <div v-if="selectedCandidate" class="share-modal__candidate-card">
-              <div class="share-modal__candidate-avatar">{{ selectedCandidateInitials }}</div>
+              <div
+                class="share-modal__candidate-avatar"
+                :style="{
+                  '--candidate-avatar-bg': selectedCandidate.avatarColors?.background,
+                  '--candidate-avatar-color': selectedCandidate.avatarColors?.color,
+                }"
+              >
+                {{ selectedCandidateInitials }}
+              </div>
               <div class="share-modal__candidate-meta">
                 <div class="share-modal__candidate-name">{{ selectedCandidate.name }}</div>
                 <div class="share-modal__candidate-role">{{ selectedCandidate.role }}</div>
@@ -651,13 +692,15 @@ const shareJobWithCandidate = async () => {
 
 .share-modal__candidate-avatar,
 .share-modal__candidate-option-avatar {
+  --candidate-avatar-bg: #f1d9e3;
+  --candidate-avatar-color: #f04f92;
   width: 32px;
   height: 32px;
   border-radius: 11px;
   display: grid;
   place-items: center;
-  background: #f1d9e3;
-  color: #f04f92;
+  background: var(--candidate-avatar-bg);
+  color: var(--candidate-avatar-color);
   font-size: 12px;
   font-weight: 700;
 }

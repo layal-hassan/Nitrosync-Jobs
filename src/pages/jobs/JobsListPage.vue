@@ -93,6 +93,6 @@ onMounted(() => {
       <span class="breadcrumb-text">Jobs</span>
     </div>
 
-    <JobsTable :jobs="jobs" />
+    <JobsTable :jobs="jobs" @refresh-jobs="fetchJobs" />
   </div>
 </template>

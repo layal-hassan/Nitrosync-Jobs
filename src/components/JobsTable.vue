@@ -3,7 +3,19 @@ import axios from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  Archive,
+  BriefcaseBusiness,
+  CalendarX,
+  CircleCheckBig,
+  CirclePause,
+  FileText,
+  LayoutGrid,
+  LayoutList,
+  ShieldCheck,
+} from 'lucide-vue-next'
+import {
   deleteNitroSyncApplicationForm,
+  fetchNitroSyncApplicationForm,
   fetchNitroSyncApplicationForms,
 } from '../composables/useNitroSyncApplicationForms'
 import {
@@ -19,6 +31,7 @@ import Dropdown from './ui/Dropdown.vue'
 const props = defineProps({
   jobs: Array,
 })
+const emit = defineEmits(['refresh-jobs'])
 
 const openMenuIndex = ref(null)
 const openStageTooltip = ref('')
@@ -36,14 +49,17 @@ const pageSize = ref(15)
 const currentPage = ref(1)
 const activeStatusFilter = ref('all')
 const deletingJobUuid = ref('')
+const duplicatingJobUuid = ref('')
 const changingStatusJobUuid = ref('')
 const deletedJobUuids = ref([])
 const statusOverrides = ref({})
 const viewingJobUuid = ref('')
 const router = useRouter()
 const deleteJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/delete')
+const duplicateJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/duplicate-job')
 const getOneJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-one')
 const recruiterStorageKey = 'nitrosync-job-recruiters'
+const duplicateJobDraftStorageKey = 'nitrosync-duplicate-job'
 
 const createDefaultFilters = () => ({
   job_title: '',
@@ -59,12 +75,12 @@ const createDefaultFilters = () => ({
 })
 
 const filterForm = ref(createDefaultFilters())
-const defaultStageColors = ['#dbe4ff', '#d9f5ea', '#eadfff', '#dcf7e6']
+const defaultStageColors = ['#8fa8ff', '#79ddb5', '#c08df7', '#7fe0c4']
 const stageDefinitions = [
-  { key: 'screen', label: 'Screen', color: '#3f6fff', mutedColor: '#dbe4ff' },
-  { key: 'testing', label: 'Testing', color: '#2fc98f', mutedColor: '#d9f5ea' },
-  { key: 'interview', label: 'Interview', color: '#b58cff', mutedColor: '#eadfff' },
-  { key: 'hired', label: 'Hired', color: '#25b45b', mutedColor: '#dcf7e6' },
+  { key: 'screen', label: 'Screen', color: '#6f86ff', mutedColor: '#8fa8ff' },
+  { key: 'testing', label: 'Testing', color: '#4ccf8f', mutedColor: '#79ddb5' },
+  { key: 'interview', label: 'Interview', color: '#a978ef', mutedColor: '#c08df7' },
+  { key: 'hired', label: 'Hired', color: '#58d2bf', mutedColor: '#7fe0c4' },
 ]
 
 const headers = [
@@ -95,6 +111,42 @@ const includesNormalized = (source, query) => normalizeString(source).includes(n
 const toArray = (value) => (Array.isArray(value) ? value : [])
 const slugifyStage = (value) => normalizeString(value).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
 const uniqueValues = (values) => [...new Set(values.map((value) => String(value ?? '').trim()).filter(Boolean))]
+
+const tagTonePalette = [
+  { bg: '#efe6ff', color: '#7a4fe0' },
+  { bg: '#fff0d9', color: '#b97800' },
+  { bg: '#e4eeff', color: '#3f6fd9' },
+  { bg: '#dff4eb', color: '#22895e' },
+  { bg: '#fbe0ec', color: '#bc4f85' },
+  { bg: '#e3f6f4', color: '#2f8e88' },
+]
+
+const getTagTone = (tag) => {
+  const normalizedTag = normalizeString(tag)
+
+  if (['node.js', 'nodejs', 'backend', 'ui/ux', 'qa', 'aws', 'b2b', 'sales'].some((item) => normalizedTag.includes(item))) {
+    return { bg: '#efe6ff', color: '#7a4fe0' }
+  }
+
+  if (['design', 'hr', 'site', 'management'].some((item) => normalizedTag.includes(item))) {
+    return { bg: '#fff0d9', color: '#b97800' }
+  }
+
+  if (['testing', 'devops', 'recruitment', 'finance'].some((item) => normalizedTag.includes(item))) {
+    return { bg: '#e4eeff', color: '#3f6fd9' }
+  }
+
+  if (['campaign', 'product', 'engineering'].some((item) => normalizedTag.includes(item))) {
+    return { bg: '#dff4eb', color: '#22895e' }
+  }
+
+  if (['marketing', 'high salary'].some((item) => normalizedTag.includes(item))) {
+    return { bg: '#fbe0ec', color: '#bc4f85' }
+  }
+
+  const hash = normalizedTag.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
+  return tagTonePalette[hash % tagTonePalette.length]
+}
 
 const formatDate = (value) => {
   if (!value) return '--'
@@ -397,13 +449,13 @@ const statusCards = computed(() => {
   })
 
   return [
-    { key: 'all', label: 'All Jobs', count: totals.total, iconClass: 'jobs-stat__icon jobs-stat__icon--all' },
-    { key: 'active', label: 'Active', count: totals.active, iconClass: 'jobs-stat__icon jobs-stat__icon--active' },
-    { key: 'on_hold', label: 'On Hold', count: totals.on_hold, iconClass: 'jobs-stat__icon jobs-stat__icon--hold' },
-    { key: 'closed', label: 'Closed', count: totals.closed, iconClass: 'jobs-stat__icon jobs-stat__icon--closed' },
-    { key: 'expired', label: 'Expired', count: totals.expired, iconClass: 'jobs-stat__icon jobs-stat__icon--expired' },
-    { key: 'draft', label: 'Draft', count: totals.draft, iconClass: 'jobs-stat__icon jobs-stat__icon--draft' },
-    { key: 'archived', label: 'Archived', count: totals.archived, iconClass: 'jobs-stat__icon jobs-stat__icon--archived' },
+    { key: 'all', label: 'All Jobs', count: totals.total, iconClass: 'jobs-stat__icon jobs-stat__icon--all', icon: BriefcaseBusiness },
+    { key: 'active', label: 'Active', count: totals.active, iconClass: 'jobs-stat__icon jobs-stat__icon--active', icon: ShieldCheck },
+    { key: 'on_hold', label: 'On Hold', count: totals.on_hold, iconClass: 'jobs-stat__icon jobs-stat__icon--hold', icon: CirclePause },
+    { key: 'closed', label: 'Closed', count: totals.closed, iconClass: 'jobs-stat__icon jobs-stat__icon--closed', icon: CircleCheckBig },
+    { key: 'expired', label: 'Expired', count: totals.expired, iconClass: 'jobs-stat__icon jobs-stat__icon--expired', icon: CalendarX },
+    { key: 'draft', label: 'Draft', count: totals.draft, iconClass: 'jobs-stat__icon jobs-stat__icon--draft', icon: FileText },
+    { key: 'archived', label: 'Archived', count: totals.archived, iconClass: 'jobs-stat__icon jobs-stat__icon--archived', icon: Archive },
   ]
 })
 
@@ -662,6 +714,146 @@ const openDeleteDialog = (job) => {
   deleteDialogError.value = ''
   isDeleteDialogOpen.value = true
   openMenuIndex.value = null
+}
+
+const openDuplicateJobFallback = async (job) => {
+  const response = await axios.post(
+    getOneJobEndpoint,
+    {
+      job_uuid: job.jobUuid,
+      related_company: job.relatedCompany,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      timeout: nitroSyncRequestTimeoutMs,
+    },
+  )
+
+  const details =
+    response?.data?.data?.job
+    ?? response?.data?.data
+    ?? response?.data?.job
+    ?? {}
+
+  const payload = buildStoredJobPayload(job, details)
+  let applicationForm = null
+
+  try {
+    applicationForm = await fetchNitroSyncApplicationForm({
+      related_company: job.relatedCompany,
+      job_uuid: job.jobUuid,
+    })
+  } catch (applicationFormError) {
+    console.error('Failed to fetch application form for duplicate fallback', {
+      payload: {
+        related_company: job.relatedCompany,
+        job_uuid: job.jobUuid,
+      },
+      error: applicationFormError,
+    })
+  }
+
+  sessionStorage.setItem(
+    duplicateJobDraftStorageKey,
+    JSON.stringify({
+      ...payload,
+      source_job_uuid: job.jobUuid,
+      application_form: applicationForm,
+    }),
+  )
+
+  openMenuIndex.value = null
+  router.push({
+    path: '/jobs/post',
+    query: {
+      mode: 'duplicate',
+      source_job_uuid: job.jobUuid || '',
+    },
+  })
+}
+
+const duplicateJob = async (job) => {
+  if (!job?.jobUuid) {
+    window.alert('This job is missing job_uuid, so duplicate cannot be sent.')
+    return
+  }
+
+  if (!job?.relatedCompany) {
+    window.alert('This job is missing related_company, so duplicate cannot be sent.')
+    return
+  }
+
+  if (duplicatingJobUuid.value === job.jobUuid) {
+    return
+  }
+
+  duplicatingJobUuid.value = job.jobUuid
+
+  try {
+    const response = await axios.post(
+      duplicateJobEndpoint,
+      {
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany,
+      },
+      {
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        timeout: nitroSyncRequestTimeoutMs,
+      },
+    )
+
+    const responseCode = String(response?.data?.code ?? '').trim()
+    const responseMessage = String(
+      response?.data?.message
+      ?? response?.data?.detail
+      ?? response?.data?.msg
+      ?? '',
+    ).trim()
+
+    if (responseCode === '0' || response?.data?.data === false) {
+      throw new Error(responseMessage || 'Failed to duplicate the job.')
+    }
+
+    openMenuIndex.value = null
+    emit('refresh-jobs')
+    window.alert(responseMessage || 'Job duplicated successfully.')
+  } catch (error) {
+    console.error('Failed to duplicate job', {
+      endpoint: duplicateJobEndpoint,
+      payload: {
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany,
+      },
+      error,
+    })
+
+    if (String(error?.response?.data?.message || error?.message || '').includes('replicate() on null')) {
+      try {
+        await openDuplicateJobFallback(job)
+        return
+      } catch (fallbackError) {
+        console.error('Failed to open duplicate fallback', {
+          jobUuid: job.jobUuid,
+          error: fallbackError,
+        })
+      }
+    }
+
+    window.alert(
+      error?.response?.data?.message
+      || error?.response?.data?.detail
+      || error?.response?.data?.msg
+      || error?.message
+      || 'Failed to duplicate the job.',
+    )
+  } finally {
+    duplicatingJobUuid.value = ''
+  }
 }
 
 const closeDeleteDialog = () => {
@@ -998,7 +1190,9 @@ onBeforeUnmount(() => {
         :key="card.key"
         class="jobs-stat"
       >
-        <span :class="card.iconClass"></span>
+        <span :class="card.iconClass">
+          <component :is="card.icon" />
+        </span>
         <div class="jobs-stat__content">
           <span class="jobs-stat__label">{{ card.label }}</span>
           <strong class="jobs-stat__value">{{ card.count }}</strong>
@@ -1045,14 +1239,18 @@ onBeforeUnmount(() => {
               :class="{ 'is-active': viewMode === 'grid' }"
               aria-label="Grid view"
               @click="setViewMode('grid')"
-            ></button>
+            >
+              <LayoutGrid class="jobs-controls__view-icon" aria-hidden="true" />
+            </button>
             <button
               type="button"
               class="jobs-controls__view-btn jobs-controls__view-btn--list"
               :class="{ 'is-active': viewMode === 'list' }"
               aria-label="List view"
               @click="setViewMode('list')"
-            ></button>
+            >
+              <LayoutList class="jobs-controls__view-icon" aria-hidden="true" />
+            </button>
           </div>
           <button class="jobs-controls__filter" @click="openFilter">
             <span class="jobs-controls__filter-icon"></span>
@@ -1165,7 +1363,14 @@ onBeforeUnmount(() => {
         <div class="jobs-col jobs-col--tags">
           <div class="jobs-tags">
             <template v-if="job.tags.length">
-              <span v-for="tag in job.tags.slice(0, 2)" :key="tag" class="jobs-tag">{{ tag }}</span>
+              <span
+                v-for="tag in job.tags.slice(0, 2)"
+                :key="tag"
+                class="jobs-tag"
+                :style="{ backgroundColor: getTagTone(tag).bg, color: getTagTone(tag).color }"
+              >
+                {{ tag }}
+              </span>
               <span v-if="job.tags.length > 2" class="jobs-tag jobs-tag--count">+{{ job.tags.length - 2 }}</span>
             </template>
             <span v-else class="jobs-tag jobs-tag--empty">No tags</span>
@@ -1180,6 +1385,7 @@ onBeforeUnmount(() => {
           <div v-if="openMenuIndex === index" class="jobs-action__menu">
             <button type="button" :disabled="viewingJobUuid === job.jobUuid" @click.stop="openViewJob(job)">View</button>
             <button type="button" @click.stop="openEditJob(job)">Edit</button>
+            <button type="button" :disabled="duplicatingJobUuid === job.jobUuid" @click.stop="duplicateJob(job)">{{ duplicatingJobUuid === job.jobUuid ? 'Duplicating...' : 'Duplicate' }}</button>
             <button type="button" :disabled="deletingJobUuid === job.jobUuid" @click.stop="openDeleteDialog(job)">Delete</button>
             <button type="button" @click.stop="openGetCandidateModal(job)">Get Candidates</button>
             <div class="jobs-action__status">
@@ -1224,6 +1430,7 @@ onBeforeUnmount(() => {
             <div v-if="openMenuIndex === index" class="jobs-action__menu">
               <button type="button" :disabled="viewingJobUuid === job.jobUuid" @click.stop="openViewJob(job)">View</button>
               <button type="button" @click.stop="openEditJob(job)">Edit</button>
+              <button type="button" :disabled="duplicatingJobUuid === job.jobUuid" @click.stop="duplicateJob(job)">{{ duplicatingJobUuid === job.jobUuid ? 'Duplicating...' : 'Duplicate' }}</button>
               <button type="button" :disabled="deletingJobUuid === job.jobUuid" @click.stop="openDeleteDialog(job)">Delete</button>
               <button type="button" @click.stop="openGetCandidateModal(job)">Get Candidates</button>
               <div class="jobs-action__status">
@@ -1329,7 +1536,14 @@ onBeforeUnmount(() => {
           <span class="jobs-grid-card__label">Tags</span>
           <div class="jobs-tags jobs-tags--grid">
             <template v-if="job.tags.length">
-              <span v-for="tag in job.tags.slice(0, 3)" :key="`grid-tag-${job.id}-${tag}`" class="jobs-tag">{{ tag }}</span>
+              <span
+                v-for="tag in job.tags.slice(0, 3)"
+                :key="`grid-tag-${job.id}-${tag}`"
+                class="jobs-tag"
+                :style="{ backgroundColor: getTagTone(tag).bg, color: getTagTone(tag).color }"
+              >
+                {{ tag }}
+              </span>
               <span v-if="job.tags.length > 3" class="jobs-tag jobs-tag--count">+{{ job.tags.length - 3 }}</span>
             </template>
             <span v-else class="jobs-tag jobs-tag--empty">No tags</span>
@@ -1413,61 +1627,60 @@ onBeforeUnmount(() => {
 
 .jobs-overview {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(7, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .jobs-stat {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 18px 20px;
-  border: 1px solid #f0e5ea;
-  border-radius: 20px;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #f1e5ea;
+  border-radius: 18px;
   background: #ffffff;
-  box-shadow: 0 10px 26px rgba(66, 39, 51, 0.04);
+  box-shadow: 0 8px 22px rgba(66, 39, 51, 0.04);
 }
 
 .jobs-stat__icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
   flex: 0 0 auto;
   position: relative;
+  display: grid;
+  place-items: center;
 }
 
-.jobs-stat__icon::before {
-  content: '';
-  position: absolute;
-  inset: 12px;
-  border-radius: 10px;
-  background: currentColor;
-  opacity: 0.18;
+.jobs-stat__icon :deep(svg) {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
 }
 
-.jobs-stat__icon--all { background: #fff1f6; color: #ea4f8d; }
-.jobs-stat__icon--active { background: #eaf9f0; color: #28b85d; }
-.jobs-stat__icon--hold { background: #fff4df; color: #cd9200; }
-.jobs-stat__icon--closed { background: #f1f3fa; color: #6b7280; }
-.jobs-stat__icon--expired { background: #fff0f1; color: #f25f6d; }
-.jobs-stat__icon--draft { background: #f3ebff; color: #8b5cf6; }
-.jobs-stat__icon--archived { background: #eceff3; color: #566273; }
+.jobs-stat__icon--all { background: #ffeaf2; color: #ea4f8d; }
+.jobs-stat__icon--active { background: #e4f8ec; color: #22b368; }
+.jobs-stat__icon--hold { background: #fff1d1; color: #d28a00; }
+.jobs-stat__icon--closed { background: #edf0f6; color: #70788a; }
+.jobs-stat__icon--expired { background: #ffe6ea; color: #f25467; }
+.jobs-stat__icon--draft { background: #efe6ff; color: #8c5bf3; }
+.jobs-stat__icon--archived { background: #edf1f5; color: #5f697b; }
 
 .jobs-stat__content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .jobs-stat__label {
-  font-size: 14px;
+  font-size: 12px;
   color: #51414a;
   font-weight: 600;
 }
 
 .jobs-stat__value {
-  font-size: 34px;
+  font-size: 20px;
   line-height: 1;
   color: #17111b;
 }
@@ -1574,48 +1787,62 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .jobs-section__heading {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 14px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .jobs-section__title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0;
   color: #111827;
-  margin-top: 2px;
-  margin-bottom: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .jobs-status-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.jobs-status-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .jobs-status-tabs__item {
-  min-height: 34px;
+  min-height: 30px;
   padding: 0 14px;
-  border: 1px solid #f1e3ea;
+  border: 1px solid #f0e3e9;
   border-radius: 999px;
   background: #ffffff;
   color: #5f5360;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .jobs-status-tabs__item.is-active {
   border-color: #ea4f8d;
-  background: linear-gradient(135deg, #f24b90, #ea74a7);
+  background: linear-gradient(135deg, #f24d91, #ea5f98);
   color: #ffffff;
-  box-shadow: 0 12px 24px rgba(234, 79, 141, 0.2);
+  box-shadow: 0 8px 18px rgba(234, 79, 141, 0.18);
 }
 
 .jobs-controls {
@@ -1623,19 +1850,23 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .jobs-search {
-  min-width: 400px;
-  height: 40px;
-  padding: 0 14px;
+  min-width: 0;
+  width: 168px;
+  max-width: 100%;
+  height: 31px;
+  padding: 0 8px;
   border: 1px solid #efe3e8;
-  border-radius: 16px;
+  border-radius: 14px;
   background: #ffffff;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .jobs-search input {
@@ -1645,13 +1876,18 @@ onBeforeUnmount(() => {
   outline: none;
   background: transparent;
   color: #4b5563;
-  font-size: 14px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.jobs-search input::placeholder {
+  font-size: 10px;
 }
 
 .jobs-search__icon {
-  width: 15px;
-  height: 15px;
-  border: 2px solid #9ca3af;
+  width: 11px;
+  height: 11px;
+  border: 1.6px solid #9ca3af;
   border-radius: 999px;
   position: relative;
   flex: 0 0 auto;
@@ -1660,11 +1896,11 @@ onBeforeUnmount(() => {
 .jobs-search__icon::after {
   content: '';
   position: absolute;
-  width: 7px;
+  width: 5px;
   height: 2px;
   background: #9ca3af;
   border-radius: 999px;
-  right: -5px;
+  right: -3px;
   bottom: -2px;
   transform: rotate(45deg);
 }
@@ -1672,9 +1908,9 @@ onBeforeUnmount(() => {
 .jobs-controls__show {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 3px;
   color: #8d6977;
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1;
   white-space: nowrap;
 }
@@ -1714,18 +1950,18 @@ onBeforeUnmount(() => {
 }
 
 .jobs-controls__show-select :deep(.dropdown__trigger) {
-  min-width: 68px;
-  height: 38px;
-  padding: 0 26px 0 12px;
-  border: 0;
-  background: #f8d8e7;
+  min-width: 54px;
+  height: 32px;
+  padding: 0 22px 0 9px;
+  border: 1px solid #f0d9e3;
+  background: #fff0f6;
   color: #ee5a96;
-  border-radius: 11px;
+  border-radius: 10px;
   box-shadow: none;
 }
 
 .jobs-controls__show-select :deep(.dropdown__value) {
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1;
 }
 
@@ -1741,90 +1977,62 @@ onBeforeUnmount(() => {
 }
 
 .jobs-controls__view {
-  min-width: 92px;
-  height: 38px;
-  padding: 5px;
-  background: #f8d8e7;
-  border-radius: 12px;
+  min-width: 72px;
+  height: 32px;
+  padding: 3px;
+  background: #fff0f6;
+  border: 1px solid #f0d9e3;
+  border-radius: 10px;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .jobs-controls__view-btn {
-  width: 38px;
-  height: 26px;
+  width: 29px;
+  height: 20px;
   border: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   background: transparent;
-  position: relative;
   display: grid;
   place-items: center;
+  color: #ea4f8d;
   transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .jobs-controls__view-btn.is-active {
-  background: #f4b8cc;
+  background: #f7bfd2;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: #fff;
 }
 
-.jobs-controls__view-btn--grid::before {
-  content: '';
-  position: absolute;
-  width: 15px;
-  height: 15px;
-  border-radius: 4px;
-  background:
-    linear-gradient(#ea4f8d, #ea4f8d) left top/6px 6px no-repeat,
-    linear-gradient(#f7a7c3, #f7a7c3) right top/6px 6px no-repeat,
-    linear-gradient(#f7a7c3, #f7a7c3) left bottom/6px 6px no-repeat,
-    linear-gradient(#ea4f8d, #ea4f8d) right bottom/6px 6px no-repeat;
-}
-
-.jobs-controls__view-btn--list::before {
-  content: '';
-  position: absolute;
-  left: 9px;
-  right: 9px;
-  top: 7px;
-  height: 5px;
-  border-radius: 4px;
-  background: #ffffff;
-  box-shadow: 0 8px 0 #ffffff;
-}
-
-.jobs-controls__view-btn--list::after {
-  content: '';
-  position: absolute;
-  top: 12px;
-  left: 9px;
-  width: 6px;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
+.jobs-controls__view-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
 }
 
 .jobs-controls__filter {
-  height: 38px;
-  padding: 0 16px;
-  border: 0;
-  background: #f3bfd2;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid #eeb1c7;
+  background: #ffdfe9;
   color: #ea4f8d;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  border-radius: 11px;
+  gap: 5px;
+  font-size: 11px;
+  border-radius: 10px;
   white-space: nowrap;
 }
 
 .jobs-controls__clear {
-  height: 38px;
-  padding: 0 6px;
+  height: 32px;
+  padding: 0 4px;
   border: 0;
   background: transparent;
   color: #ea4f8d;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -1837,22 +2045,22 @@ onBeforeUnmount(() => {
 }
 
 .jobs-controls__post {
-  height: 38px;
-  padding: 0 16px;
-  border: 1px solid #ee6a9c;
-  background: transparent;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #ee78a6;
+  background: #fff8fb;
   color: #ee5a96;
-  font-size: 13px;
+  font-size: 11px;
   border-radius: 11px;
   line-height: 1;
   white-space: nowrap;
 }
 
 .jobs-card {
-  background: #f6f7fb;
-  border-radius: 16px;
-  padding: 12px 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  background: #f8f9fc;
+  border-radius: 20px;
+  padding: 10px 10px 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
   overflow-x: auto;
   overflow-y: visible;
 }
@@ -2150,7 +2358,7 @@ onBeforeUnmount(() => {
 }
 
 .jobs-stages__dot--active {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 1px rgba(123, 96, 112, 0.1);
 }
 
 .jobs-stages__tooltip {
@@ -2205,21 +2413,21 @@ onBeforeUnmount(() => {
 }
 
 .jobs-tag {
-  background: #f4e8ec;
+  background: #ecdde3;
   padding: 4px 9px;
   border-radius: 20px;
   font-size: 10px;
-  color: #7f6874;
+  color: #654b59;
 }
 
 .jobs-tag--count {
-  background: #f0ecff;
-  color: #7757dd;
+  background: #e7e0ff;
+  color: #6747d5;
 }
 
 .jobs-tag--empty {
-  background: #f5f6fa;
-  color: #97a0ad;
+  background: #eceff5;
+  color: #7d8797;
 }
 
 :deep(.department) {
@@ -2229,16 +2437,16 @@ onBeforeUnmount(() => {
 }
 
 :deep(.department--pink) { color: #f04f92; }
-:deep(.department--blue) { color: #4264ff; }
-:deep(.department--indigo) { color: #6d46ec; }
-:deep(.department--gold) { color: #df9a00; }
-:deep(.department--green) { color: #28b85d; }
+:deep(.department--blue) { color: #3558ea; }
+:deep(.department--indigo) { color: #5f37dd; }
+:deep(.department--gold) { color: #c78700; }
+:deep(.department--green) { color: #1fa75b; }
 
 :deep(.recruiter) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #f7f7f9;
+  background: #eef1f5;
   border-radius: 20px;
   padding: 4px 8px;
   font-size: 10px;
@@ -2264,20 +2472,20 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-:deep(.job-status--active) { color: #1fa968; background: #ddf8ea; }
-:deep(.job-status--hold) { color: #c78300; background: #fff2d5; }
-:deep(.job-status--closed) { color: #6b7280; background: #eef1f7; }
-:deep(.job-status--draft) { color: #8657f3; background: #efe8ff; }
-:deep(.job-status--expired) { color: #f25f6d; background: #ffe5e8; }
-:deep(.job-status--archived) { color: #566273; background: #eceff3; }
-:deep(.job-status--pending) { color: #4f46e5; background: #e8ecff; }
+:deep(.job-status--active) { color: #148553; background: #d4f1e1; }
+:deep(.job-status--hold) { color: #ad7200; background: #ffe9bc; }
+:deep(.job-status--closed) { color: #586173; background: #e4e9f1; }
+:deep(.job-status--draft) { color: #7045df; background: #e6dcff; }
+:deep(.job-status--expired) { color: #e14758; background: #ffd8dd; }
+:deep(.job-status--archived) { color: #485567; background: #e3e8ef; }
+:deep(.job-status--pending) { color: #3f38c8; background: #dde4ff; }
 
-:deep(.recruiter--pink) { color: #ea5b93; background: #f8eaf0; }
-:deep(.recruiter--blue) { color: #486eff; background: #ecf0ff; }
-:deep(.recruiter--purple) { color: #6b49e8; background: #efeafd; }
-:deep(.recruiter--gold) { color: #cd9200; background: #fff4d9; }
-:deep(.recruiter--green) { color: #27a65b; background: #e8f7ed; }
-:deep(.recruiter--cyan) { color: #06a8cb; background: #e7f8fb; }
+:deep(.recruiter--pink) { color: #ce3f79; background: #f3dde7; }
+:deep(.recruiter--blue) { color: #3658de; background: #e2e9ff; }
+:deep(.recruiter--purple) { color: #5e39d4; background: #e8e1fb; }
+:deep(.recruiter--gold) { color: #b57c00; background: #ffecbf; }
+:deep(.recruiter--green) { color: #1d9150; background: #dcf1e3; }
+:deep(.recruiter--cyan) { color: #0a90ad; background: #dbf0f4; }
 
 :deep(.avatar) {
   width: 18px;
@@ -2460,6 +2668,25 @@ onBeforeUnmount(() => {
   background: #fff;
 }
 
+@media (max-width: 1280px) {
+  .jobs-section__top {
+    gap: 8px;
+  }
+
+  .jobs-search {
+    width: 160px;
+  }
+
+  .jobs-controls {
+    gap: 6px;
+  }
+
+  .jobs-status-tabs__item {
+    padding: 0 12px;
+    font-size: 10px;
+  }
+}
+
 @media (max-width: 1180px) {
   .jobs-overview {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2468,6 +2695,13 @@ onBeforeUnmount(() => {
   .jobs-section__top {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .jobs-section__heading {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
   }
 
   .jobs-controls {
