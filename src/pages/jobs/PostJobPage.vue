@@ -384,6 +384,7 @@ const normalizeTextInput = (value) => {
   return ''
 }
 const recruiterStorageKey = 'nitrosync-job-recruiters'
+const departmentStorageKey = 'nitrosync-job-departments'
 const jobStagesStorageKeyPrefix = 'nitrosync-job-stages:'
 const wizardDraftStorageKeyPrefix = 'nitrosync-post-job-draft:'
 let wizardDraftPersistTimer = null
@@ -655,6 +656,16 @@ const getStoredRecruitersByJob = () => {
   }
 }
 
+const getStoredDepartmentsByJob = () => {
+  try {
+    const rawValue = localStorage.getItem(departmentStorageKey)
+    const parsed = rawValue ? JSON.parse(rawValue) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
 const storeRecruiterForJob = (jobUuid, recruiterName, recruiterUuid = '') => {
   const normalizedJobUuid = normalizeTemplateText(jobUuid)
   const normalizedRecruiterName = normalizeTemplateText(recruiterName)
@@ -671,6 +682,26 @@ const storeRecruiterForJob = (jobUuid, recruiterName, recruiterUuid = '') => {
 
   try {
     localStorage.setItem(recruiterStorageKey, JSON.stringify(nextValue))
+  } catch {
+    // Ignore local storage failures and keep submit flow working.
+  }
+}
+
+const storeDepartmentForJob = (jobUuid, departmentName) => {
+  const normalizedJobUuid = normalizeTemplateText(jobUuid)
+  const normalizedDepartmentName = normalizeTemplateText(departmentName)
+
+  if (!normalizedJobUuid || !normalizedDepartmentName) return
+
+  const nextValue = {
+    ...getStoredDepartmentsByJob(),
+    [normalizedJobUuid]: {
+      department_name: normalizedDepartmentName,
+    },
+  }
+
+  try {
+    localStorage.setItem(departmentStorageKey, JSON.stringify(nextValue))
   } catch {
     // Ignore local storage failures and keep submit flow working.
   }
@@ -861,13 +892,21 @@ const selectedRecruiterNames = computed(() =>
     .filter(Boolean),
 )
 
+const isStandaloneJobStagesMode = computed(() => {
+  const requestedStep = String(route.query.step || '').trim().toLowerCase()
+  const source = String(route.query.source || '').trim().toLowerCase()
+  return !isViewMode.value && (requestedStep === 'job-stages' || requestedStep === 'job_stages') && source === 'table-stages'
+})
+
 const pageModeLabel = computed(() => {
+  if (isStandaloneJobStagesMode.value) return 'Job Stages'
   if (isViewMode.value) return 'View Job'
   if (isEditMode.value) return 'Edit Job'
   return 'Post a Job'
 })
 
 const pageSubtitle = computed(() => {
+  if (isStandaloneJobStagesMode.value) return 'Manage the workflow stages for this job without entering the full edit wizard.'
   if (isViewMode.value) return 'Review the saved job details and workflow configuration.'
   if (isEditMode.value) return 'Update only the sections you need. Your existing job data is already loaded.'
   return 'Enter information to complete entering this job'
@@ -1350,7 +1389,7 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   const openJobStagesStep = requestedStep === 'job-stages' || requestedStep === 'job_stages'
   const openedFromStagesDots = String(route.query.source || '').trim().toLowerCase() === 'table-stages'
   const targetedWorkflowStage = String(route.query.target_stage || '').trim()
-  const allowStoredWizardUiState = mode !== 'view'
+  const allowStoredWizardUiState = mode !== 'view' && !openJobStagesStep
   const allowStoredJobStagesUiState = mode !== 'view'
   const initialMainStep = mode === 'view' ? wizardSteps.length - 1 : openJobStagesStep ? 3 : 0
   const jobUuid = String(draft.job_uuid || route.query.job_uuid || '').trim()
@@ -1481,6 +1520,12 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
       openedFromStagesDots,
       targetedWorkflowStage,
     }
+  }
+
+  if (openJobStagesStep && mode !== 'view') {
+    mainStep.value = 3
+    currentStep.value = 0
+    furthestMainStep.value = Math.max(furthestMainStep.value, 3)
   }
 
   loadCurrentCompanyName()
@@ -2960,6 +3005,10 @@ const submitJob = async (successMessage, successVariant) => {
         normalizeRecruiterName(recruiterRecord) || recruiterValue,
         normalizeRecruiterUuid(recruiterRecord) || recruiterValue,
       )
+      storeDepartmentForJob(
+        persistedJobUuid,
+        jobDetailsForm.value.department,
+      )
       storeEditWizardDraftForJob(persistedJobUuid)
       openCompletionModal(successVariant)
       return true
@@ -3076,7 +3125,7 @@ const handlePreviewAction = async (action) => {
     </div>
 
     <section class="post-job-page">
-      <header class="post-job-page__header">
+      <header v-if="!isStandaloneJobStagesMode" class="post-job-page__header">
         <h1 class="post-job-page__title">{{ pageModeLabel }}</h1>
         <p class="post-job-page__subtitle">{{ pageSubtitle }}</p>
       </header>
@@ -3103,7 +3152,7 @@ const handlePreviewAction = async (action) => {
       </section>
 
       <template v-else>
-        <nav class="wizard-steps" aria-label="Job posting wizard">
+        <nav v-if="!isStandaloneJobStagesMode" class="wizard-steps" aria-label="Job posting wizard">
           <button
             v-for="(step, index) in wizardSteps"
             :key="step.label"
@@ -3130,6 +3179,7 @@ const handlePreviewAction = async (action) => {
             'wizard-card--intelligent': mainStep === 2,
             'wizard-card--job-stages': mainStep === 3,
             'wizard-card--readonly': isViewMode && mainStep !== 5,
+            'wizard-card--standalone-job-stages': isStandaloneJobStagesMode,
           }"
         >
           <h2 v-if="mainStep === 0" class="wizard-card__title">
@@ -3218,6 +3268,7 @@ const handlePreviewAction = async (action) => {
                 :validation="jobStagesValidation"
                 :related-company="companyId"
                 :is-view-mode="isViewMode"
+                :standalone-mode="isStandaloneJobStagesMode"
                 @back="goBackStep"
                 @complete="completeJobStages"
               />
@@ -3263,7 +3314,7 @@ const handlePreviewAction = async (action) => {
             </div>
           </div>
 
-          <div v-else-if="!isViewMode && mainStep !== 3 && (hasWizardBack || (mainStep !== 3 && mainStep !== 5))" class="wizard-actions">
+          <div v-else-if="!isStandaloneJobStagesMode && !isViewMode && mainStep !== 3 && (hasWizardBack || (mainStep !== 3 && mainStep !== 5))" class="wizard-actions">
             <button v-if="hasWizardBack" type="button" class="wizard-actions__back" @click="goBackStep">Back</button>
 
             <div v-if="mainStep !== 3 && mainStep !== 5" class="wizard-actions__primary">
@@ -3508,6 +3559,14 @@ const handlePreviewAction = async (action) => {
   max-width: var(--job-stages-shell-max);
   min-height: 400px;
   padding: 20px 22px 24px;
+}
+
+.wizard-card--standalone-job-stages {
+  max-width: var(--job-stages-shell-max);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .wizard-card--readonly .wizard-panel,

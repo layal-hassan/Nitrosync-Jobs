@@ -49,6 +49,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  standaloneMode: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const screen = ref(props.form.screen)
@@ -1336,9 +1340,21 @@ syncStageManagement(visibleStageRows.value)
 
 <template>
   <div class="job-stages-step">
+    <template v-if="props.standaloneMode">
+      <div class="job-stages-step__workflow-shell job-stages-step__workflow-shell--standalone">
+        <JobStagesWorkflowStep
+          :related-company="companyId"
+          :stage-rows="stageRows"
+          :targeted-stage="props.form.targetedWorkflowStage || ''"
+          @stage-rows-updated="syncStageRowsFromWorkflow"
+        />
+      </div>
+    </template>
+
+    <template v-else>
     <div class="job-stages-step__head">
       <div>
-        <h3 class="job-stages-step__title">Step 4: Job Stages</h3>
+        <h3 class="job-stages-step__title">{{ props.standaloneMode ? 'Job Stages' : 'Step 4: Job Stages' }}</h3>
         <p class="job-stages-step__text">
           Make smarter hiring decisions, our intelligent screening and advancement system automates evaluations
           based on your criteria, ensuring efficient and fair assessments for every candidate.
@@ -1610,7 +1626,7 @@ syncStageManagement(visibleStageRows.value)
         </div>
       </section>
 
-        <div v-if="!props.isViewMode" class="job-stages-step__footer">
+        <div v-if="!props.isViewMode && !props.standaloneMode" class="job-stages-step__footer">
           <button
             type="button"
             class="job-stages-step__back"
@@ -2053,6 +2069,7 @@ syncStageManagement(visibleStageRows.value)
         </template>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -2114,6 +2131,10 @@ syncStageManagement(visibleStageRows.value)
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.job-stages-step__workflow-shell--standalone {
+  margin-top: 0;
 }
 
 .job-stages-step__canvas--dimmed .stage-shell,

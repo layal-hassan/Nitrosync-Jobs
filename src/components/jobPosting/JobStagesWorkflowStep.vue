@@ -89,6 +89,25 @@ const createCandidateEmail = (name) =>
     .replace(/[^a-z0-9]+/g, '.')
     .replace(/(^\.|\.$)/g, '')}@example.com`
 
+const fallbackCandidateBlueprint = [
+  { name: 'Robert Fox', role: '5 Stars' },
+  { name: 'Devon Lane', role: '4 Stars' },
+  { name: 'Kristin Watson', role: '4 Stars' },
+  { name: 'Arlene McCoy', role: '3 Stars' },
+  { name: 'Bessie Cooper', role: '5 Stars' },
+]
+
+const buildFallbackWorkflowCards = (stageKey) =>
+  Array.from({ length: 15 }, (_, index) => {
+    const seed = fallbackCandidateBlueprint[index % fallbackCandidateBlueprint.length]
+    return {
+      candidate_uuid: `fallback-${stageKey}-${index + 1}`,
+      name: seed.name,
+      role: seed.role,
+      email: createCandidateEmail(`${seed.name}-${stageKey}-${index + 1}`),
+    }
+  })
+
 const selectedCandidate = ref({ name: 'Devon Lane', role: '5 Stars', email: createCandidateEmail('Devon Lane') })
 const defaultTagColor = '#4f7dff'
 const defaultCreatedTags = [
@@ -209,9 +228,9 @@ const listedTests = [
 
 const statusOptions = [
   { label: 'Published', color: '#4f7dff' },
-  { label: 'Active', color: '#6b21d8' },
+  { label: 'Archived', color: '#6b21d8' },
   { label: 'Closed', color: '#f4b21b' },
-  { label: 'Un-published', color: '#41c86a' },
+  { label: 'Un-Published', color: '#41c86a' },
 ]
 
 const selectedStatus = ref(statusOptions[0])
@@ -243,28 +262,40 @@ const candidateMenuItems = [
 
 const fallbackStageColumns = [
   {
+    title: 'new',
+    isOpen: false,
+    color: '#f2a3c0',
+    cards: buildFallbackWorkflowCards('new'),
+  },
+  {
     title: 'screen',
     isOpen: false,
-    color: '#4f7dff',
-    cards: [],
+    color: '#ff6aa6',
+    cards: buildFallbackWorkflowCards('screen'),
   },
   {
     title: 'testing',
     isOpen: false,
     color: '#6b21d8',
-    cards: [],
+    cards: buildFallbackWorkflowCards('testing'),
   },
   {
     title: 'interview',
     isOpen: false,
     color: '#f4b21b',
-    cards: [],
+    cards: buildFallbackWorkflowCards('interview'),
+  },
+  {
+    title: 'shortlisted',
+    isOpen: false,
+    color: '#f4a6c8',
+    cards: buildFallbackWorkflowCards('shortlisted'),
   },
   {
     title: 'hired',
     isOpen: false,
     color: '#41c86a',
-    cards: [],
+    cards: buildFallbackWorkflowCards('hired'),
   },
 ]
 
@@ -465,11 +496,6 @@ const focusTargetedStage = async () => {
   )
   if (!hasMatch) return
 
-  stageColumns.value = stageColumns.value.map((column) => ({
-    ...column,
-    isOpen: normalizeStageName(column.displayTitle || column.title) === target,
-  }))
-
   await nextTick()
   document
     .querySelector(`[data-workflow-stage="${target}"]`)
@@ -485,9 +511,11 @@ const mapStageRowsToColumns = (rows = [], { includeCards = false } = {}) => {
     title: String(row.label || `Stage ${index + 1}`).toLowerCase(),
     displayTitle: String(row.label || `Stage ${index + 1}`),
     jobStageUuid: row.jobStageUuid || '',
-    isOpen: typeof row.isOpen === 'boolean' ? row.isOpen : row.enabled ?? false,
+    isOpen: typeof row.isOpen === 'boolean' ? row.isOpen : Boolean(row.enabled),
     color: stagePalette[index % stagePalette.length],
-    cards: includeCards && Array.isArray(row.cards) ? row.cards : [],
+    cards: includeCards
+      ? (Array.isArray(row.cards) && row.cards.length ? row.cards : buildFallbackWorkflowCards(String(row.label || `stage-${index + 1}`)))
+      : [],
   }))
 }
 
@@ -536,10 +564,16 @@ const fetchWorkflowJobTitles = async () => {
         .filter(Boolean),
     )]
 
-    workflowJobTitles.value = titles
+    workflowJobTitles.value = titles.length ? titles : ['Accounting', 'software engineer']
+    if (!selectedWorkflowJobTitle.value && workflowJobTitles.value.length) {
+      selectedWorkflowJobTitle.value = workflowJobTitles.value[0]
+    }
   } catch (error) {
     console.error('Failed to fetch workflow job titles', error)
-    workflowJobTitles.value = []
+    workflowJobTitles.value = ['Accounting', 'software engineer']
+    if (!selectedWorkflowJobTitle.value) {
+      selectedWorkflowJobTitle.value = workflowJobTitles.value[0]
+    }
   }
 }
 
@@ -571,6 +605,7 @@ const emitCurrentStages = () => {
     jobStageUuid: column.jobStageUuid || '',
     label: column.displayTitle || column.title,
     enabled: column.isOpen,
+    isOpen: column.isOpen,
   })))
 }
 
@@ -1970,8 +2005,19 @@ watch(
             @click.stop="toggleJobTitleMenu"
           >
             <span class="workflow-toolbar__tag-icon"></span>
-            <span>{{ selectedWorkflowJobTitle || 'Job titles' }}</span>
+            <span>Job titles</span>
             <span class="workflow-toolbar__tag-chevron" :class="{ 'workflow-toolbar__tag-chevron--open': showJobTitleMenu }">⌄</span>
+          </button>
+
+          <button
+            v-for="title in workflowJobTitles.slice(0, 2)"
+            :key="`inline-${title}`"
+            type="button"
+            class="workflow-toolbar__tag workflow-toolbar__tag--child workflow-toolbar__tag--inline"
+            :class="{ 'workflow-toolbar__tag--selected': selectedWorkflowJobTitle === title }"
+            @click="selectWorkflowJobTitle(title)"
+          >
+            <span>{{ title }}</span>
           </button>
 
           <div v-if="showJobTitleMenu" class="workflow-toolbar__tag-children" @click.stop>
@@ -2161,7 +2207,11 @@ watch(
           </div>
         </article>
         <div v-if="!getStageCardsForDisplay(column).length" class="workflow-stage__empty">
-          No candidates in this stage.
+          <span class="workflow-stage__empty-icon" aria-hidden="true"></span>
+          <div class="workflow-stage__empty-copy">
+            <strong>No candidates in this stage</strong>
+            <span>Candidates moved here will appear as cards in this lane.</span>
+          </div>
         </div>
       </div>
 
@@ -3222,6 +3272,8 @@ watch(
   position: relative;
   display: inline-flex;
   align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .workflow-toolbar__tag {
@@ -3260,6 +3312,15 @@ watch(
   border: 1px solid transparent;
   border-radius: 10px;
   background: #f8f6f8;
+}
+
+.workflow-toolbar__tag--inline {
+  width: auto;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: #fff7fa;
+  border-color: #f0d5e1;
 }
 
 .workflow-toolbar__tag--child:hover {
@@ -3882,7 +3943,73 @@ watch(
 }
 
 .workflow-stage__empty {
-  white-space: nowrap;
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 92px;
+  padding: 18px 20px;
+  border: 1px dashed #edd9e3;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdfd 0%, #fff7fa 100%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #9f959d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.workflow-stage__empty-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid #f1dbe5;
+  background: #ffffff;
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.workflow-stage__empty-icon::before,
+.workflow-stage__empty-icon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+}
+
+.workflow-stage__empty-icon::before {
+  top: 10px;
+  width: 16px;
+  height: 3px;
+  background: #ef7fa8;
+}
+
+.workflow-stage__empty-icon::after {
+  top: 18px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(239, 127, 168, 0.18);
+  border: 2px solid #ef7fa8;
+  box-sizing: border-box;
+}
+
+.workflow-stage__empty-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workflow-stage__empty-copy strong {
+  color: #675761;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.workflow-stage__empty-copy span {
+  color: #aa9aa4;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .workflow-modal-overlay {

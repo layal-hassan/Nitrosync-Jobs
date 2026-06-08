@@ -59,6 +59,7 @@ const deleteJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/delete')
 const duplicateJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/duplicate-job')
 const getOneJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-one')
 const recruiterStorageKey = 'nitrosync-job-recruiters'
+const departmentStorageKey = 'nitrosync-job-departments'
 const duplicateJobDraftStorageKey = 'nitrosync-duplicate-job'
 
 const createDefaultFilters = () => ({
@@ -316,10 +317,28 @@ const getStoredRecruiterName = (job = {}) => {
   }
 }
 
+const getStoredDepartmentName = (job = {}) => {
+  const jobUuid = String(job?.job_uuid ?? job?.uuid ?? '').trim()
+  if (!jobUuid) return ''
+
+  try {
+    const rawValue = localStorage.getItem(departmentStorageKey)
+    const parsed = rawValue ? JSON.parse(rawValue) : {}
+    const storedDepartment = parsed?.[jobUuid]
+    return typeof storedDepartment?.department_name === 'string' ? storedDepartment.department_name.trim() : ''
+  } catch {
+    return ''
+  }
+}
+
 const normalizedJobs = computed(() =>
   (props.jobs || [])
     .map((job, index) => {
-    const department = departmentPresentation(job.department?.department_name || job.department_name || '')
+    const department = departmentPresentation(
+      typeof job.department === 'string'
+        ? (job.department || getStoredDepartmentName(job))
+        : job.department?.department_name || job.department_name || getStoredDepartmentName(job),
+    )
     const recruiterName =
       (typeof job.recruiter_name === 'string' ? job.recruiter_name.trim() : '')
       || (typeof job.recruiter === 'string' ? job.recruiter.trim() : '')
@@ -1396,7 +1415,7 @@ onBeforeUnmount(() => {
                   :key="`${job.jobUuid || job.id}-${option.key}`"
                   type="button"
                   class="jobs-action__status-option"
-                  :class="{ 'is-active': job.status.key === option.key }"
+                  :class="[`jobs-action__status-option--${option.key}`, { 'is-active': job.status.key === option.key }]"
                   :disabled="changingStatusJobUuid === job.jobUuid"
                   @click.stop="changeJobStatus(job, option.key)"
                 >
@@ -1441,7 +1460,7 @@ onBeforeUnmount(() => {
                     :key="`grid-${job.jobUuid || job.id}-${option.key}`"
                     type="button"
                     class="jobs-action__status-option"
-                    :class="{ 'is-active': job.status.key === option.key }"
+                    :class="[`jobs-action__status-option--${option.key}`, { 'is-active': job.status.key === option.key }]"
                     :disabled="changingStatusJobUuid === job.jobUuid"
                     @click.stop="changeJobStatus(job, option.key)"
                   >
@@ -1857,31 +1876,34 @@ onBeforeUnmount(() => {
 
 .jobs-search {
   min-width: 0;
-  width: 168px;
+  width: 154px;
   max-width: 100%;
-  height: 31px;
-  padding: 0 8px;
+  height: 34px;
+  padding: 0 9px;
   border: 1px solid #efe3e8;
   border-radius: 14px;
   background: #ffffff;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .jobs-search input {
   flex: 1 1 auto;
   min-width: 0;
+  height: 100%;
   border: 0;
   outline: none;
   background: transparent;
   color: #4b5563;
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 0;
 }
 
 .jobs-search input::placeholder {
-  font-size: 10px;
+  font-size: 10.5px;
+  color: #9a8791;
 }
 
 .jobs-search__icon {
@@ -1891,12 +1913,13 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   position: relative;
   flex: 0 0 auto;
+  margin-left: 1px;
 }
 
 .jobs-search__icon::after {
   content: '';
   position: absolute;
-  width: 5px;
+  width: 4px;
   height: 2px;
   background: #9ca3af;
   border-radius: 999px;
@@ -2057,10 +2080,13 @@ onBeforeUnmount(() => {
 }
 
 .jobs-card {
-  background: #f8f9fc;
+  background:
+    radial-gradient(circle at top left, rgba(255, 132, 184, 0.08), transparent 26%),
+    radial-gradient(circle at top right, rgba(120, 146, 255, 0.08), transparent 22%),
+    #fbfbfe;
   border-radius: 20px;
   padding: 10px 10px 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 18px 34px rgba(56, 36, 47, 0.06);
   overflow-x: auto;
   overflow-y: visible;
 }
@@ -2068,17 +2094,20 @@ onBeforeUnmount(() => {
 .jobs-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+  gap: 22px;
 }
 
 .jobs-grid-card {
   position: relative;
   min-height: 220px;
-  padding: 20px;
-  border: 1px solid #f0e5ea;
-  border-radius: 18px;
+  padding: 22px 24px 20px;
+  border: 1px solid #f2e6eb;
+  border-radius: 22px;
   background: #ffffff;
-  box-shadow: 0 10px 24px rgba(50, 33, 41, 0.05);
+  box-shadow: 0 16px 36px rgba(73, 46, 58, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .jobs-grid-card__top {
@@ -2086,41 +2115,43 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 2px;
 }
 
 .jobs-grid-card__id {
-  min-height: 28px;
-  padding: 0 12px;
+  min-height: 34px;
+  padding: 0 14px;
   border-radius: 999px;
-  background: #fff1f6;
-  color: #ea4f8d;
+  background: linear-gradient(180deg, #fff3f8 0%, #ffe8f1 100%);
+  color: #e84b8a;
   display: inline-flex;
   align-items: center;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .jobs-grid-card__title {
-  margin: 0 0 18px;
-  font-size: 22px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: #9b6179;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #935d75;
+  letter-spacing: -0.02em;
 }
 
 .jobs-grid-card__subtitle {
-  margin: -10px 0 18px;
-  color: #8f8590;
-  font-size: 13px;
-  line-height: 1.5;
+  margin: -8px 0 2px;
+  color: #8e8190;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .jobs-grid-card__meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--surface-gap);
-  margin-bottom: var(--surface-gap);
+  gap: 12px;
+  margin-bottom: 2px;
 }
 
 .jobs-grid-card__meta-item,
@@ -2130,13 +2161,59 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.jobs-grid-card__meta-item {
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 1px solid #f5e9ee;
+  border-radius: 16px;
+  background: #fffafb;
+}
+
+.jobs-grid-card__section {
+  padding-top: 14px;
+  border-top: 1px solid #f4eaee;
+}
+
 .jobs-grid-card__section + .jobs-grid-card__section {
-  margin-top: 14px;
+  margin-top: -2px;
 }
 
 .jobs-grid-card__label {
-  font-size: 12px;
-  color: #b19ca6;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b59eaa;
+}
+
+.jobs-grid-card__meta-item > span:last-child {
+  color: #33252d;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.jobs-grid-card :deep(.job-status) {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0 18px;
+  font-size: 13px;
+}
+
+.jobs-grid-card .jobs-expiry-cell--grid {
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.jobs-grid-card .jobs-expiry-cell--grid strong {
+  font-size: 14px;
+}
+
+.jobs-grid-card .jobs-expiry-cell--grid span {
+  font-size: 11px;
+}
+
+.jobs-grid-card .jobs-stages--grid {
+  gap: 8px;
 }
 
 .jobs-stages--grid {
@@ -2145,6 +2222,25 @@ onBeforeUnmount(() => {
 
 .jobs-tags--grid {
   justify-content: flex-start;
+  gap: 8px;
+}
+
+.jobs-grid-card .jobs-tag {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.jobs-grid-card :deep(.recruiter) {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.jobs-grid-card .jobs-recruiter-empty {
+  font-size: 13px;
 }
 
 .jobs-row {
@@ -2156,12 +2252,14 @@ onBeforeUnmount(() => {
 }
 
 .jobs-header {
-  background: #f4f5f8;
+  background:
+    linear-gradient(180deg, #fdfcff 0%, #f6f7fb 100%);
   border-radius: var(--surface-radius);
   padding: 14px 18px;
   font-weight: 500;
   margin-bottom: 6px;
   position: relative;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
 .jobs-header__cell {
@@ -2176,15 +2274,18 @@ onBeforeUnmount(() => {
 
 .jobs-row--body {
   padding: 14px 18px;
-  border-bottom: 1px solid #f1f1f4;
-  background: #ffffff;
-  transition: background-color 0.18s ease;
+  border-bottom: 1px solid #f3e8ee;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 251, 253, 0.98) 100%);
+  transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
   font-size: 11px;
   position: relative;
 }
 
 .jobs-row--body:hover {
-  background: #fafafb;
+  background:
+    linear-gradient(180deg, #fff8fb 0%, #fffdfd 100%);
+  box-shadow: inset 3px 0 0 #ef5b96;
 }
 
 .jobs-row--body:last-child {
@@ -2299,8 +2400,8 @@ onBeforeUnmount(() => {
 }
 
 .jobs-col--title-wrap {
-  justify-content: flex-start;
-  text-align: left;
+  justify-content: center;
+  text-align: center;
 }
 
 .jobs-col--expiry-wrap {
@@ -2312,6 +2413,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.jobs-title-cell {
+  align-items: center;
 }
 
 .jobs-expiry-cell {
@@ -2348,17 +2453,21 @@ onBeforeUnmount(() => {
 }
 
 .jobs-stages__dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   padding: 0;
   border: 0;
   border-radius: 999px;
   position: relative;
   flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
 }
 
 .jobs-stages__dot--active {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 0 1px rgba(123, 96, 112, 0.1);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.98),
+    0 0 0 1px rgba(123, 96, 112, 0.12),
+    0 0 12px rgba(239, 91, 150, 0.28);
 }
 
 .jobs-stages__tooltip {
@@ -2413,34 +2522,36 @@ onBeforeUnmount(() => {
 }
 
 .jobs-tag {
-  background: #ecdde3;
-  padding: 4px 9px;
+  background: #f3e3ea;
+  padding: 5px 10px;
   border-radius: 20px;
   font-size: 10px;
+  font-weight: 600;
   color: #654b59;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .jobs-tag--count {
-  background: #e7e0ff;
-  color: #6747d5;
+  background: #e9e1ff;
+  color: #6a43e6;
 }
 
 .jobs-tag--empty {
-  background: #eceff5;
-  color: #7d8797;
+  background: #edf1f7;
+  color: #71809b;
 }
 
 :deep(.department) {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
 }
 
-:deep(.department--pink) { color: #f04f92; }
-:deep(.department--blue) { color: #3558ea; }
-:deep(.department--indigo) { color: #5f37dd; }
-:deep(.department--gold) { color: #c78700; }
-:deep(.department--green) { color: #1fa75b; }
+:deep(.department--pink) { color: #eb2f84; }
+:deep(.department--blue) { color: #244fe5; }
+:deep(.department--indigo) { color: #5929df; }
+:deep(.department--gold) { color: #b87700; }
+:deep(.department--green) { color: #08915b; }
 
 :deep(.recruiter) {
   display: inline-flex;
@@ -2448,10 +2559,11 @@ onBeforeUnmount(() => {
   gap: 6px;
   background: #eef1f5;
   border-radius: 20px;
-  padding: 4px 8px;
+  padding: 5px 10px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .jobs-recruiter-empty {
@@ -2465,27 +2577,28 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   min-height: 28px;
-  padding: 0 12px;
+  padding: 0 14px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
-:deep(.job-status--active) { color: #148553; background: #d4f1e1; }
-:deep(.job-status--hold) { color: #ad7200; background: #ffe9bc; }
-:deep(.job-status--closed) { color: #586173; background: #e4e9f1; }
-:deep(.job-status--draft) { color: #7045df; background: #e6dcff; }
-:deep(.job-status--expired) { color: #e14758; background: #ffd8dd; }
-:deep(.job-status--archived) { color: #485567; background: #e3e8ef; }
-:deep(.job-status--pending) { color: #3f38c8; background: #dde4ff; }
+:deep(.job-status--active) { color: #0d8a57; background: #c9f0dc; }
+:deep(.job-status--hold) { color: #ae6c00; background: #ffe3a8; }
+:deep(.job-status--closed) { color: #4d5c72; background: #dde6f2; }
+:deep(.job-status--draft) { color: #6338dc; background: #dfd3ff; }
+:deep(.job-status--expired) { color: #dd3954; background: #ffcfd8; }
+:deep(.job-status--archived) { color: #41536c; background: #dce3ee; }
+:deep(.job-status--pending) { color: #3530c9; background: #d6e0ff; }
 
-:deep(.recruiter--pink) { color: #ce3f79; background: #f3dde7; }
-:deep(.recruiter--blue) { color: #3658de; background: #e2e9ff; }
-:deep(.recruiter--purple) { color: #5e39d4; background: #e8e1fb; }
-:deep(.recruiter--gold) { color: #b57c00; background: #ffecbf; }
-:deep(.recruiter--green) { color: #1d9150; background: #dcf1e3; }
-:deep(.recruiter--cyan) { color: #0a90ad; background: #dbf0f4; }
+:deep(.recruiter--pink) { color: #c92c73; background: #f6d7e5; }
+:deep(.recruiter--blue) { color: #274ee0; background: #dbe6ff; }
+:deep(.recruiter--purple) { color: #552fd6; background: #e4dafd; }
+:deep(.recruiter--gold) { color: #af7400; background: #ffe7ac; }
+:deep(.recruiter--green) { color: #148f4d; background: #d6f2df; }
+:deep(.recruiter--cyan) { color: #0088a8; background: #d7f0f5; }
 
 :deep(.avatar) {
   width: 18px;
@@ -2594,6 +2707,8 @@ onBeforeUnmount(() => {
   color: #8b596a;
   font-size: 11px;
   line-height: 1;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .jobs-action__menu .jobs-action__status-option.is-active {
@@ -2605,6 +2720,42 @@ onBeforeUnmount(() => {
 .jobs-action__menu .jobs-action__status-option:disabled {
   cursor: wait;
   opacity: 0.75;
+}
+
+.jobs-action__menu .jobs-action__status-option--active {
+  border-color: #bfe7d0;
+  background: #e0f7ea;
+  color: #0d8a57;
+}
+
+.jobs-action__menu .jobs-action__status-option--on_hold {
+  border-color: #f4d292;
+  background: #fff0c8;
+  color: #ae6c00;
+}
+
+.jobs-action__menu .jobs-action__status-option--closed {
+  border-color: #cfd8e6;
+  background: #e9eff8;
+  color: #4d5c72;
+}
+
+.jobs-action__menu .jobs-action__status-option--draft {
+  border-color: #d4c6ff;
+  background: #eee7ff;
+  color: #6338dc;
+}
+
+.jobs-action__menu .jobs-action__status-option--expired {
+  border-color: #f2b9c5;
+  background: #ffe0e6;
+  color: #dd3954;
+}
+
+.jobs-action__menu .jobs-action__status-option--archived {
+  border-color: #ccd5e3;
+  background: #e7edf6;
+  color: #41536c;
 }
 
 .jobs-pagination {
