@@ -66,14 +66,14 @@ const closePublishTimeInputRef = ref(null)
 const tagPalette = ['#ea4f8d', '#4f7dff', '#6b21d8', '#f1b32a', '#48d873', '#f08db2', '#8ea7ff', '#c4a1e8', '#f3d78f']
 
 const previewTitle = computed(() => (props.isViewMode ? 'View Job' : 'Preview Job'))
-const titleFieldValue = computed(() => props.jobDetails.jobTitle || 'Jobtitle will be shown here')
+const titleFieldValue = computed(() => props.jobDetails.jobTitle || '')
 const previewDescription = computed(() =>
   props.jobDetails.description
   || props.metaData.seoDescription
-  || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc vulputate libero et velit interdum, ac aliquet odio mattis. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos...'
+  || ''
 )
 const previewSeoTitle = computed(() => props.metaData.seoTitle || 'Meta title')
-const fullAddressValue = computed(() => props.jobDetails.jobTitle || 'Ex: Accountant in a Bank')
+const fullAddressValue = computed(() => props.jobDetails.jobTitle || '')
 const normalizeCurrencyLabel = (value) => String(value || '').trim()
 const formatSalaryValue = (value) => {
   const rawValue = String(value || '').trim()
@@ -94,12 +94,12 @@ const formatSalaryValue = (value) => {
 const salaryFromValue = computed(() => formatSalaryValue(props.additionalInfo.salaryFrom))
 const salaryToValue = computed(() => formatSalaryValue(props.additionalInfo.salaryTo))
 const previewTags = computed(() =>
-  (props.selectedTags.length ? props.selectedTags : ['High Salary', 'Finance']).map((label, index) => ({
+  props.selectedTags.map((label, index) => ({
     label,
     color: tagPalette[index % tagPalette.length],
   })),
 )
-const previewRecruiter = computed(() => props.hiringTeam.recruiter || props.selectedRecruiters[0] || 'Manal Oraby')
+const previewRecruiter = computed(() => props.hiringTeam.recruiter || props.selectedRecruiters[0] || '')
 const showViewActions = computed(() => props.isViewMode)
 const showEditPublishedActions = computed(() => props.isEditMode && props.isPublishedJob)
 const showEditDraftActions = computed(() => props.isEditMode && !props.isPublishedJob)

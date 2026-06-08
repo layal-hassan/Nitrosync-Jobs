@@ -5,120 +5,7 @@ export const relatedCompany =
   String(import.meta.env.VITE_NITROSYNC_RELATED_COMPANY || 'b00af2a4-2d77-432b-bd93-4e7ea120d154').trim()
   || 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
 
-export const fallbackEmployees = [
-  {
-    id: 'emp-1',
-    name: 'Ellie Romi',
-    role: 'Financial Manager',
-    status: 'Verified',
-    email: 'elieromie@gmail.com',
-    phone: '+963223454673',
-    address: '2030 Romani St.',
-    note: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit...',
-    avatarBg: 'linear-gradient(135deg, #ecff4f 0%, #ffeb58 100%)',
-    avatarAccent: '#0f1525',
-    avatarText: 'ER',
-    online: false,
-  },
-  {
-    id: 'emp-2',
-    name: 'Nancy Karam',
-    role: 'HR Manager',
-    status: 'LoggedOut',
-    email: 'nkaram@nitrosync.com',
-    phone: '+963223454674',
-    address: '2030 Romani St.',
-    note: 'Profile is archived but still visible in employee records...',
-    avatarBg: 'linear-gradient(135deg, #ffffff 0%, #f2f4ff 100%)',
-    avatarAccent: '#5a57ff',
-    avatarText: 'NK',
-    online: false,
-  },
-  {
-    id: 'emp-3',
-    name: 'Mohamad Sami',
-    role: 'Financial Manager',
-    status: 'LoggedIn',
-    email: 'msami@nitrosync.com',
-    phone: '+963223454675',
-    address: '2030 Port',
-    note: 'Available for payroll approvals and budget coordination.',
-    avatarBg: 'linear-gradient(135deg, #a7d9ff 0%, #86c8ff 100%)',
-    avatarAccent: '#f28a1f',
-    avatarText: 'MS',
-    online: true,
-  },
-  {
-    id: 'emp-4',
-    name: 'Michael Augo',
-    role: 'Financial Manager',
-    status: 'Verified',
-    email: 'maugo@nitrosync.com',
-    phone: '+963223454676',
-    address: '2030 Romani St.',
-    note: 'Senior finance lead with oversight across regional operations.',
-    avatarBg: 'linear-gradient(135deg, #7b63ff 0%, #6d4fff 100%)',
-    avatarAccent: '#ffd2bb',
-    avatarText: 'MA',
-    online: false,
-  },
-  {
-    id: 'emp-5',
-    name: 'Rami Bshara',
-    role: 'Financial Manager',
-    status: 'Verified',
-    email: 'rbshara@nitrosync.com',
-    phone: '+963223454677',
-    address: '2030 Romani St.',
-    note: 'Owns daily reporting and internal finance dashboards.',
-    avatarBg: 'linear-gradient(135deg, #e7ff5d 0%, #8cff7d 100%)',
-    avatarAccent: '#c55240',
-    avatarText: 'RB',
-    online: false,
-  },
-  {
-    id: 'emp-6',
-    name: 'Ellie Romi',
-    role: 'Financial Manager',
-    status: 'LoggedIn',
-    email: 'elieromie@gmail.com',
-    phone: '+963223454673',
-    address: '2030 Romani St.',
-    note: 'Leads reconciliation and finance support for operations.',
-    avatarBg: 'linear-gradient(135deg, #b0a0ff 0%, #9d90ff 100%)',
-    avatarAccent: '#1f1f24',
-    avatarText: 'ER',
-    online: true,
-  },
-  {
-    id: 'emp-7',
-    name: 'Ellie Romi',
-    role: 'Financial Manager',
-    status: 'UnVerified',
-    email: 'elieromie@gmail.com',
-    phone: '+963223454673',
-    address: '2030 Romani St.',
-    note: 'Former account owner with read-only history retained.',
-    avatarBg: 'linear-gradient(135deg, #8f66ff 0%, #7f50ff 100%)',
-    avatarAccent: '#ffd870',
-    avatarText: 'ER',
-    online: true,
-  },
-  {
-    id: 'emp-8',
-    name: 'Ellie Romi',
-    role: 'Financial Manager',
-    status: 'Verified',
-    email: 'elieromie@gmail.com',
-    phone: '+963223454673',
-    address: '2030 Romani St.',
-    note: 'Supports finance handoff, reporting and approvals.',
-    avatarBg: 'linear-gradient(135deg, #ffd34f 0%, #ffbb53 100%)',
-    avatarAccent: '#f25b8d',
-    avatarText: 'ER',
-    online: false,
-  },
-]
+export const fallbackEmployees = []
 
 export const normalizeLabel = (value, fallback = '') => {
   const normalized = String(value ?? '').trim()
@@ -172,10 +59,10 @@ const normalizeEmploymentStatus = (employee = {}) => {
     if (['4', 'unverified', 'un_verified', 'un verified'].includes(lowered)) return 'UnVerified'
   }
 
-  return 'Verified'
+  return ''
 }
 
-const buildEmployeeAddress = (employee = {}, baseEmployee = {}) => {
+const buildEmployeeAddress = (employee = {}) => {
   const { additionalInfo } = getEmployeeSections(employee)
   const locationParts = [
     additionalInfo?.city,
@@ -187,7 +74,7 @@ const buildEmployeeAddress = (employee = {}, baseEmployee = {}) => {
     .map((value) => normalizeLabel(value))
     .filter(Boolean)
 
-  return locationParts[0] ? locationParts.join(', ') : baseEmployee.address
+  return locationParts.join(', ')
 }
 
 export const buildInitials = (name = '') =>
@@ -220,8 +107,7 @@ export const normalizeEmployee = (employee = {}, index = 0) => {
     ?? additionalInfo?.last_name
     ?? additionalInfo?.lastName,
   )
-  const baseEmployee = fallbackEmployees[index % fallbackEmployees.length]
-  const name = fullName || [firstName, lastName].filter(Boolean).join(' ').trim() || baseEmployee.name
+  const name = fullName || [firstName, lastName].filter(Boolean).join(' ').trim() || `Employee ${index + 1}`
   const role = normalizeLabel(
     coalesce(
       employmentDetails?.job_title,
@@ -233,7 +119,7 @@ export const normalizeEmployee = (employee = {}, index = 0) => {
       employee?.department_name,
       systemRole?.role_name,
     ),
-    baseEmployee.role,
+    '',
   )
   const status = normalizeEmploymentStatus(employee)
   const note = normalizeLabel(
@@ -244,7 +130,7 @@ export const normalizeEmployee = (employee = {}, index = 0) => {
       employmentDetails?.employment_type,
       systemRole?.description,
     ),
-    baseEmployee.note,
+    '',
   )
 
   return {
@@ -295,7 +181,7 @@ export const normalizeEmployee = (employee = {}, index = 0) => {
       ?? additionalInfo?.personal_email
       ?? employee?.work_email
       ?? employee?.employee_email,
-      baseEmployee.email,
+      '',
     ),
     phone: normalizeLabel(
       employee?.phone
@@ -304,12 +190,12 @@ export const normalizeEmployee = (employee = {}, index = 0) => {
       ?? additionalInfo?.home_phone
       ?? employee?.mobile
       ?? employee?.phone_number,
-      baseEmployee.phone,
+      '',
     ),
-    address: buildEmployeeAddress(employee, baseEmployee),
+    address: buildEmployeeAddress(employee),
     note,
-    avatarBg: baseEmployee.avatarBg,
-    avatarAccent: baseEmployee.avatarAccent,
+    avatarBg: 'linear-gradient(135deg, #f4f4f8 0%, #ececf3 100%)',
+    avatarAccent: '#6b7280',
     avatarText: buildInitials(name),
     online: status === 'LoggedIn',
     hireDate: normalizeLabel(

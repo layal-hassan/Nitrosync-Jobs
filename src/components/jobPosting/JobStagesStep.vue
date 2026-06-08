@@ -59,13 +59,13 @@ const screen = ref(props.form.screen)
 const newStageName = ref(props.form.newStageName)
 const selectedScoreCard = ref(props.form.selectedScoreCard || '')
 const scoreCardDraft = ref(props.form.scoreCardDraft || {
-  name: 'Graphic Designer Screening Scorecard',
-  jobTitle: 'Graphic Designer',
-  interviewer: 'Interviewer',
-  tags: 'Screening, design, culture fit',
-  instructionMessage: 'Please score each candidate against the required skills, leave concise evidence-based notes, and flag any follow-up needed before moving to the next stage.',
-  evaluationCriteria: 'Assess ownership, communication clarity, collaboration, and how the candidate responds to feedback during the interview process.',
-  commentsObservation: 'Use this section for final interviewer notes, decision context, and clear recommendations before the candidate advances.',
+  name: '',
+  jobTitle: '',
+  interviewer: '',
+  tags: '',
+  instructionMessage: '',
+  evaluationCriteria: '',
+  commentsObservation: '',
 })
 const scoreCardSubmitting = ref(false)
 const editingScoreCardUuid = ref(props.form.editingScoreCardUuid || '')
@@ -107,24 +107,12 @@ const companyId = computed(() =>
   String(props.relatedCompany || 'b00af2a4-2d77-432b-bd93-4e7ea120d154').trim() || 'b00af2a4-2d77-432b-bd93-4e7ea120d154',
 )
 
-const scoreSummaryTags = ['High level', 'Mid level', 'High level', 'Mid level']
-const fallbackScorecards = [
-  { uuid: 'fallback-scorecard-1', title: 'Initial phone screening', owner: 'Talent acquisition', action: 'Edit card', isFallback: true },
-  { uuid: 'fallback-scorecard-2', title: 'Design interview scorecard', owner: 'Graphic designer', action: 'Edit card', isFallback: true },
-  { uuid: 'fallback-scorecard-3', title: 'Culture fit review', owner: 'People operations', action: 'Edit card', isFallback: true },
-  { uuid: 'fallback-scorecard-4', title: 'Manager final evaluation', owner: 'Hiring manager', action: 'Edit card', isFallback: true },
-  { uuid: 'fallback-scorecard-5', title: 'Executive approval card', owner: 'Leadership team', action: 'Edit card', isFallback: true },
-]
-const savedScorecards = ref([...fallbackScorecards])
+const scoreSummaryTags = []
+const savedScorecards = ref([])
 const scoreCardsLoading = ref(false)
 const scoreCardsError = ref('')
 
-const assessmentOptions = [
-  { title: 'English communication assessment', color: '#ea4f8d' },
-  { title: 'Job knowledge test', color: '#4f7dff' },
-  { title: 'Problem solving challenge', color: '#6b21d8' },
-  { title: 'Culture fit survey', color: '#f1b32a' },
-]
+const assessmentOptions = []
 
 const questionInput = ref(props.form.questionInput)
 const questionColors = ['#ea4f8d', '#4f7dff', '#6b21d8']
@@ -136,15 +124,9 @@ const manualCompetencyTitle = ref(props.form.manualCompetencyTitle)
 const manualSkillMode = ref(props.form.manualSkillMode)
 const manualSkillTitle = ref(props.form.manualSkillTitle)
 
-const skillTags = [
-  { label: 'active 1', color: '#ea4f8d' },
-  { label: 'active 2', color: '#4f7dff' },
-  { label: 'active 3', color: '#6b21d8' },
-  { label: 'active 4', color: '#ffb84d' },
-  { label: 'active 5', color: '#41d66b' },
-]
-const scoreCardJobTitleOptions = ['Please select', 'Graphic Designer', 'HR Manager']
-const scoreCardInterviewerOptions = ['Please select', 'Interviewer', 'Hiring manager']
+const skillTags = []
+const scoreCardJobTitleOptions = ['Please select']
+const scoreCardInterviewerOptions = ['Please select']
 
 const automatedPrimaryActionOptions = ['Please select', 'Send email', 'Send assessment', 'Send interview calendar']
 const addStageNameRequiredMessage = 'Enter a stage name before adding a new stage.'
@@ -437,8 +419,8 @@ const fetchScoreCards = async () => {
   scoreCardsError.value = ''
 
   try {
-    const mappedRows = await fetchNitroSyncScoreCards(companyId.value)
-    savedScorecards.value = mappedRows.length ? mappedRows : [...fallbackScorecards]
+  const mappedRows = await fetchNitroSyncScoreCards(companyId.value)
+    savedScorecards.value = mappedRows
 
     if (!selectedScoreCard.value && savedScorecards.value.length) {
       selectedScoreCard.value = savedScorecards.value[0].uuid
@@ -446,13 +428,8 @@ const fetchScoreCards = async () => {
     }
   } catch (error) {
     console.error('Failed to fetch score cards', error)
-    scoreCardsError.value = getNitroSyncErrorMessage(error, 'Could not load score cards from API. Using saved options.')
-    savedScorecards.value = [...fallbackScorecards]
-
-    if (!selectedScoreCard.value && savedScorecards.value.length) {
-      selectedScoreCard.value = savedScorecards.value[0].uuid
-      props.form.selectedScoreCard = selectedScoreCard.value
-    }
+    scoreCardsError.value = getNitroSyncErrorMessage(error, 'Could not load score cards from API.')
+    savedScorecards.value = []
   } finally {
     scoreCardsLoading.value = false
   }
@@ -1179,7 +1156,7 @@ const deleteScoreCard = async (item) => {
       selectedScoreCard.value = savedScorecards.value[0]?.uuid || ''
       props.form.selectedScoreCard = selectedScoreCard.value
     }
-    scoreCardActionMessage.value = 'Score card removed from the local fallback list.'
+    scoreCardActionMessage.value = 'Score card removed.'
     scoreCardActionError.value = ''
     return
   }
@@ -1908,7 +1885,7 @@ syncStageManagement(visibleStageRows.value)
               </div>
             </div>
 
-            <div class="preview-strip preview-strip--pink">{{ scoreCardDraft.name || 'Graphic Designer Screening Scorecard' }} <span class="preview-stars">☆☆☆☆☆</span></div>
+            <div class="preview-strip preview-strip--pink">{{ scoreCardDraft.name || 'Scorecard title' }} <span class="preview-stars">☆☆☆☆☆</span></div>
             <div class="preview-strip preview-strip--blue">{{ scoreCardCompetenciesValue || 'experience' }} <span class="preview-stars">☆☆☆☆☆</span></div>
 
             <div class="preview-note">

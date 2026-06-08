@@ -52,12 +52,7 @@ const sendMessage = ref('')
 const sendError = ref('')
 const showSuccessState = ref(false)
 
-const allCandidates = [
-  { id: 1, name: 'Carlos Mahovia', email: 'carlos.mahovia@example.com', accent: 'pink', tags: 'Finance', position: 'Accountant', country: 'Jordan', rating: '5' },
-  { id: 2, name: 'Nora Salem', email: 'nora.salem@example.com', accent: 'blue', tags: 'Tech', position: 'Engineer', country: 'UAE', rating: '4' },
-  { id: 3, name: 'Omar Hadi', email: 'omar.hadi@example.com', accent: 'purple', tags: 'Backend', position: 'Developer', country: 'Saudi', rating: '5' },
-  { id: 4, name: 'Lina Adib', email: 'lina.adib@example.com', accent: 'gold', tags: 'Design', position: 'Designer', country: 'Jordan', rating: '3' },
-]
+const allCandidates = []
 
 const emailTemplates = ['Custom Email', 'Referral Intro', 'Short Follow Up']
 const isCustomEmailSelected = computed(() => savedEmail.value === 'Custom Email')

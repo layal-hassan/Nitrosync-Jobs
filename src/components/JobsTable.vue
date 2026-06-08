@@ -58,8 +58,6 @@ const router = useRouter()
 const deleteJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/delete')
 const duplicateJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/duplicate-job')
 const getOneJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-one')
-const recruiterStorageKey = 'nitrosync-job-recruiters'
-const departmentStorageKey = 'nitrosync-job-departments'
 const duplicateJobDraftStorageKey = 'nitrosync-duplicate-job'
 
 const createDefaultFilters = () => ({
@@ -303,46 +301,17 @@ const getRecruiterAvatar = (job = {}) =>
     ?? '',
   ).trim()
 
-const getStoredRecruiterName = (job = {}) => {
-  const jobUuid = String(job?.job_uuid ?? job?.uuid ?? '').trim()
-  if (!jobUuid) return ''
-
-  try {
-    const rawValue = localStorage.getItem(recruiterStorageKey)
-    const parsed = rawValue ? JSON.parse(rawValue) : {}
-    const storedRecruiter = parsed?.[jobUuid]
-    return typeof storedRecruiter?.recruiter_name === 'string' ? storedRecruiter.recruiter_name.trim() : ''
-  } catch {
-    return ''
-  }
-}
-
-const getStoredDepartmentName = (job = {}) => {
-  const jobUuid = String(job?.job_uuid ?? job?.uuid ?? '').trim()
-  if (!jobUuid) return ''
-
-  try {
-    const rawValue = localStorage.getItem(departmentStorageKey)
-    const parsed = rawValue ? JSON.parse(rawValue) : {}
-    const storedDepartment = parsed?.[jobUuid]
-    return typeof storedDepartment?.department_name === 'string' ? storedDepartment.department_name.trim() : ''
-  } catch {
-    return ''
-  }
-}
-
 const normalizedJobs = computed(() =>
   (props.jobs || [])
     .map((job, index) => {
     const department = departmentPresentation(
       typeof job.department === 'string'
-        ? (job.department || getStoredDepartmentName(job))
-        : job.department?.department_name || job.department_name || getStoredDepartmentName(job),
+        ? job.department
+        : job.department?.department_name || job.department_name || '',
     )
     const recruiterName =
       (typeof job.recruiter_name === 'string' ? job.recruiter_name.trim() : '')
       || (typeof job.recruiter === 'string' ? job.recruiter.trim() : '')
-      || getStoredRecruiterName(job)
     const recruiterUi = recruiterPresentation(index)
     const tags = toArray(job.tags).map((tag) =>
       typeof tag === 'object'

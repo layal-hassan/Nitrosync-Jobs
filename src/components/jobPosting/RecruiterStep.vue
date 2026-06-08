@@ -15,18 +15,8 @@ const props = defineProps({
 const emit = defineEmits(['update:selectedRecruiters'])
 const searchQuery = ref('')
 
-const defaultRecruiterOptions = [
-  { name: 'Manal Oraby', type: 'Lead Recruiter', color: '#ff6a9d', initials: 'MO' },
-  { name: 'Tareq Ahmad', type: 'Technical Recruiter', color: '#f1b32a', initials: 'TA' },
-  { name: 'Lina Saleh', type: 'Operations Recruiter', color: '#4f7dff', initials: 'LS' },
-  { name: 'Omar Khaled', type: 'HR Recruiter', color: '#48d873', initials: 'OK' },
-  { name: 'Dana Samir', type: 'Campus Recruiter', color: '#7028e4', initials: 'DS' },
-]
-
 const recruiterOptions = computed(() => {
-  const baseOptions = Array.isArray(props.recruiterOptions) && props.recruiterOptions.length
-    ? props.recruiterOptions
-    : defaultRecruiterOptions
+  const baseOptions = Array.isArray(props.recruiterOptions) ? props.recruiterOptions : []
 
   const merged = [...baseOptions]
   const existingValues = new Set(baseOptions.map((item) => String(item?.value ?? item?.name ?? '').trim().toLowerCase()).filter(Boolean))

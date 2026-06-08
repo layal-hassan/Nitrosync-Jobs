@@ -43,7 +43,7 @@ const jobUrl = computed(() => {
   const base =
     typeof window !== 'undefined' && window.location?.origin
       ? window.location.origin
-      : 'https://example.com'
+      : ''
 
   return props.job?.id ? `${base}/jobs/${props.job.id}` : `${base}/jobs`
 })

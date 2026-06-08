@@ -22,7 +22,6 @@ import { bulkEditNitroSyncEmployees } from '../../composables/useNitroSyncBulkEd
 import {
   buildEmployeeUpdatePayload,
   buildInitials,
-  fallbackEmployees,
   loadEmployeesDirectory,
   relatedCompany,
 } from '../../composables/useEmployeeDirectory'

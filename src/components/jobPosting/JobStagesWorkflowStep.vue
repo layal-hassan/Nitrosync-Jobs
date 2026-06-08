@@ -83,46 +83,16 @@ const selectedWorkflowJobTitle = ref('')
 const activeCandidateMenu = ref(null)
 const activeStageMenu = ref(null)
 const jobsGetAllEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-all')
-const createCandidateEmail = (name) =>
-  `${String(name || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '.')
-    .replace(/(^\.|\.$)/g, '')}@example.com`
-
-const fallbackCandidateBlueprint = [
-  { name: 'Robert Fox', role: '5 Stars' },
-  { name: 'Devon Lane', role: '4 Stars' },
-  { name: 'Kristin Watson', role: '4 Stars' },
-  { name: 'Arlene McCoy', role: '3 Stars' },
-  { name: 'Bessie Cooper', role: '5 Stars' },
-]
-
-const buildFallbackWorkflowCards = (stageKey) =>
-  Array.from({ length: 15 }, (_, index) => {
-    const seed = fallbackCandidateBlueprint[index % fallbackCandidateBlueprint.length]
-    return {
-      candidate_uuid: `fallback-${stageKey}-${index + 1}`,
-      name: seed.name,
-      role: seed.role,
-      email: createCandidateEmail(`${seed.name}-${stageKey}-${index + 1}`),
-    }
-  })
-
-const selectedCandidate = ref({ name: 'Devon Lane', role: '5 Stars', email: createCandidateEmail('Devon Lane') })
+const selectedCandidate = ref({ name: '', role: '', email: '' })
 const defaultTagColor = '#4f7dff'
-const defaultCreatedTags = [
-  {
-    name: 'High Salary',
-    color: '#35d06a',
-  },
-]
+const defaultCreatedTags = []
 const tagInput = ref('')
 const selectedTagColor = ref(defaultTagColor)
 const tagCandidateUuid = ref('')
 const tagSaving = ref(false)
 const tagMessage = ref('')
 const tagError = ref('')
-const createdTags = ref([...defaultCreatedTags])
+const createdTags = ref([])
 const shareProfilePermission = ref('view')
 const shareProfileUrl = ref('')
 const shareProfileLoading = ref(false)
@@ -139,13 +109,11 @@ const teamMembersMessage = ref('')
 const teamMembersError = ref('')
 const employeeDirectory = ref([])
 const selectedTeamMemberUuids = ref([])
-const noteAuthor = ref('Elias Diab')
+const noteAuthor = ref('')
 const disqualifyReason = ref('')
 const disqualifyPoolOption = ref('add')
 const disqualifySavedEmail = ref('Please Select')
-const disqualifyEmailBody = ref(
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc vulputate libero et velit interdum, ac aliquet odio mattis. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.'
-)
+const disqualifyEmailBody = ref('')
 const disqualifyCandidateUuid = ref('')
 const showNoteForm = ref(false)
 const noteTitleInput = ref('')
@@ -156,14 +124,10 @@ const noteSaving = ref(false)
 const noteMessage = ref('')
 const noteError = ref('')
 const emailTitle = ref('')
-const emailBody = ref(
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc vulputate libero et velit interdum, ac aliquet odio mattis. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.'
-)
+const emailBody = ref('')
 const assignEmployeeName = ref('')
 const assignTitle = ref('')
-const assignBackgroundInfo = ref(
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc vulputate libero et velit interdum, ac aliquet odio mattis. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.'
-)
+const assignBackgroundInfo = ref('')
 const assignReminderEnabled = ref(true)
 const assignDueDate = ref('Please Select')
 const assignAlertTime = ref('01:00')
@@ -195,13 +159,7 @@ const disqualifyEmailDebug = ref('')
 const scheduleEmailLoading = ref(false)
 const scheduleEmailMessage = ref('')
 const scheduleEmailError = ref('')
-const assignCandidates = [
-  'Theresa Webb',
-  'Darrell Steward',
-  'Courtney Henry',
-  'Brooklyn Simmons',
-  'Cody Fisher',
-]
+const assignCandidates = []
 const selectedAssignCandidates = ref([])
 const candidateUuidByName = ref({})
 const candidateStageUuid = ref('')
@@ -212,19 +170,8 @@ const candidateActionError = ref('')
 const stageActionLoading = ref(false)
 const stageActionMessage = ref('')
 const stageActionError = ref('')
-const notes = ref([
-  {
-    title: 'Note title will be shown here.',
-    description:
-      'Praesent auctor purus luctus nunc egestas, ac scelerisque ante pulvinar. Donec ut rhoncus ex.',
-    author: 'Elias Diab',
-  },
-])
-const listedTests = [
-  { title: 'Human Resources Experience Test', questions: 12, minutes: 50, difficulty: 35 },
-  { title: 'Human Resources Experience Test', questions: 12, minutes: 50, difficulty: 35 },
-  { title: 'Human Resources Experience Test', questions: 12, minutes: 50, difficulty: 35 },
-]
+const notes = ref([])
+const listedTests = []
 
 const statusOptions = [
   { label: 'Published', color: '#4f7dff' },
@@ -258,45 +205,6 @@ const candidateMenuItems = [
   'Onboarding Setup',
   'Mark as Hired',
   'Update HR System',
-]
-
-const fallbackStageColumns = [
-  {
-    title: 'new',
-    isOpen: false,
-    color: '#f2a3c0',
-    cards: buildFallbackWorkflowCards('new'),
-  },
-  {
-    title: 'screen',
-    isOpen: false,
-    color: '#ff6aa6',
-    cards: buildFallbackWorkflowCards('screen'),
-  },
-  {
-    title: 'testing',
-    isOpen: false,
-    color: '#6b21d8',
-    cards: buildFallbackWorkflowCards('testing'),
-  },
-  {
-    title: 'interview',
-    isOpen: false,
-    color: '#f4b21b',
-    cards: buildFallbackWorkflowCards('interview'),
-  },
-  {
-    title: 'shortlisted',
-    isOpen: false,
-    color: '#f4a6c8',
-    cards: buildFallbackWorkflowCards('shortlisted'),
-  },
-  {
-    title: 'hired',
-    isOpen: false,
-    color: '#41c86a',
-    cards: buildFallbackWorkflowCards('hired'),
-  },
 ]
 
 const stagePalette = ['#4f7dff', '#6b21d8', '#f4b21b', '#41c86a', '#ff8a4f']
@@ -504,7 +412,7 @@ const focusTargetedStage = async () => {
 
 const mapStageRowsToColumns = (rows = [], { includeCards = false } = {}) => {
   if (!Array.isArray(rows) || !rows.length) {
-    return fallbackStageColumns
+    return []
   }
 
   return rows.map((row, index) => ({
@@ -514,7 +422,7 @@ const mapStageRowsToColumns = (rows = [], { includeCards = false } = {}) => {
     isOpen: typeof row.isOpen === 'boolean' ? row.isOpen : Boolean(row.enabled),
     color: stagePalette[index % stagePalette.length],
     cards: includeCards
-      ? (Array.isArray(row.cards) && row.cards.length ? row.cards : buildFallbackWorkflowCards(String(row.label || `stage-${index + 1}`)))
+      ? (Array.isArray(row.cards) ? row.cards : [])
       : [],
   }))
 }
@@ -564,16 +472,14 @@ const fetchWorkflowJobTitles = async () => {
         .filter(Boolean),
     )]
 
-    workflowJobTitles.value = titles.length ? titles : ['Accounting', 'software engineer']
+    workflowJobTitles.value = titles
     if (!selectedWorkflowJobTitle.value && workflowJobTitles.value.length) {
       selectedWorkflowJobTitle.value = workflowJobTitles.value[0]
     }
   } catch (error) {
     console.error('Failed to fetch workflow job titles', error)
-    workflowJobTitles.value = ['Accounting', 'software engineer']
-    if (!selectedWorkflowJobTitle.value) {
-      selectedWorkflowJobTitle.value = workflowJobTitles.value[0]
-    }
+    workflowJobTitles.value = []
+    selectedWorkflowJobTitle.value = ''
   }
 }
 
@@ -652,15 +558,11 @@ const fetchWorkflowStages = async () => {
       return
     }
 
-    if (!stageColumns.value.length) {
-      stageColumns.value = [...fallbackStageColumns]
-      syncStagePaginationState(stageColumns.value)
-    }
+    if (!stageColumns.value.length) syncStagePaginationState(stageColumns.value)
     await focusTargetedStage()
   } catch (error) {
     console.error('Failed to fetch workflow stages', error)
     if (!stageColumns.value.length) {
-      stageColumns.value = [...fallbackStageColumns]
       syncStagePaginationState(stageColumns.value)
       stageActionError.value = getNitroSyncErrorMessage(error, 'Could not load workflow stages.')
     }
@@ -967,8 +869,8 @@ const markCandidateAsHired = async (card) => {
 
     selectedCandidate.value = {
       name: card.name,
-      role: '5 Stars',
-      email: card.email || createCandidateEmail(card.name),
+      role: getCandidateSecondaryText(card),
+      email: card.email || '',
       candidateUuid,
     }
 
@@ -991,7 +893,7 @@ const handleCandidateMenuAction = async (item, card, column = null) => {
   activeCandidateMenu.value = null
 
   if (item === 'Send Email') {
-    selectedCandidate.value = { name: card.name, role: '5 Stars', email: card.email || createCandidateEmail(card.name) }
+    selectedCandidate.value = { name: card.name, role: getCandidateSecondaryText(card), email: card.email || '' }
     emailTitle.value = ''
     sendEmailMessage.value = ''
     sendEmailError.value = ''
@@ -1001,7 +903,7 @@ const handleCandidateMenuAction = async (item, card, column = null) => {
   if (item === 'Add Tags') {
     selectedCandidate.value = {
       name: card.name,
-      role: '5 Stars',
+      role: getCandidateSecondaryText(card),
       candidateUuid: getCandidateUuidFromCard(card),
     }
     tagCandidateUuid.value = getCandidateUuidFromCard(card)
@@ -1014,7 +916,7 @@ const handleCandidateMenuAction = async (item, card, column = null) => {
   }
 
   if (item === 'Add Notes') {
-    selectedCandidate.value = { name: card.name, role: '5 Stars' }
+    selectedCandidate.value = { name: card.name, role: getCandidateSecondaryText(card) }
     showNoteForm.value = false
     editingNoteIndex.value = null
     noteCandidateUuid.value = ''
@@ -1026,8 +928,8 @@ const handleCandidateMenuAction = async (item, card, column = null) => {
   if (item === 'Share Profile') {
     selectedCandidate.value = {
       name: card.name,
-      role: '5 Stars',
-      email: card.email || createCandidateEmail(card.name),
+      role: getCandidateSecondaryText(card),
+      email: card.email || '',
       candidateUuid: getCandidateUuidFromCard(card),
     }
     shareProfilePermission.value = 'view'
@@ -1043,8 +945,8 @@ const handleCandidateMenuAction = async (item, card, column = null) => {
   if (item === 'Add team member') {
     selectedCandidate.value = {
       name: card.name,
-      role: '5 Stars',
-      email: card.email || createCandidateEmail(card.name),
+      role: getCandidateSecondaryText(card),
+      email: card.email || '',
       candidateUuid: getCandidateUuidFromCard(card),
       jobStageUuid: String(column?.jobStageUuid || '').trim(),
     }
@@ -1056,12 +958,12 @@ const handleCandidateMenuAction = async (item, card, column = null) => {
   }
 
   if (item === 'Send Test') {
-    selectedCandidate.value = { name: card.name, role: '5 Stars' }
+    selectedCandidate.value = { name: card.name, role: getCandidateSecondaryText(card) }
     showSendTestModal.value = true
   }
 
   if (item === 'Disqualify') {
-    selectedCandidate.value = { name: card.name, role: '5 Stars', email: card.email || createCandidateEmail(card.name) }
+    selectedCandidate.value = { name: card.name, role: getCandidateSecondaryText(card), email: card.email || '' }
     disqualifyCandidateUuid.value = ''
     disqualifyReason.value = ''
     disqualifyPoolOption.value = 'add'
@@ -1072,11 +974,11 @@ const handleCandidateMenuAction = async (item, card, column = null) => {
   }
 
   if (item === 'Schedule an Interview') {
-    selectedCandidate.value = { name: card.name, role: '5 Stars', email: card.email || createCandidateEmail(card.name) }
+    selectedCandidate.value = { name: card.name, role: getCandidateSecondaryText(card), email: card.email || '' }
     scheduleCandidateUuid.value = ''
     scheduleCandidateInfo.value = card.name
     schedulePosition.value = ''
-    scheduleEmail.value = card.email || createCandidateEmail(card.name)
+    scheduleEmail.value = card.email || ''
     scheduleInterviewDetails.value = ''
     scheduleDate.value = ''
     scheduleTime.value = ''
@@ -1093,7 +995,7 @@ const handleCandidateMenuAction = async (item, card, column = null) => {
   }
 
   if (item === 'Assign') {
-    selectedCandidate.value = { name: card.name, role: '5 Stars', email: card.email || createCandidateEmail(card.name) }
+    selectedCandidate.value = { name: card.name, role: getCandidateSecondaryText(card), email: card.email || '' }
     assignEmployeeName.value = ''
     assignTitle.value = ''
     assignReminderEnabled.value = true

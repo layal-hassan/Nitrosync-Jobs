@@ -28,13 +28,9 @@ const aiMessage = ref('')
 const aiError = ref('')
 const aiAnswer = ref('')
 
-const fallbackTeamOptions = ['Design Team', 'Product Team', 'Marketing Team', 'HR Team']
-const fallbackRecruiterOptions = ['Manal Oraby', 'Tareq Ahmad', 'Lina Saleh', 'Omar Khaled']
-const fallbackUserOptions = ['Manal Oraby', 'Tareq Ahmad', 'Lina Saleh', 'Omar Khaled', 'Dana Samir']
-
-const baseTeamOptions = ref([...fallbackTeamOptions])
-const baseRecruiterOptions = ref([...fallbackRecruiterOptions])
-const baseUserOptions = ref([...fallbackUserOptions])
+const baseTeamOptions = ref([])
+const baseRecruiterOptions = ref([])
+const baseUserOptions = ref([])
 
 const companyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
 
@@ -165,7 +161,7 @@ const fetchEmployees = async () => {
     }
   } catch (error) {
     console.error('Failed to fetch employees', error)
-    employeesError.value = 'Could not load employees from API. Using saved options.'
+    employeesError.value = 'Could not load employees from API.'
   } finally {
     employeesLoading.value = false
   }

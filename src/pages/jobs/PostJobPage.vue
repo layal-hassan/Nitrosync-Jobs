@@ -99,17 +99,17 @@ const metaDataForm = ref({
 })
 
 const tagsForm = ref({
-  selectedTags: ['High Salary', 'Finance'],
+  selectedTags: [],
 })
 
 const recruiterForm = ref({
-  selectedRecruiters: ['Manal Oraby'],
+  selectedRecruiters: [],
 })
 
 const hiringTeamForm = ref({
   team: '',
   recruiter: '',
-  additionalUsers: ['Manal Oraby'],
+  additionalUsers: [],
 })
 
 const previewForm = ref({
@@ -204,20 +204,15 @@ const jobStagesForm = ref({
   newStageName: '',
   selectedScoreCard: '',
   scoreCardDraft: {
-    name: 'Graphic Designer Screening Scorecard',
-    jobTitle: 'Graphic Designer',
-    interviewer: 'Interviewer',
-    tags: 'Screening, design, culture fit',
-    instructionMessage: 'Please score each candidate against the required skills, leave concise evidence-based notes, and flag any follow-up needed before moving to the next stage.',
-    evaluationCriteria: 'Assess ownership, communication clarity, collaboration, and how the candidate responds to feedback during the interview process.',
-    commentsObservation: 'Use this section for final interviewer notes, decision context, and clear recommendations before the candidate advances.',
+    name: '',
+    jobTitle: '',
+    interviewer: '',
+    tags: '',
+    instructionMessage: '',
+    evaluationCriteria: '',
+    commentsObservation: '',
   },
-  stageRows: [
-    { jobStageUuid: '', label: 'Screen', enabled: true },
-    { jobStageUuid: '', label: 'Testing', enabled: true },
-    { jobStageUuid: '', label: 'Interview', enabled: false },
-    { jobStageUuid: '', label: 'Hired', enabled: false },
-  ],
+  stageRows: [],
   questionInput: '',
   selectedQuestions: [],
   selectedCompetency: '',
@@ -229,13 +224,13 @@ const jobStagesForm = ref({
       automatedActionDraft: {
         automatedActionUuid: '',
         condition: '',
-    primaryAction: '',
+      primaryAction: '',
     assignedRecruiter: '',
-    assignMessage: 'Send the candidate invitation automatically, assign the right owner, and add a short internal note for the next reviewer.',
+    assignMessage: '',
     inviteAutomatically: false,
     moveCandidateTo: '',
     notifyCandidate: false,
-    assignManager: true,
+    assignManager: false,
   },
   savedAutomatedActions: [],
 })
@@ -258,81 +253,7 @@ const appForm = ref({
   applicationQuestionsLoaded: false,
 })
 
-const fallbackTemplateDrafts = [
-  {
-    label: 'Marketing template',
-    value: 'marketing',
-    draft: {
-      job_title: 'Marketing Manager',
-      job_code: 'MKT-204',
-      department: 'Marketing',
-      country: 'Saudi Arabia',
-      city: 'Riyadh',
-      description: 'Lead campaign planning, brand growth, and performance reporting across digital and offline channels.',
-      degree_level: 'Bachelor',
-      career_level: 'Mid-Senior level',
-      industry: 'Technology',
-      contract_type: 'Full time',
-      currency: 'SAR',
-      start_from: '$1000',
-      end_to: '$2000',
-      tags: ['Marketing', 'Leadership', 'Analytics'],
-      recruiter: 'Manal Oraby',
-      team: 'Marketing Team',
-      job_title_seo: 'Marketing Manager Job Opening',
-      job_description_seo: 'Marketing Manager role focused on campaigns, growth, and team leadership.',
-    },
-  },
-  {
-    label: 'Engineering template',
-    value: 'engineering',
-    draft: {
-      job_title: 'Civil Engineer',
-      job_code: 'ENG-112',
-      department: 'Engineering',
-      country: 'Jordan',
-      city: 'Amman',
-      description: 'Plan, review, and supervise civil engineering works with strong coordination across project teams.',
-      degree_level: 'Bachelor',
-      career_level: 'Senior level',
-      industry: 'Technology',
-      contract_type: 'Full time',
-      currency: 'USD',
-      start_from: '$1000',
-      end_to: '$2000',
-      tags: ['Engineering', 'Site', 'Projects'],
-      recruiter: 'Tareq Ahmad',
-      team: 'Product Team',
-      job_title_seo: 'Civil Engineer Career Opportunity',
-      job_description_seo: 'Civil Engineer opening for project delivery, design review, and site coordination.',
-    },
-  },
-  {
-    label: 'Sales template',
-    value: 'sales',
-    draft: {
-      job_title: 'Sales Executive',
-      job_code: 'SAL-318',
-      department: 'Sales',
-      country: 'UAE',
-      city: 'Dubai',
-      description: 'Drive pipeline growth, manage key accounts, and close new business opportunities.',
-      degree_level: 'Bachelor',
-      career_level: 'Mid level',
-      industry: 'Banking',
-      contract_type: 'Full time',
-      currency: 'EUR',
-      start_from: '$1000',
-      end_to: '$2000',
-      tags: ['Sales', 'B2B', 'Revenue'],
-      recruiter: 'Lina Saleh',
-      team: 'Marketing Team',
-      job_title_seo: 'Sales Executive Hiring',
-      job_description_seo: 'Sales Executive role focused on client acquisition, pipeline growth, and closing.',
-    },
-  },
-]
-const templates = ref([...fallbackTemplateDrafts])
+const templates = ref([])
 
 const defaultCompanyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
 let companyId = defaultCompanyId
@@ -383,8 +304,6 @@ const normalizeTextInput = (value) => {
 
   return ''
 }
-const recruiterStorageKey = 'nitrosync-job-recruiters'
-const departmentStorageKey = 'nitrosync-job-departments'
 const jobStagesStorageKeyPrefix = 'nitrosync-job-stages:'
 const wizardDraftStorageKeyPrefix = 'nitrosync-post-job-draft:'
 let wizardDraftPersistTimer = null
@@ -646,67 +565,6 @@ const resolveRecruiterRecord = (value) => {
   }) || null
 }
 
-const getStoredRecruitersByJob = () => {
-  try {
-    const rawValue = localStorage.getItem(recruiterStorageKey)
-    const parsed = rawValue ? JSON.parse(rawValue) : {}
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-const getStoredDepartmentsByJob = () => {
-  try {
-    const rawValue = localStorage.getItem(departmentStorageKey)
-    const parsed = rawValue ? JSON.parse(rawValue) : {}
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-const storeRecruiterForJob = (jobUuid, recruiterName, recruiterUuid = '') => {
-  const normalizedJobUuid = normalizeTemplateText(jobUuid)
-  const normalizedRecruiterName = normalizeTemplateText(recruiterName)
-
-  if (!normalizedJobUuid || !normalizedRecruiterName) return
-
-  const nextValue = {
-    ...getStoredRecruitersByJob(),
-    [normalizedJobUuid]: {
-      recruiter_name: normalizedRecruiterName,
-      recruiter_uuid: normalizeTemplateText(recruiterUuid),
-    },
-  }
-
-  try {
-    localStorage.setItem(recruiterStorageKey, JSON.stringify(nextValue))
-  } catch {
-    // Ignore local storage failures and keep submit flow working.
-  }
-}
-
-const storeDepartmentForJob = (jobUuid, departmentName) => {
-  const normalizedJobUuid = normalizeTemplateText(jobUuid)
-  const normalizedDepartmentName = normalizeTemplateText(departmentName)
-
-  if (!normalizedJobUuid || !normalizedDepartmentName) return
-
-  const nextValue = {
-    ...getStoredDepartmentsByJob(),
-    [normalizedJobUuid]: {
-      department_name: normalizedDepartmentName,
-    },
-  }
-
-  try {
-    localStorage.setItem(departmentStorageKey, JSON.stringify(nextValue))
-  } catch {
-    // Ignore local storage failures and keep submit flow working.
-  }
-}
-
 const getSelectedTemplateDraft = () => {
   const selectedValue = String(selectedTemplate.value || '').trim()
   if (!selectedValue) return null
@@ -715,13 +573,7 @@ const getSelectedTemplateDraft = () => {
   return selectedOption?.draft || null
 }
 
-const getStoredRecruiterForJob = (jobUuid) => {
-  const normalizedJobUuid = normalizeTemplateText(jobUuid)
-  if (!normalizedJobUuid) return null
-
-  const storedRecruiter = getStoredRecruitersByJob()[normalizedJobUuid]
-  return storedRecruiter && typeof storedRecruiter === 'object' ? storedRecruiter : null
-}
+const getStoredRecruiterForJob = () => null
 
 const normalizeCompanyLabel = (value) => String(value ?? '').trim()
 const invalidCompanyLabels = new Set(['off', 'optional', 'mandatory', 'none', 'null', 'undefined'])
@@ -843,23 +695,8 @@ const recruiterOptions = computed(() => {
     })
     .filter(Boolean)
 
-  const fallbackOptions = [
-    { name: 'Manal Oraby', type: 'Lead Recruiter', color: '#ff6a9d', initials: 'MO' },
-    { name: 'Tareq Ahmad', type: 'Technical Recruiter', color: '#f1b32a', initials: 'TA' },
-    { name: 'Lina Saleh', type: 'Operations Recruiter', color: '#4f7dff', initials: 'LS' },
-    { name: 'Omar Khaled', type: 'HR Recruiter', color: '#48d873', initials: 'OK' },
-    { name: 'Dana Samir', type: 'Campus Recruiter', color: '#7028e4', initials: 'DS' },
-  ]
-
   const merged = [...baseOptions]
   const existingNames = new Set(baseOptions.map((item) => item.name.toLowerCase()))
-
-  fallbackOptions.forEach((item) => {
-    if (!existingNames.has(item.name.toLowerCase())) {
-      merged.push(item)
-      existingNames.add(item.name.toLowerCase())
-    }
-  })
 
   recruiterForm.value.selectedRecruiters.forEach((name, index) => {
     const normalizedName = String(name || '').trim()
@@ -1095,10 +932,10 @@ const fetchTemplates = async () => {
       })
       .filter(Boolean)
 
-    templates.value = mappedTemplates.length ? mappedTemplates : [...fallbackTemplateDrafts]
+    templates.value = mappedTemplates
   } catch (error) {
     console.error('Failed to fetch job templates', error)
-    templates.value = [...fallbackTemplateDrafts]
+    templates.value = []
   } finally {
     templatesLoading.value = false
   }
@@ -1130,12 +967,12 @@ const startWizard = () => {
   appFormStage.value = 0
   intelligentStage.value = 0
   intelligentQuestionTypes.value = []
-  tagsForm.value = { selectedTags: ['High Salary', 'Finance'] }
-  recruiterForm.value = { selectedRecruiters: ['Manal Oraby'] }
+  tagsForm.value = { selectedTags: [] }
+  recruiterForm.value = { selectedRecruiters: [] }
   hiringTeamForm.value = {
     team: '',
     recruiter: '',
-    additionalUsers: ['Manal Oraby'],
+    additionalUsers: [],
   }
   previewForm.value = {
     publishAction: '',
@@ -1174,20 +1011,15 @@ const startWizard = () => {
     newStageName: '',
     selectedScoreCard: '',
     scoreCardDraft: {
-      name: 'Graphic Designer Screening Scorecard',
-      jobTitle: 'Graphic Designer',
-      interviewer: 'Interviewer',
-      tags: 'Screening, design, culture fit',
-      instructionMessage: 'Please score each candidate against the required skills, leave concise evidence-based notes, and flag any follow-up needed before moving to the next stage.',
-      evaluationCriteria: 'Assess ownership, communication clarity, collaboration, and how the candidate responds to feedback during the interview process.',
-      commentsObservation: 'Use this section for final interviewer notes, decision context, and clear recommendations before the candidate advances.',
+      name: '',
+      jobTitle: '',
+      interviewer: '',
+      tags: '',
+      instructionMessage: '',
+      evaluationCriteria: '',
+      commentsObservation: '',
     },
-    stageRows: [
-      { jobStageUuid: '', label: 'Screen', enabled: true },
-      { jobStageUuid: '', label: 'Testing', enabled: true },
-      { jobStageUuid: '', label: 'Interview', enabled: false },
-      { jobStageUuid: '', label: 'Hired', enabled: false },
-    ],
+    stageRows: [],
     questionInput: '',
     selectedQuestions: [],
     selectedCompetency: '',
@@ -1201,11 +1033,11 @@ const startWizard = () => {
       condition: '',
       primaryAction: '',
       assignedRecruiter: '',
-      assignMessage: 'Send the candidate invitation automatically, assign the right owner, and add a short internal note for the next reviewer.',
+      assignMessage: '',
       inviteAutomatically: false,
       moveCandidateTo: '',
       notifyCandidate: false,
-      assignManager: true,
+      assignManager: false,
       },
       savedAutomatedActions: [],
     }
@@ -2989,26 +2821,13 @@ const submitJob = async (successMessage, successVariant) => {
     submissionMessage.value =
       successfulResponse.message
 
-      const recruiterValue = normalizeHiringTeamField(
-        hiringTeamForm.value.recruiter || selectedRecruiterNames.value[0] || '',
-      )
-    const recruiterRecord = resolveRecruiterRecord(recruiterValue)
-    const persistedJobUuid = String(
+      const persistedJobUuid = String(
       editingJobUuid.value
       || currentJobUuid.value
       || route.query.job_uuid
       || requestPayload.job_uuid
       || '',
     ).trim()
-      storeRecruiterForJob(
-        persistedJobUuid,
-        normalizeRecruiterName(recruiterRecord) || recruiterValue,
-        normalizeRecruiterUuid(recruiterRecord) || recruiterValue,
-      )
-      storeDepartmentForJob(
-        persistedJobUuid,
-        jobDetailsForm.value.department,
-      )
       storeEditWizardDraftForJob(persistedJobUuid)
       openCompletionModal(successVariant)
       return true
