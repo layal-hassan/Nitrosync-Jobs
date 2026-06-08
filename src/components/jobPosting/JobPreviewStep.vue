@@ -277,19 +277,17 @@ onBeforeUnmount(() => {
           <h4>Additional Info</h4>
 
           <div class="job-preview-card__grid job-preview-card__grid--two">
-            <div class="job-preview-card__field job-preview-card__field--select">
+            <div class="job-preview-card__field">
               <label>Industry</label>
-              <div class="job-preview-card__value job-preview-card__value--select">
+              <div class="job-preview-card__value">
                 <span>{{ additionalInfo.industry || 'Select one of the list...' }}</span>
-                <span class="job-preview-card__value-arrow"></span>
               </div>
             </div>
 
-            <div class="job-preview-card__field job-preview-card__field--select">
+            <div class="job-preview-card__field">
               <label>Career Level</label>
-              <div class="job-preview-card__value job-preview-card__value--select">
+              <div class="job-preview-card__value">
                 <span>{{ additionalInfo.careerLevel || 'Select one of the list...' }}</span>
-                <span class="job-preview-card__value-arrow"></span>
               </div>
             </div>
           </div>
@@ -311,11 +309,10 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div class="job-preview-card__field job-preview-card__field--select">
+          <div class="job-preview-card__field">
             <label>Currency</label>
-            <div class="job-preview-card__value job-preview-card__value--select">
+            <div class="job-preview-card__value">
               <span>{{ additionalInfo.currency || 'Select Currency...' }}</span>
-              <span class="job-preview-card__value-arrow"></span>
             </div>
           </div>
 

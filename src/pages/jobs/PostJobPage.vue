@@ -575,6 +575,60 @@ const getSelectedTemplateDraft = () => {
 
 const getStoredRecruiterForJob = () => null
 
+const getDraftObjectCandidate = (value) => {
+  if (Array.isArray(value)) {
+    return value.find((entry) => entry && typeof entry === 'object') || null
+  }
+
+  return value && typeof value === 'object' ? value : null
+}
+
+const getDraftDepartmentObject = (draft = {}) => {
+  const candidates = [
+    draft?.department,
+    draft?.job?.department,
+    draft?.model?.department,
+    draft?.job_model?.department,
+    draft?.raw?.department,
+    draft?.details?.department,
+  ]
+
+  for (const candidate of candidates) {
+    const resolved = getDraftObjectCandidate(candidate)
+    if (resolved) return resolved
+  }
+
+  return null
+}
+
+const extractDraftDepartment = (draft = {}) =>
+  normalizeTemplateText(
+    typeof draft?.department === 'string'
+      ? draft.department
+      : getDraftDepartmentObject(draft)?.department_name
+        ?? getDraftDepartmentObject(draft)?.name
+        ?? draft?.department_name
+        ?? draft?.job_details?.department
+        ?? draft?.job_posting?.department
+        ?? '',
+  )
+
+const extractDraftRecruiter = (draft = {}) => {
+  const hiringTeam =
+    Array.isArray(draft?.job_hiring_team) ? draft.job_hiring_team
+      : Array.isArray(draft?.hiring_team) ? draft.hiring_team
+        : []
+  const firstHiringTeam = hiringTeam[0] && typeof hiringTeam[0] === 'object' ? hiringTeam[0] : {}
+
+  return normalizeTemplateText(
+    draft?.recruiter_name
+    ?? (typeof draft?.recruiter === 'string' ? draft.recruiter : '')
+    ?? firstHiringTeam?.recruiter
+    ?? firstHiringTeam?.recruiter_name
+    ?? '',
+  )
+}
+
 const normalizeCompanyLabel = (value) => String(value ?? '').trim()
 const invalidCompanyLabels = new Set(['off', 'optional', 'mandatory', 'none', 'null', 'undefined'])
 const normalizeMeaningfulCompanyLabel = (value) => {
@@ -1249,17 +1303,13 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
     createdAt: String(draft.created_at ?? '').trim(),
   }
   const storedRecruiter = getStoredRecruiterForJob(jobUuid)
-  const recruiterName = String(
-    draft.recruiter_name
-    ?? draft.recruiter
-    ?? storedRecruiter?.recruiter_name
-    ?? '',
-  ).trim()
+  const recruiterName = extractDraftRecruiter(draft) || normalizeTemplateText(storedRecruiter?.recruiter_name)
+  const departmentName = extractDraftDepartment(draft)
 
   jobDetailsForm.value = {
     jobTitle: draft.job_title || '',
     jobCode: draft.job_code || '',
-    department: draft.department || '',
+    department: departmentName,
     country: draft.country || '',
     city: draft.city || '',
     description: normalizeTextInput(draft.description),
@@ -1284,7 +1334,7 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   }
 
   hiringTeamForm.value = {
-    team: draft.department || '',
+    team: departmentName,
     recruiter: recruiterName,
     additionalUsers: [],
   }
@@ -2749,6 +2799,39 @@ const goToJobsPage = () => {
   router.push('/jobs')
 }
 
+const syncWizardToEditMode = async (jobUuid) => {
+  const normalizedJobUuid = String(jobUuid || '').trim()
+  if (!normalizedJobUuid) return
+
+  editingJobUuid.value = normalizedJobUuid
+  currentJobUuid.value = normalizedJobUuid
+  isEditMode.value = true
+  isViewMode.value = false
+
+  if (
+    String(route.query.mode || '').trim() === 'edit'
+    && String(route.query.job_uuid || '').trim() === normalizedJobUuid
+  ) {
+    return
+  }
+
+  try {
+    await router.replace({
+      path: '/jobs/post',
+      query: {
+        ...route.query,
+        mode: 'edit',
+        job_uuid: normalizedJobUuid,
+      },
+    })
+  } catch (error) {
+    console.error('Failed to sync wizard route to edit mode', {
+      jobUuid: normalizedJobUuid,
+      error,
+    })
+  }
+}
+
 const validateScheduleBeforeSubmit = () => {
   const { scheduleEnabled, publishDate, publishTime, closePublishDate, closePublishTime } = previewForm.value.schedule
 
@@ -2828,6 +2911,7 @@ const submitJob = async (successMessage, successVariant) => {
       || requestPayload.job_uuid
       || '',
     ).trim()
+      await syncWizardToEditMode(persistedJobUuid)
       storeEditWizardDraftForJob(persistedJobUuid)
       openCompletionModal(successVariant)
       return true
@@ -2863,6 +2947,7 @@ const submitSchedulePublish = async () => {
       timeout: nitroSyncRequestTimeoutMs,
     })
     const successfulResponse = assertNitroSyncRequestSucceeded(response, 'Job schedule saved successfully.')
+    await syncWizardToEditMode(requestPayload.job_uuid)
 
     submissionMessage.value = ''
     openCompletionModal('schedule')

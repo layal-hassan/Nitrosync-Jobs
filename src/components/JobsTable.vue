@@ -301,17 +301,78 @@ const getRecruiterAvatar = (job = {}) =>
     ?? '',
   ).trim()
 
+const normalizeText = (value) => String(value ?? '').trim()
+
+const getObjectCandidate = (value) => {
+  if (Array.isArray(value)) {
+    return value.find((entry) => entry && typeof entry === 'object') || null
+  }
+
+  return value && typeof value === 'object' ? value : null
+}
+
+const getNestedDepartmentObject = (source = {}) => {
+  const candidates = [
+    source?.department,
+    source?.job?.department,
+    source?.model?.department,
+    source?.job_model?.department,
+    source?.raw?.department,
+    source?.details?.department,
+  ]
+
+  for (const candidate of candidates) {
+    const resolved = getObjectCandidate(candidate)
+    if (resolved) return resolved
+  }
+
+  return null
+}
+
+const getFirstHiringTeamEntry = (source = {}) => {
+  const hiringTeam =
+    Array.isArray(source?.job_hiring_team) ? source.job_hiring_team
+      : Array.isArray(source?.hiring_team) ? source.hiring_team
+        : []
+
+  return hiringTeam[0] && typeof hiringTeam[0] === 'object' ? hiringTeam[0] : {}
+}
+
+const extractDepartmentValue = (source = {}) =>
+  normalizeText(
+    typeof source?.department === 'string'
+      ? source.department
+      : getNestedDepartmentObject(source)?.department_name
+        ?? getNestedDepartmentObject(source)?.name
+        ?? source?.department_name
+        ?? source?.job_details?.department
+        ?? source?.job_posting?.department
+        ?? source?.details?.department
+        ?? '',
+  )
+
+const extractRecruiterValue = (source = {}) => {
+  const recruiter = source?.recruiter
+  const hiringTeam = getFirstHiringTeamEntry(source)
+
+  return normalizeText(
+    source?.recruiter_name
+    ?? (typeof recruiter === 'string' ? recruiter : '')
+    ?? recruiter?.full_name
+    ?? recruiter?.name
+    ?? recruiter?.employee_name
+    ?? hiringTeam?.recruiter
+    ?? hiringTeam?.recruiter_name
+    ?? hiringTeam?.name
+    ?? '',
+  )
+}
+
 const normalizedJobs = computed(() =>
   (props.jobs || [])
     .map((job, index) => {
-    const department = departmentPresentation(
-      typeof job.department === 'string'
-        ? job.department
-        : job.department?.department_name || job.department_name || '',
-    )
-    const recruiterName =
-      (typeof job.recruiter_name === 'string' ? job.recruiter_name.trim() : '')
-      || (typeof job.recruiter === 'string' ? job.recruiter.trim() : '')
+    const department = departmentPresentation(extractDepartmentValue(job))
+    const recruiterName = extractRecruiterValue(job)
     const recruiterUi = recruiterPresentation(index)
     const tags = toArray(job.tags).map((tag) =>
       typeof tag === 'object'
@@ -931,11 +992,7 @@ const buildStoredJobPayload = (job, details = {}) => ({
   related_company: details.related_company ?? details.company_uuid ?? job.relatedCompany,
   job_title: details.job_title ?? job.title,
   job_code: details.job_code ?? job.jobCode,
-  department:
-    details.department?.department_name
-    ?? details.department_name
-    ?? details.department
-    ?? job.department,
+  department: extractDepartmentValue(details) || job.department,
   country: details.country?.name ?? details.country_name ?? details.country ?? job.country,
   city: details.city?.name ?? details.city_name ?? details.city ?? job.city,
   description: details.description ?? job.description,
@@ -974,7 +1031,7 @@ const buildStoredJobPayload = (job, details = {}) => ({
           : String(tag).trim(),
       ).filter(Boolean)
     : [...job.tags],
-  recruiter: details.recruiter_name ?? details.recruiter ?? job.recruiter,
+  recruiter: extractRecruiterValue(details) || job.recruiter,
   job_stages: Array.isArray(details.job_stages)
     ? details.job_stages
     : Array.isArray(details.jobs_stages)
