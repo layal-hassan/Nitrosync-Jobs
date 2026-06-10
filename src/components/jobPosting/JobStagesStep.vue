@@ -242,6 +242,13 @@ const sanitizeStageRows = (rows = []) =>
     }))
     : []
 
+const syncStageRowsFromForm = (rows = props.form.stageRows) => {
+  stageRows.value = sanitizeStageRows(rows)
+}
+
+const hasPreloadedStageRows = () =>
+  Array.isArray(props.form.stageRows) && props.form.stageRows.length > 0
+
 const normalizeStageManagement = (item) => ({
   scoreCardUuids: Array.isArray(item?.scoreCardUuids) ? [...new Set(item.scoreCardUuids.filter(Boolean))] : [],
   assessmentTitles: Array.isArray(item?.assessmentTitles) ? [...new Set(item.assessmentTitles.filter(Boolean))] : [],
@@ -494,7 +501,7 @@ const renameStageFromBoard = async (stage) => {
       stage_name: normalizedName,
     })
 
-    await fetchStages()
+    await fetchStages({ force: true })
     stageActionMessage.value = result.message || 'Stage updated successfully.'
     closeInlineStageMenu()
   } catch (error) {
@@ -529,7 +536,7 @@ const deleteStageFromBoard = async (stage) => {
       related_company: companyId.value,
     })
 
-    await fetchStages()
+    await fetchStages({ force: true })
     stageActionMessage.value = result.message || 'Stage deleted successfully.'
     closeInlineStageMenu()
   } catch (error) {
@@ -546,7 +553,11 @@ const closeWorkflowDesigner = () => {
 }
 
 onMounted(() => {
-  fetchStages()
+  if (hasPreloadedStageRows()) {
+    syncStageRowsFromForm(props.form.stageRows)
+  } else {
+    fetchStages()
+  }
   fetchScoreCards()
   fetchAutomatedActions()
   fetchEmployees()
@@ -557,15 +568,21 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleDocumentPointerDown)
 })
 
-const fetchStages = async () => {
+const fetchStages = async ({ force = false } = {}) => {
+  if (!force && hasPreloadedStageRows()) {
+    syncStageRowsFromForm(props.form.stageRows)
+    return
+  }
+
   stagesLoading.value = true
   stageActionError.value = ''
 
   try {
     const rows = await fetchNitroSyncJobStages(companyId.value)
     if (rows.length) {
-      stageRows.value = rows
-      props.form.stageRows = sanitizeStageRows(rows)
+      const sanitizedRows = sanitizeStageRows(rows)
+      stageRows.value = sanitizedRows
+      props.form.stageRows = sanitizedRows
       return
     }
 
@@ -637,7 +654,7 @@ const openBuilder = async () => {
       stage_name: newStageName.value.trim(),
     })
 
-    await fetchStages()
+    await fetchStages({ force: true })
     stageActionMessage.value = result.message || 'Stage created successfully.'
     newStageName.value = ''
     screen.value = 0
@@ -1270,6 +1287,42 @@ watch(currentStageKey, (value) => {
   props.form.currentStageKey = value
 })
 
+watch(
+  () => props.form.showWorkflowDesigner,
+  (value) => {
+    showWorkflowDesigner.value = Boolean(value)
+  },
+)
+
+watch(
+  () => props.form.stageRows,
+  (value) => {
+    const sanitizedRows = sanitizeStageRows(value)
+    const currentRows = JSON.stringify(sanitizeStageRows(stageRows.value))
+    const nextRows = JSON.stringify(sanitizedRows)
+
+    if (currentRows !== nextRows) {
+      stageRows.value = sanitizedRows
+    }
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.form.stageManagementByStage,
+  (value) => {
+    stageManagementByStage.value = value && typeof value === 'object' ? value : {}
+  },
+  { deep: true },
+)
+
+watch(
+  () => props.form.currentStageKey,
+  (value) => {
+    currentStageKey.value = String(value || '').trim()
+  },
+)
+
 watch(questionInput, (value) => {
   props.form.questionInput = value
 })
@@ -1306,7 +1359,7 @@ watch(
   () => props.relatedCompany,
   (value, previousValue) => {
     if (!String(value || '').trim() || value === previousValue) return
-    fetchStages()
+    fetchStages({ force: true })
     fetchScoreCards()
     fetchAutomatedActions()
   },

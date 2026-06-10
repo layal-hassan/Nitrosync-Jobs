@@ -58,7 +58,6 @@ const router = useRouter()
 const deleteJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/delete')
 const duplicateJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/duplicate-job')
 const getOneJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-one')
-const duplicateJobDraftStorageKey = 'nitrosync-duplicate-job'
 
 const createDefaultFilters = () => ({
   job_title: '',
@@ -332,10 +331,42 @@ const getNestedDepartmentObject = (source = {}) => {
 const getFirstHiringTeamEntry = (source = {}) => {
   const hiringTeam =
     Array.isArray(source?.job_hiring_team) ? source.job_hiring_team
-      : Array.isArray(source?.hiring_team) ? source.hiring_team
-        : []
+      : source?.job_hiring_team && typeof source.job_hiring_team === 'object' ? [source.job_hiring_team]
+        : Array.isArray(source?.hiring_team) ? source.hiring_team
+          : source?.hiring_team && typeof source.hiring_team === 'object' ? [source.hiring_team]
+            : []
 
   return hiringTeam[0] && typeof hiringTeam[0] === 'object' ? hiringTeam[0] : {}
+}
+
+const getRecruiterDisplayName = (value) => {
+  if (!value || typeof value !== 'object') return ''
+
+  const additionalInfo =
+    value?.employee_additional_information
+    ?? value?.employeeAdditionalInformation
+    ?? {}
+  const fullName = normalizeText(
+    value?.full_name
+    ?? value?.fullName
+    ?? value?.employee_name
+    ?? value?.employeeName
+    ?? value?.name,
+  )
+  const firstName = normalizeText(
+    value?.first_name
+    ?? value?.firstName
+    ?? additionalInfo?.first_name
+    ?? additionalInfo?.firstName,
+  )
+  const lastName = normalizeText(
+    value?.last_name
+    ?? value?.lastName
+    ?? additionalInfo?.last_name
+    ?? additionalInfo?.lastName,
+  )
+
+  return fullName || [firstName, lastName].filter(Boolean).join(' ').trim()
 }
 
 const extractDepartmentValue = (source = {}) =>
@@ -354,17 +385,22 @@ const extractDepartmentValue = (source = {}) =>
 const extractRecruiterValue = (source = {}) => {
   const recruiter = source?.recruiter
   const hiringTeam = getFirstHiringTeamEntry(source)
+  const recruiterValue = typeof recruiter === 'string' ? recruiter : ''
+  const hiringTeamRecruiterValue = typeof hiringTeam?.recruiter === 'string' ? hiringTeam.recruiter : ''
 
   return normalizeText(
     source?.recruiter_name
-    ?? (typeof recruiter === 'string' ? recruiter : '')
-    ?? recruiter?.full_name
-    ?? recruiter?.name
-    ?? recruiter?.employee_name
-    ?? hiringTeam?.recruiter
-    ?? hiringTeam?.recruiter_name
-    ?? hiringTeam?.name
-    ?? '',
+    || recruiterValue
+    || getRecruiterDisplayName(recruiter)
+    || hiringTeam?.recruiter_name
+    || hiringTeamRecruiterValue
+    || getRecruiterDisplayName(hiringTeam?.recruiter)
+    || getRecruiterDisplayName(hiringTeam?.assigned_recruiter)
+    || source?.assigned_recruiter_name
+    || (typeof source?.assigned_recruiter === 'string' ? source.assigned_recruiter : '')
+    || getRecruiterDisplayName(source?.assigned_recruiter)
+    || hiringTeam?.name
+    || '',
   )
 }
 
@@ -765,64 +801,6 @@ const openDeleteDialog = (job) => {
   openMenuIndex.value = null
 }
 
-const openDuplicateJobFallback = async (job) => {
-  const response = await axios.post(
-    getOneJobEndpoint,
-    {
-      job_uuid: job.jobUuid,
-      related_company: job.relatedCompany,
-    },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      timeout: nitroSyncRequestTimeoutMs,
-    },
-  )
-
-  const details =
-    response?.data?.data?.job
-    ?? response?.data?.data
-    ?? response?.data?.job
-    ?? {}
-
-  const payload = buildStoredJobPayload(job, details)
-  let applicationForm = null
-
-  try {
-    applicationForm = await fetchNitroSyncApplicationForm({
-      related_company: job.relatedCompany,
-      job_uuid: job.jobUuid,
-    })
-  } catch (applicationFormError) {
-    console.error('Failed to fetch application form for duplicate fallback', {
-      payload: {
-        related_company: job.relatedCompany,
-        job_uuid: job.jobUuid,
-      },
-      error: applicationFormError,
-    })
-  }
-
-  sessionStorage.setItem(
-    duplicateJobDraftStorageKey,
-    JSON.stringify({
-      ...payload,
-      source_job_uuid: job.jobUuid,
-      application_form: applicationForm,
-    }),
-  )
-
-  openMenuIndex.value = null
-  router.push({
-    path: '/jobs/post',
-    query: {
-      mode: 'duplicate',
-      source_job_uuid: job.jobUuid || '',
-    },
-  })
-}
-
 const duplicateJob = async (job) => {
   if (!job?.jobUuid) {
     window.alert('This job is missing job_uuid, so duplicate cannot be sent.')
@@ -880,18 +858,6 @@ const duplicateJob = async (job) => {
       },
       error,
     })
-
-    if (String(error?.response?.data?.message || error?.message || '').includes('replicate() on null')) {
-      try {
-        await openDuplicateJobFallback(job)
-        return
-      } catch (fallbackError) {
-        console.error('Failed to open duplicate fallback', {
-          jobUuid: job.jobUuid,
-          error: fallbackError,
-        })
-      }
-    }
 
     window.alert(
       error?.response?.data?.message
@@ -993,6 +959,11 @@ const buildStoredJobPayload = (job, details = {}) => ({
   job_title: details.job_title ?? job.title,
   job_code: details.job_code ?? job.jobCode,
   department: extractDepartmentValue(details) || job.department,
+  department_id:
+    details.department_id
+    ?? getNestedDepartmentObject(details)?.id
+    ?? getNestedDepartmentObject(details)?.department_id
+    ?? '',
   country: details.country?.name ?? details.country_name ?? details.country ?? job.country,
   city: details.city?.name ?? details.city_name ?? details.city ?? job.city,
   description: details.description ?? job.description,
@@ -1032,6 +1003,11 @@ const buildStoredJobPayload = (job, details = {}) => ({
       ).filter(Boolean)
     : [...job.tags],
   recruiter: extractRecruiterValue(details) || job.recruiter,
+  recruiter_uuid:
+    details.recruiter_uuid
+    ?? details.recruiter?.employee_uuid
+    ?? details.recruiter?.uuid
+    ?? '',
   job_stages: Array.isArray(details.job_stages)
     ? details.job_stages
     : Array.isArray(details.jobs_stages)

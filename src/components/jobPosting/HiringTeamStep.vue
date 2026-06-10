@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { sendNitroSyncAiCommand, aiTaskTimeoutMs } from '../../composables/useNitroSyncAi'
 import { getNitroSyncEmployees } from '../../composables/useNitroSyncEmployees'
 import Dropdown from '../ui/Dropdown.vue'
@@ -17,6 +17,14 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  relatedCompany: {
+    type: String,
+    default: '',
+  },
+  teamOptions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const quickUser = ref('')
@@ -31,8 +39,6 @@ const aiAnswer = ref('')
 const baseTeamOptions = ref([])
 const baseRecruiterOptions = ref([])
 const baseUserOptions = ref([])
-
-const companyId = 'b00af2a4-2d77-432b-bd93-4e7ea120d154'
 
 const normalizeLabel = (value) => String(value || '').trim()
 const normalizeFormField = (value) =>
@@ -69,7 +75,10 @@ const mergeOptions = (primaryOptions, extraOptions = []) =>
   uniqueLabels([...primaryOptions, ...extraOptions])
 
 const teamOptions = computed(() =>
-  mergeOptions(baseTeamOptions.value, [props.form.team]),
+  mergeOptions(baseTeamOptions.value, [
+    ...props.teamOptions,
+    props.form.team,
+  ]),
 )
 
 const recruiterOptions = computed(() =>
@@ -141,11 +150,20 @@ const removeAdditionalUser = (name) => {
 }
 
 const fetchEmployees = async () => {
+  const relatedCompany = normalizeLabel(props.relatedCompany)
+
+  if (!relatedCompany) {
+    baseTeamOptions.value = uniqueLabels(props.teamOptions)
+    baseRecruiterOptions.value = []
+    baseUserOptions.value = []
+    return
+  }
+
   employeesLoading.value = true
   employeesError.value = ''
 
   try {
-    const response = await getNitroSyncEmployees(companyId)
+    const response = await getNitroSyncEmployees(relatedCompany)
     const rows = Array.isArray(response?.data) ? response.data : []
 
     const employeeNames = uniqueLabels(rows.map(getEmployeeName))
@@ -172,6 +190,13 @@ onMounted(() => {
   props.form.recruiter = normalizeFormField(props.form.recruiter)
   fetchEmployees()
 })
+
+watch(
+  () => props.relatedCompany,
+  () => {
+    fetchEmployees()
+  },
+)
 
 const suggestTeamWithAi = async () => {
   if (!String(props.aiCommand || '').trim()) {

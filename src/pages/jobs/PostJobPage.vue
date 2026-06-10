@@ -67,6 +67,7 @@ const currentJobMeta = ref({
 const applicationFormId = ref('')
 const resolvedCompanyName = ref('')
 const recruiterDirectory = ref([])
+const departmentDirectory = ref([])
 const jobStagesValidation = ref({
   message: '',
   stageErrors: {},
@@ -77,6 +78,7 @@ const jobDetailsForm = ref({
   jobTitle: '',
   jobCode: '',
   department: '',
+  departmentId: '',
   country: '',
   city: '',
   description: '',
@@ -261,6 +263,7 @@ const createJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/create')
 const editJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/edit')
 const schedulePublishEndpoint = buildNitroSyncEndpoint('/v1/jobs/schedule-publish')
 const getJobTemplatesEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-templates')
+const getDepartmentsEndpoint = buildNitroSyncEndpoint('/v1/departments/get-all')
 
 const wizardSteps = [
   { label: 'Job Posting', color: '#ea4f8d' },
@@ -281,6 +284,7 @@ const postingTabs = [
 ]
 
 const normalizeTemplateText = (value) => String(value ?? '').trim()
+const uniqueOptions = (values) => [...new Set(values.map((value) => normalizeTemplateText(value)).filter(Boolean))]
 const normalizeTextInput = (value) => {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return String(value).trim()
@@ -495,6 +499,7 @@ const createTemplateDraft = (item = {}) => ({
   job_title: normalizeTemplateText(item?.job_title ?? item?.title),
   job_code: normalizeTemplateText(item?.job_code ?? item?.code),
   department: normalizeTemplateText(item?.department?.department_name ?? item?.department_name ?? item?.department),
+  department_id: normalizeTemplateText(item?.department_id ?? item?.department?.id ?? item?.department?.department_id),
   country: normalizeTemplateText(item?.country?.name ?? item?.country_name ?? item?.country),
   city: normalizeTemplateText(item?.city?.name ?? item?.city_name ?? item?.city),
   description: normalizeTextInput(item?.description),
@@ -509,10 +514,68 @@ const createTemplateDraft = (item = {}) => ({
   end_to: normalizeTemplateText(item?.end_to),
   tags: normalizeTemplateArray(item?.tags),
   recruiter: normalizeTemplateText(item?.recruiter_name ?? item?.recruiter),
+  recruiter_uuid: normalizeTemplateText(item?.recruiter_uuid ?? item?.recruiter?.employee_uuid ?? item?.recruiter?.uuid),
   team: normalizeTemplateText(item?.team_name ?? item?.team ?? item?.department_name ?? item?.department),
   job_title_seo: normalizeTemplateText(item?.job_title_seo ?? item?.seo_title),
   job_description_seo: normalizeTextInput(item?.job_description_seo ?? item?.seo_description),
 })
+
+const findDepartmentRecord = (value) => {
+  const normalizedValue = normalizeTemplateText(value).toLowerCase()
+  if (!normalizedValue) return null
+
+  return departmentDirectory.value.find((department) => {
+    const departmentId = normalizeTemplateText(
+      department?.id ?? department?.department_id ?? department?.uuid,
+    ).toLowerCase()
+    const departmentName = normalizeTemplateText(
+      department?.department_name ?? department?.name,
+    ).toLowerCase()
+
+    return departmentId === normalizedValue || departmentName === normalizedValue
+  }) || null
+}
+
+const departmentOptions = computed(() => {
+  const options = departmentDirectory.value
+    .map((item) => {
+      const label = normalizeTemplateText(item?.department_name ?? item?.name)
+      const value = normalizeTemplateText(item?.id ?? item?.department_id ?? item?.uuid)
+
+      if (!label || !value) return null
+
+      return { label, value }
+    })
+    .filter(Boolean)
+
+  const selectedDepartmentId = normalizeTemplateText(jobDetailsForm.value.departmentId)
+  const selectedDepartmentName = normalizeTemplateText(jobDetailsForm.value.department)
+  const exists = options.some((option) => option.value === selectedDepartmentId || option.label === selectedDepartmentName)
+
+  if (!exists && selectedDepartmentId && selectedDepartmentName) {
+    options.push({
+      label: selectedDepartmentName,
+      value: selectedDepartmentId,
+    })
+  }
+
+  return options
+})
+
+const syncDepartmentSelection = () => {
+  const currentDepartmentId = normalizeTemplateText(jobDetailsForm.value.departmentId)
+  const currentDepartmentName = normalizeTemplateText(jobDetailsForm.value.department)
+  const departmentRecord = findDepartmentRecord(currentDepartmentId || currentDepartmentName)
+
+  if (!departmentRecord) return
+
+  jobDetailsForm.value.departmentId = normalizeTemplateText(
+    departmentRecord?.id ?? departmentRecord?.department_id ?? departmentRecord?.uuid,
+  )
+  jobDetailsForm.value.department = normalizeTemplateText(
+    departmentRecord?.department_name ?? departmentRecord?.name,
+  )
+}
 
 const normalizeRecruiterUuid = (employee = {}) =>
   normalizeTemplateText(
@@ -527,6 +590,10 @@ const normalizeRecruiterUuid = (employee = {}) =>
   )
 
 const normalizeRecruiterName = (employee = {}) => {
+  const additionalInfo =
+    employee?.employee_additional_information
+    ?? employee?.employeeAdditionalInformation
+    ?? {}
   const fullName = normalizeTemplateText(
     employee?.full_name
     ?? employee?.fullName
@@ -534,8 +601,18 @@ const normalizeRecruiterName = (employee = {}) => {
     ?? employee?.employeeName
     ?? employee?.name,
   )
-  const firstName = normalizeTemplateText(employee?.first_name ?? employee?.firstName)
-  const lastName = normalizeTemplateText(employee?.last_name ?? employee?.lastName)
+  const firstName = normalizeTemplateText(
+    employee?.first_name
+    ?? employee?.firstName
+    ?? additionalInfo?.first_name
+    ?? additionalInfo?.firstName,
+  )
+  const lastName = normalizeTemplateText(
+    employee?.last_name
+    ?? employee?.lastName
+    ?? additionalInfo?.last_name
+    ?? additionalInfo?.lastName,
+  )
 
   return fullName || [firstName, lastName].filter(Boolean).join(' ').trim()
 }
@@ -565,6 +642,19 @@ const resolveRecruiterRecord = (value) => {
   }) || null
 }
 
+const syncSelectedRecruiters = () => {
+  const selectedValues = Array.isArray(recruiterForm.value.selectedRecruiters)
+    ? recruiterForm.value.selectedRecruiters
+    : []
+
+  if (!selectedValues.length) return
+
+  recruiterForm.value.selectedRecruiters = selectedValues.map((value) => {
+    const recruiterRecord = resolveRecruiterRecord(value)
+    return normalizeRecruiterUuid(recruiterRecord) || normalizeTemplateText(value)
+  })
+}
+
 const getSelectedTemplateDraft = () => {
   const selectedValue = String(selectedTemplate.value || '').trim()
   if (!selectedValue) return null
@@ -573,7 +663,45 @@ const getSelectedTemplateDraft = () => {
   return selectedOption?.draft || null
 }
 
-const getStoredRecruiterForJob = () => null
+const recruiterStorageKey = 'nitrosync-job-recruiters'
+
+const getStoredRecruiterMap = () => {
+  try {
+    const rawValue = localStorage.getItem(recruiterStorageKey)
+    const parsed = rawValue ? JSON.parse(rawValue) : {}
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const storeRecruiterForJob = ({ jobUuid, recruiterUuid, recruiterName } = {}) => {
+  const normalizedJobUuid = normalizeTemplateText(jobUuid)
+  const normalizedRecruiterUuid = normalizeTemplateText(recruiterUuid)
+  const normalizedRecruiterName = normalizeTemplateText(recruiterName)
+
+  if (!normalizedJobUuid || !normalizedRecruiterName) return
+
+  try {
+    const currentMap = getStoredRecruiterMap()
+    currentMap[normalizedJobUuid] = {
+      recruiter_uuid: normalizedRecruiterUuid,
+      recruiter_name: normalizedRecruiterName,
+    }
+    localStorage.setItem(recruiterStorageKey, JSON.stringify(currentMap))
+  } catch {
+    // Ignore storage failures and keep submit flow working.
+  }
+}
+
+const getStoredRecruiterForJob = (jobUuid = '') => {
+  const normalizedJobUuid = normalizeTemplateText(jobUuid)
+  if (!normalizedJobUuid) return null
+
+  const recruiterMap = getStoredRecruiterMap()
+  const storedRecruiter = recruiterMap[normalizedJobUuid]
+  return storedRecruiter && typeof storedRecruiter === 'object' ? storedRecruiter : null
+}
 
 const getDraftObjectCandidate = (value) => {
   if (Array.isArray(value)) {
@@ -613,11 +741,22 @@ const extractDraftDepartment = (draft = {}) =>
         ?? '',
   )
 
+const extractDraftDepartmentId = (draft = {}) =>
+  normalizeTemplateText(
+    draft?.department_id
+      ?? getDraftDepartmentObject(draft)?.id
+      ?? getDraftDepartmentObject(draft)?.department_id
+      ?? getDraftDepartmentObject(draft)?.uuid
+      ?? '',
+  )
+
 const extractDraftRecruiter = (draft = {}) => {
   const hiringTeam =
     Array.isArray(draft?.job_hiring_team) ? draft.job_hiring_team
-      : Array.isArray(draft?.hiring_team) ? draft.hiring_team
-        : []
+      : draft?.job_hiring_team && typeof draft.job_hiring_team === 'object' ? [draft.job_hiring_team]
+        : Array.isArray(draft?.hiring_team) ? draft.hiring_team
+          : draft?.hiring_team && typeof draft.hiring_team === 'object' ? [draft.hiring_team]
+            : []
   const firstHiringTeam = hiringTeam[0] && typeof hiringTeam[0] === 'object' ? hiringTeam[0] : {}
 
   return normalizeTemplateText(
@@ -851,11 +990,23 @@ const jobPostingHeading = computed(() => (isEditMode.value ? 'Edit: Job Posting'
 const applyTemplateDraft = (draft) => {
   if (!draft) return
 
+  const templateDepartment = findDepartmentRecord(draft.department)
+
   jobDetailsForm.value = {
     ...jobDetailsForm.value,
     jobTitle: draft.job_title || '',
     jobCode: draft.job_code || '',
-    department: draft.department || '',
+    department: normalizeTemplateText(
+      templateDepartment?.department_name
+      ?? templateDepartment?.name
+      ?? draft.department,
+    ),
+    departmentId: normalizeTemplateText(
+      templateDepartment?.id
+      ?? templateDepartment?.department_id
+      ?? templateDepartment?.uuid
+      ?? '',
+    ),
     country: draft.country || '',
     city: draft.city || '',
     description: normalizeTextInput(draft.description),
@@ -877,7 +1028,9 @@ const applyTemplateDraft = (draft) => {
   }
 
   recruiterForm.value = {
-    selectedRecruiters: draft.recruiter ? [draft.recruiter] : [],
+    selectedRecruiters: normalizeTemplateText(draft.recruiter_uuid ?? draft.recruiter)
+      ? [normalizeTemplateText(draft.recruiter_uuid ?? draft.recruiter)]
+      : [],
   }
 
   hiringTeamForm.value = {
@@ -927,12 +1080,44 @@ const loadRecruiterDirectory = async () => {
   try {
     const response = await getNitroSyncEmployees(companyId)
     recruiterDirectory.value = Array.isArray(response?.data) ? response.data : []
+    syncSelectedRecruiters()
   } catch (error) {
     console.error('Failed to load recruiter directory', {
       relatedCompany: companyId,
       error,
     })
     recruiterDirectory.value = []
+  }
+}
+
+const loadDepartmentDirectory = async () => {
+  if (!String(companyId || '').trim()) {
+    departmentDirectory.value = []
+    return
+  }
+
+  try {
+    const response = await axios.post(
+      getDepartmentsEndpoint,
+      {
+        related_company: companyId,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: nitroSyncRequestTimeoutMs,
+      },
+    )
+
+    departmentDirectory.value = Array.isArray(response?.data?.data) ? response.data.data : []
+    syncDepartmentSelection()
+  } catch (error) {
+    console.error('Failed to load departments', {
+      relatedCompany: companyId,
+      error,
+    })
+    departmentDirectory.value = []
   }
 }
 
@@ -1305,11 +1490,13 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   const storedRecruiter = getStoredRecruiterForJob(jobUuid)
   const recruiterName = extractDraftRecruiter(draft) || normalizeTemplateText(storedRecruiter?.recruiter_name)
   const departmentName = extractDraftDepartment(draft)
+  const departmentId = extractDraftDepartmentId(draft)
 
   jobDetailsForm.value = {
     jobTitle: draft.job_title || '',
     jobCode: draft.job_code || '',
     department: departmentName,
+    departmentId,
     country: draft.country || '',
     city: draft.city || '',
     description: normalizeTextInput(draft.description),
@@ -1330,7 +1517,9 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   }
 
   recruiterForm.value = {
-    selectedRecruiters: recruiterName ? [recruiterName] : [],
+    selectedRecruiters: normalizeTemplateText(draft.recruiter_uuid ?? recruiterName)
+      ? [normalizeTemplateText(draft.recruiter_uuid ?? recruiterName)]
+      : [],
   }
 
   hiringTeamForm.value = {
@@ -1564,6 +1753,7 @@ const buildCurrentJobSessionDraft = () => ({
   job_title: jobDetailsForm.value.jobTitle,
   job_code: jobDetailsForm.value.jobCode,
   department: jobDetailsForm.value.department,
+  department_id: jobDetailsForm.value.departmentId,
   country: jobDetailsForm.value.country,
   city: jobDetailsForm.value.city,
   description: normalizeTextInput(jobDetailsForm.value.description),
@@ -1585,6 +1775,7 @@ const buildCurrentJobSessionDraft = () => ({
   job_description_seo: normalizeTextInput(metaDataForm.value.seoDescription),
   tags: [...tagsForm.value.selectedTags],
   recruiter: hiringTeamForm.value.recruiter || selectedRecruiterNames.value[0] || '',
+  recruiter_uuid: normalizeTemplateText(recruiterForm.value.selectedRecruiters[0] || ''),
   team: hiringTeamForm.value.team || '',
   additional_users: Array.isArray(hiringTeamForm.value.additionalUsers) ? [...hiringTeamForm.value.additionalUsers] : [],
   job_stages: Array.isArray(jobStagesForm.value.stageRows) ? [...jobStagesForm.value.stageRows] : [],
@@ -1648,7 +1839,15 @@ onMounted(() => {
   fetchTemplates()
   loadCurrentCompanyName()
   loadRecruiterDirectory()
+  loadDepartmentDirectory()
 })
+
+watch(
+  () => departmentDirectory.value,
+  () => {
+    syncDepartmentSelection()
+  },
+)
 
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim())
 const parseSalaryValue = (value) => {
@@ -1691,7 +1890,7 @@ const getJobDetailsErrors = () => {
   const errors = {}
   if (!jobDetailsForm.value.jobTitle.trim()) errors.jobTitle = 'Job title is required.'
   if (!jobDetailsForm.value.jobCode.trim()) errors.jobCode = 'Job code is required.'
-  if (!jobDetailsForm.value.department.trim()) errors.department = 'Department is required.'
+  if (!String(jobDetailsForm.value.departmentId || jobDetailsForm.value.department || '').trim()) errors.department = 'Department is required.'
   if (!jobDetailsForm.value.country.trim()) errors.country = 'Country is required.'
   if (!jobDetailsForm.value.city.trim()) errors.city = 'City is required.'
   if (!jobDetailsForm.value.description.trim()) errors.description = 'Description is required.'
@@ -1993,8 +2192,9 @@ const buildJobSubmissionPayload = ({
   includeWithPublish = true,
   includeScheduleFields = false,
 } = {}) => {
+  const selectedRecruiterValue = normalizeTemplateText(recruiterForm.value.selectedRecruiters[0] || '')
   const recruiterValue = normalizeHiringTeamField(
-    hiringTeamForm.value.recruiter || selectedRecruiterNames.value[0] || '',
+    hiringTeamForm.value.recruiter || selectedRecruiterValue || '',
   )
   const hiringTeamValue = normalizeHiringTeamField(hiringTeamForm.value.team)
   const recruiterRecord = resolveRecruiterRecord(recruiterValue)
@@ -2018,7 +2218,7 @@ const buildJobSubmissionPayload = ({
   const payload = {
     job_title: jobDetailsForm.value.jobTitle,
     job_code: jobDetailsForm.value.jobCode,
-    department: jobDetailsForm.value.department,
+    department: jobDetailsForm.value.departmentId || jobDetailsForm.value.department,
     country: jobDetailsForm.value.country,
     city: jobDetailsForm.value.city,
     description: normalizeTextInput(jobDetailsForm.value.description),
@@ -2036,7 +2236,8 @@ const buildJobSubmissionPayload = ({
     job_title_seo: metaDataForm.value.seoTitle,
     job_description_seo: normalizeTextInput(metaDataForm.value.seoDescription),
     job_photo_seo: metaDataForm.value.seoPhoto,
-    recruiter_uuid: recruiterUuid || recruiterValue || '',
+    recruiter_name: recruiterName,
+    recruiter_uuid: recruiterUuid || selectedRecruiterValue || recruiterValue || '',
     tags: tagsForm.value.selectedTags.map((tag) => ({
       tag_name: tag,
     })),
@@ -2058,6 +2259,9 @@ const buildJobSubmissionPayload = ({
       {
         team: hiringTeamValue,
         recruiter: recruiterName,
+        recruiter_name: recruiterName,
+        recruiter_uuid: recruiterUuid || selectedRecruiterValue || recruiterValue || '',
+        employee_uuid: recruiterUuid || selectedRecruiterValue || recruiterValue || '',
         additional_users: serializedAdditionalUsers,
       },
     ],
@@ -2911,6 +3115,11 @@ const submitJob = async (successMessage, successVariant) => {
       || requestPayload.job_uuid
       || '',
     ).trim()
+      storeRecruiterForJob({
+        jobUuid: persistedJobUuid,
+        recruiterUuid: requestPayload.recruiter_uuid,
+        recruiterName: requestPayload.recruiter_name,
+      })
       await syncWizardToEditMode(persistedJobUuid)
       storeEditWizardDraftForJob(persistedJobUuid)
       openCompletionModal(successVariant)
@@ -3120,6 +3329,7 @@ const handlePreviewAction = async (action) => {
                 :form="jobDetailsForm"
                 :errors="jobDetailsErrors"
                 :ai-command="jobDescriptionAiCommand"
+                :department-options="departmentOptions"
               />
               <AdditionalInformation v-if="currentStep === 1" :form="additionalInfoForm" :errors="additionalInfoErrors" />
               <TagsStep
@@ -3182,6 +3392,8 @@ const handlePreviewAction = async (action) => {
               :form="hiringTeamForm"
               :errors="hiringTeamErrors"
               :ai-command="hiringTeamAiCommand"
+              :related-company="companyId"
+              :team-options="departmentOptions"
             />
 
             <JobPreviewStep

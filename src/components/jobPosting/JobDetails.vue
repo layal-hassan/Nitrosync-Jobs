@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { sendNitroSyncAiCommand, aiTaskTimeoutMs } from '../../composables/useNitroSyncAi'
-import { countryCityOptions, countryOptions, departmentOptions } from '../../data/jobPostingOptions'
+import { countryCityOptions, countryOptions } from '../../data/jobPostingOptions'
 import Dropdown from '../ui/Dropdown.vue'
 
 const props = defineProps({
@@ -17,11 +17,36 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  departmentOptions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const aiLoading = ref(false)
 const aiMessage = ref('')
 const aiError = ref('')
+const selectedDepartmentValue = computed({
+  get: () => props.form.departmentId || props.form.department || '',
+  set: (value) => {
+    const selectedOption = props.departmentOptions.find((option) => {
+      if (!option || typeof option !== 'object') {
+        return String(option || '').trim() === String(value || '').trim()
+      }
+
+      return String(option.value ?? '').trim() === String(value || '').trim()
+    })
+
+    if (selectedOption && typeof selectedOption === 'object') {
+      props.form.departmentId = String(selectedOption.value ?? '').trim()
+      props.form.department = String(selectedOption.label ?? '').trim()
+      return
+    }
+
+    props.form.departmentId = String(value || '').trim()
+    props.form.department = String(value || '').trim()
+  },
+})
 const cityOptions = computed(() => countryCityOptions[props.form.country] || [])
 
 watch(
@@ -80,7 +105,7 @@ const generateDescriptionWithAi = async () => {
       <div class="step-form__field">
         <label class="step-form__label">Department</label>
         <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.department }">
-          <Dropdown v-model="form.department" :options="departmentOptions" placeholder="select one of the list..." />
+          <Dropdown v-model="selectedDepartmentValue" :options="departmentOptions" placeholder="select one of the list..." />
         </div>
         <p v-if="errors.department" class="step-form__error">{{ errors.department }}</p>
       </div>
