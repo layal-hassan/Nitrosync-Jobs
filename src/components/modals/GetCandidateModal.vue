@@ -20,6 +20,7 @@ const emit = defineEmits(['close'])
 
 const selectedOption = ref('Recommended channels')
 const activeModal = ref('root')
+const employeeReferralCandidates = ref([])
 
 const sourcingOptions = [
   {
@@ -75,8 +76,12 @@ const handleOptionClick = (title) => {
   }
 }
 
-const handleEmployeeReferralNext = () => {
-  activeModal.value = 'sendEmail'
+const handleEmployeeReferralNext = (employees = []) => {
+  employeeReferralCandidates.value = Array.isArray(employees) ? employees.filter(Boolean) : []
+  activeModal.value = ''
+  requestAnimationFrame(() => {
+    activeModal.value = 'sendEmail'
+  })
 }
 </script>
 
@@ -152,6 +157,7 @@ const handleEmployeeReferralNext = () => {
 
     <SendEmailModal
       :open="activeModal === 'sendEmail'"
+      :candidates="employeeReferralCandidates"
       @back="activeModal = 'employeeReferral'"
       @close="activeModal = 'root'"
     />

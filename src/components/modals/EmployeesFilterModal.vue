@@ -1,6 +1,7 @@
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { reactive, watch } from 'vue'
 import Dropdown from '../ui/Dropdown.vue'
+import DatePicker from '../ui/DatePicker.vue'
 
 const props = defineProps({
   open: {
@@ -22,7 +23,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'apply', 'clear'])
-const activeDateField = ref('')
 
 const createForm = () => ({
   employmentStatus: '',
@@ -62,8 +62,6 @@ const handleClear = () => {
   syncForm()
   emit('clear')
 }
-
-const getDateInputType = (fieldName) => (activeDateField.value === fieldName || form[fieldName] ? 'date' : 'text')
 
 watch(
   () => props.open,
@@ -119,38 +117,17 @@ watch(
 
         <div class="employee-filters-modal__range-label">Employee Range</div>
 
-        <label class="employee-filters-modal__field employee-filters-modal__field--date">
-          <input
-            v-model="form.rangeFrom"
-            :type="getDateInputType('rangeFrom')"
-            placeholder="From"
-            @focus="activeDateField = 'rangeFrom'"
-            @blur="activeDateField = ''"
-          />
-          <span class="employee-filters-modal__calendar" aria-hidden="true"></span>
-        </label>
+        <div class="employee-filters-modal__field employee-filters-modal__field--date">
+          <DatePicker v-model="form.rangeFrom" placeholder="From" />
+        </div>
 
-        <label class="employee-filters-modal__field employee-filters-modal__field--date">
-          <input
-            v-model="form.rangeTo"
-            :type="getDateInputType('rangeTo')"
-            placeholder="To"
-            @focus="activeDateField = 'rangeTo'"
-            @blur="activeDateField = ''"
-          />
-          <span class="employee-filters-modal__calendar" aria-hidden="true"></span>
-        </label>
+        <div class="employee-filters-modal__field employee-filters-modal__field--date">
+          <DatePicker v-model="form.rangeTo" placeholder="To" />
+        </div>
 
-        <label class="employee-filters-modal__field employee-filters-modal__field--full employee-filters-modal__field--date">
-          <input
-            v-model="form.hireDate"
-            :type="getDateInputType('hireDate')"
-            placeholder="Hire date"
-            @focus="activeDateField = 'hireDate'"
-            @blur="activeDateField = ''"
-          />
-          <span class="employee-filters-modal__calendar" aria-hidden="true"></span>
-        </label>
+        <div class="employee-filters-modal__field employee-filters-modal__field--full employee-filters-modal__field--date">
+          <DatePicker v-model="form.hireDate" placeholder="Hire date" />
+        </div>
 
         <label class="employee-filters-modal__field employee-filters-modal__field--full">
           <input v-model.trim="form.location" type="text" placeholder="Location" />
@@ -272,7 +249,8 @@ watch(
 }
 
 .employee-filters-modal__field input,
-.employee-filters-modal__field :deep(.dropdown__trigger) {
+.employee-filters-modal__field :deep(.dropdown__trigger),
+.employee-filters-modal__field :deep(.date-picker__trigger) {
   width: 100%;
   min-height: var(--employee-filter-control-height) !important;
   height: var(--employee-filter-control-height) !important;
@@ -300,14 +278,16 @@ watch(
 }
 
 .employee-filters-modal__field input:focus,
-.employee-filters-modal__field :deep(.dropdown__trigger:focus-visible) {
+.employee-filters-modal__field :deep(.dropdown__trigger:focus-visible),
+.employee-filters-modal__field :deep(.date-picker__trigger:focus-visible) {
   outline: none;
   border-color: #ef87b1;
   box-shadow: 0 0 0 3px rgba(239, 90, 150, 0.1);
 }
 
 .employee-filters-modal__field input::placeholder,
-.employee-filters-modal__field :deep(.dropdown__trigger--placeholder) {
+.employee-filters-modal__field :deep(.dropdown__trigger--placeholder),
+.employee-filters-modal__field :deep(.date-picker__trigger--placeholder) {
   color: #b9afb5;
 }
 
@@ -321,6 +301,12 @@ watch(
 .employee-filters-modal__field :deep(.dropdown__value) {
   font-size: 12px !important;
   line-height: 1;
+}
+
+.employee-filters-modal__field :deep(.date-picker__value) {
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .employee-filters-modal__field :deep(.dropdown__arrow) {
@@ -337,52 +323,18 @@ watch(
   font-weight: 600;
 }
 
-.employee-filters-modal__field--date input {
-  padding-right: 36px !important;
-  color-scheme: light;
-}
-
-.employee-filters-modal__field--date input::-webkit-calendar-picker-indicator {
-  opacity: 0;
-  position: absolute;
-  right: 0;
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-}
-
-.employee-filters-modal__calendar {
-  position: absolute;
-  top: 50%;
-  right: 12px;
+.employee-filters-modal__field--date :deep(.date-picker__icon) {
   width: 14px;
   height: 14px;
-  border: 1.4px solid #ef5a96;
-  border-radius: 4px;
-  background:
-    linear-gradient(#ef5a96, #ef5a96) center 4px / 8px 1.2px no-repeat,
-    linear-gradient(#ef5a96, #ef5a96) center 8px / 5px 1.2px no-repeat;
-  transform: translateY(-50%);
-  pointer-events: none;
 }
 
-.employee-filters-modal__calendar::before,
-.employee-filters-modal__calendar::after {
-  content: '';
-  position: absolute;
-  top: -3px;
-  width: 2px;
-  height: 3px;
-  border-radius: 999px;
-  background: #ef5a96;
-}
-
-.employee-filters-modal__calendar::before {
-  left: 3px;
-}
-
-.employee-filters-modal__calendar::after {
-  right: 3px;
+.employee-filters-modal__field--date :deep(.date-picker__panel) {
+  width: 272px;
+  padding: 12px;
+  border: 1px solid #f2dbe5;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff 0%, #fff8fb 100%);
+  box-shadow: 0 18px 32px rgba(44, 24, 34, 0.14);
 }
 
 .employee-filters-modal__footer {

@@ -26,8 +26,6 @@ import JobPreviewStep from '../../components/jobPosting/JobPreviewStep.vue'
 import MetaDataStep from '../../components/jobPosting/MetaDataStep.vue'
 import RecruiterStep from '../../components/jobPosting/RecruiterStep.vue'
 import TagsStep from '../../components/jobPosting/TagsStep.vue'
-import Dropdown from '../../components/ui/Dropdown.vue'
-
 const showWizard = ref(false)
 const route = useRoute()
 const router = useRouter()
@@ -40,6 +38,8 @@ const intelligentStage = ref(0)
 const intelligentQuestionTypes = ref([])
 const selectedTemplate = ref('')
 const templatesLoading = ref(false)
+const templateSearchQuery = ref('')
+const showTemplateLibrary = ref(false)
 const validationMessage = ref('')
 const submissionMessage = ref('')
 const submittingJob = ref(false)
@@ -137,6 +137,21 @@ const normalizeJobStatus = (value) => {
   if (['6', 'archived', 'archive'].includes(normalized)) return 'archived'
 
   return normalized
+}
+
+const extractJobStatusValue = (value) => {
+  if (value && typeof value === 'object') {
+    return String(
+      value.key
+      ?? value.label
+      ?? value.status
+      ?? value.name
+      ?? value.value
+      ?? '',
+    ).trim()
+  }
+
+  return String(value ?? '').trim()
 }
 const formatJobDateTime = (value) => {
   const rawValue = String(value || '').trim()
@@ -263,6 +278,7 @@ const createJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/create')
 const editJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/edit')
 const schedulePublishEndpoint = buildNitroSyncEndpoint('/v1/jobs/schedule-publish')
 const getJobTemplatesEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-templates')
+const getOneJobEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-one')
 const getDepartmentsEndpoint = buildNitroSyncEndpoint('/v1/departments/get-all')
 
 const wizardSteps = [
@@ -818,6 +834,42 @@ const getStoredCompanyName = () => {
   return ''
 }
 
+const getStoredCompanyId = () => {
+  const storageKeys = [
+    'nitrosync-user',
+    'nitrosync-profile',
+    'user',
+    'profile',
+    'auth-user',
+    'currentUser',
+  ]
+
+  for (const key of storageKeys) {
+    for (const storage of [globalThis.localStorage, globalThis.sessionStorage]) {
+      try {
+        const rawValue = storage?.getItem?.(key)
+        if (!rawValue) continue
+
+        const parsed = JSON.parse(rawValue)
+        const storedCompanyId = normalizeTemplateText(
+          parsed?.related_company
+          ?? parsed?.company_uuid
+          ?? parsed?.company?.uuid
+          ?? parsed?.company?.company_uuid
+          ?? parsed?.organization_uuid
+          ?? parsed?.organization?.uuid,
+        )
+
+        if (storedCompanyId) return storedCompanyId
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return defaultCompanyId
+}
+
 const currentCompanyName = computed(() =>
   normalizeMeaningfulCompanyLabel(
     resolvedCompanyName.value
@@ -825,6 +877,30 @@ const currentCompanyName = computed(() =>
     || appForm.value.company
     || '',
   ),
+)
+const normalizedTemplateSearch = computed(() => String(templateSearchQuery.value || '').trim().toLowerCase())
+const filteredTemplates = computed(() => {
+  const query = normalizedTemplateSearch.value
+  if (!query) return templates.value
+
+  return templates.value.filter((item) => {
+    const haystack = [
+      item?.label,
+      item?.department,
+      item?.contractType,
+      item?.location,
+    ]
+      .map((value) => String(value || '').trim().toLowerCase())
+      .filter(Boolean)
+      .join(' ')
+
+    return haystack.includes(query)
+  })
+})
+const recentTemplates = computed(() => filteredTemplates.value.slice(0, 3))
+const templatePreviewList = computed(() => filteredTemplates.value.slice(0, 5))
+const selectedTemplateOption = computed(() =>
+  templates.value.find((item) => String(item.value || '').trim() === String(selectedTemplate.value || '').trim()) || null,
 )
 const recruiterOptions = computed(() => {
   const palette = ['#ff6a9d', '#f1b32a', '#4f7dff', '#48d873', '#7028e4']
@@ -881,7 +957,7 @@ const recruiterOptions = computed(() => {
         key: `${value || name}-${index}`,
         name,
         value: value || name,
-        type: detailParts.join(' • '),
+        type: detailParts.join(' | '),
         color: palette[index % palette.length],
         initials: initials || name.slice(0, 2).toUpperCase(),
       }
@@ -943,7 +1019,7 @@ const pageSubtitle = computed(() => {
 })
 
 const starterPrimaryLabel = computed(() => (isEditMode.value ? 'Continue editing' : 'Next step'))
-const starterScratchLabel = computed(() => (isEditMode.value ? 'Edit without template' : 'start from scratch'))
+const starterScratchLabel = computed(() => (isEditMode.value ? 'Edit without template' : 'Start from scratch'))
 const wizardPrimaryLabel = computed(() => (isEditMode.value ? 'Save and continue' : 'Next step'))
 const wizardSecondaryLabel = computed(() => (isEditMode.value ? 'Skip section' : 'Skip'))
 const completionModalContent = computed(() => {
@@ -986,6 +1062,52 @@ const hasWizardBack = computed(() =>
   ),
 )
 const jobPostingHeading = computed(() => (isEditMode.value ? 'Edit: Job Posting' : 'Step 1: Job Posting'))
+
+const formatTemplateUpdatedAt = (value) => {
+  const rawValue = String(value || '').trim()
+  if (!rawValue) return ''
+
+  const parsed = new Date(rawValue)
+  if (Number.isNaN(parsed.getTime())) return ''
+
+  const diffMs = Date.now() - parsed.getTime()
+  const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+
+  if (diffDays <= 0) return 'Updated today'
+  if (diffDays === 1) return 'Updated 1 day ago'
+  if (diffDays < 7) return `Updated ${diffDays} days ago`
+
+  const diffWeeks = Math.floor(diffDays / 7)
+  if (diffWeeks === 1) return 'Updated 1 week ago'
+  if (diffWeeks < 5) return `Updated ${diffWeeks} weeks ago`
+
+  return `Updated ${parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })}`
+}
+
+const selectTemplateOption = (option) => {
+  selectedTemplate.value = String(option?.value || '').trim()
+}
+
+const openTemplateLibrary = () => {
+  showTemplateLibrary.value = true
+}
+
+const closeTemplateLibrary = () => {
+  showTemplateLibrary.value = false
+}
+
+const useTemplateAndStart = (option = selectedTemplateOption.value) => {
+  if (option?.value) {
+    selectedTemplate.value = String(option.value).trim()
+  }
+
+  closeTemplateLibrary()
+  startWizard()
+}
 
 const applyTemplateDraft = (draft) => {
   if (!draft) return
@@ -1166,6 +1288,21 @@ const fetchTemplates = async () => {
         return {
           label,
           value,
+          department: normalizeTemplateText(
+            item?.department?.department_name
+            ?? item?.department_name
+            ?? item?.department,
+          ),
+          contractType: normalizeTemplateText(
+            item?.contract_type?.contract_type_name
+            ?? item?.contract_type_name
+            ?? item?.contract_type,
+          ),
+          location: [
+            normalizeTemplateText(item?.city?.name ?? item?.city_name ?? item?.city),
+            normalizeTemplateText(item?.country?.name ?? item?.country_name ?? item?.country),
+          ].filter(Boolean).join(', '),
+          updatedAt: normalizeTemplateText(item?.updated_at ?? item?.updatedAt ?? item?.created_at),
           draft: createTemplateDraft(item),
         }
       })
@@ -1181,6 +1318,7 @@ const fetchTemplates = async () => {
 }
 
 const startWizard = () => {
+  showTemplateLibrary.value = false
   companyId = defaultCompanyId
   resolvedCompanyName.value = ''
   isEditMode.value = false
@@ -1460,7 +1598,7 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   const openJobStagesStep = requestedStep === 'job-stages' || requestedStep === 'job_stages'
   const openedFromStagesDots = String(route.query.source || '').trim().toLowerCase() === 'table-stages'
   const targetedWorkflowStage = String(route.query.target_stage || '').trim()
-  const allowStoredWizardUiState = mode !== 'view' && !openJobStagesStep
+  const allowStoredWizardUiState = mode === 'create' && !openJobStagesStep
   const allowStoredJobStagesUiState = mode !== 'view'
   const initialMainStep = mode === 'view' ? wizardSteps.length - 1 : openJobStagesStep ? 3 : 0
   const jobUuid = String(draft.job_uuid || route.query.job_uuid || '').trim()
@@ -1480,7 +1618,7 @@ const applyJobDraft = (draft, { mode = 'edit' } = {}) => {
   validationMessage.value = ''
   submissionMessage.value = ''
   currentJobMeta.value = {
-    status: String(draft.status ?? draft.job_status ?? draft.active_status ?? '').trim(),
+    status: extractJobStatusValue(draft.status ?? draft.job_status ?? draft.active_status ?? ''),
     publishAt: String(draft.publish_at ?? draft.published_at ?? '').trim(),
     closeAt: String(draft.close_at ?? '').trim(),
     expiryDate: String(draft.expiry_date ?? '').trim(),
@@ -1689,19 +1827,82 @@ const resetCreateEntryState = () => {
   clearStoredWizardDraft({ mode: 'create' })
 }
 
-const loadEditDraft = () => {
+const fetchEditJobDraftFromApi = async (jobUuid, relatedCompany = '') => {
+  const normalizedJobUuid = String(jobUuid || route.query.job_uuid || '').trim()
+  const normalizedCompanyId = String(relatedCompany || companyId || getStoredCompanyId() || defaultCompanyId).trim()
+
+  if (!normalizedJobUuid || !normalizedCompanyId) return null
+
+  try {
+    const response = await axios.post(
+      getOneJobEndpoint,
+      {
+        job_uuid: normalizedJobUuid,
+        related_company: normalizedCompanyId,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: nitroSyncRequestTimeoutMs,
+      },
+    )
+
+    const details =
+      response?.data?.data?.job
+      ?? response?.data?.data
+      ?? response?.data?.job
+      ?? null
+
+    if (!details || typeof details !== 'object') return null
+
+    const payload = {
+      ...details,
+      job_uuid: details.job_uuid ?? details.uuid ?? normalizedJobUuid,
+      related_company: details.related_company ?? details.company_uuid ?? normalizedCompanyId,
+    }
+
+    sessionStorage.setItem('nitrosync-edit-job', JSON.stringify(payload))
+    return payload
+  } catch (error) {
+    console.error('Failed to load edit job draft from API', {
+      endpoint: getOneJobEndpoint,
+      payload: {
+        job_uuid: normalizedJobUuid,
+        related_company: normalizedCompanyId,
+      },
+      error,
+    })
+    return null
+  }
+}
+
+const loadEditDraft = async () => {
   if (route.query.mode !== 'edit') return
 
   const rawDraft = sessionStorage.getItem('nitrosync-edit-job')
-  if (!rawDraft) return
+  let draft = null
 
-  try {
-    const draft = JSON.parse(rawDraft)
-    applyJobDraft(draft, { mode: 'edit' })
-    fetchAndApplyApplicationForm(draft.job_uuid || route.query.job_uuid || '')
-  } catch (error) {
-    console.error('Failed to load edit job draft', error)
+  if (rawDraft) {
+    try {
+      draft = JSON.parse(rawDraft)
+    } catch (error) {
+      console.error('Failed to parse edit job draft', error)
+    }
   }
+
+  const draftStatus = extractJobStatusValue(draft?.status ?? draft?.job_status ?? draft?.active_status)
+  if (!draft || !draftStatus) {
+    draft = await fetchEditJobDraftFromApi(
+      draft?.job_uuid || route.query.job_uuid || '',
+      draft?.related_company || draft?.company_uuid || '',
+    )
+  }
+
+  if (!draft) return
+
+  applyJobDraft(draft, { mode: 'edit' })
+  fetchAndApplyApplicationForm(draft.job_uuid || route.query.job_uuid || '')
 }
 
 const loadViewDraft = () => {
@@ -3244,27 +3445,193 @@ const handlePreviewAction = async (action) => {
       </header>
 
       <section v-if="!showWizard" class="starter-card">
-        <div class="starter-card__field">
-          <label class="starter-card__label">Saved template</label>
-          <Dropdown
-            v-model="selectedTemplate"
-            :options="templates"
-            :placeholder="templatesLoading ? 'Loading templates...' : 'Select a template'"
-          />
-        </div>
+        <div class="starter-card__main">
+          <div class="starter-card__field starter-card__field--wide">
+            <label class="starter-card__label">Use a template <span class="starter-card__label-muted">(optional)</span></label>
 
-        <div class="starter-card__divider">Or</div>
+            <div class="starter-card__search-shell">
+              <span class="starter-card__search-icon" aria-hidden="true"></span>
+              <input
+                v-model="templateSearchQuery"
+                type="text"
+                class="starter-card__search-input"
+                :placeholder="templatesLoading ? 'Loading templates...' : 'Search templates...'"
+              >
+              <button
+                v-if="templateSearchQuery"
+                type="button"
+                class="starter-card__search-clear"
+                @click="templateSearchQuery = ''"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div class="starter-card__library">
+              <div v-if="selectedTemplateOption" class="starter-card__selected">
+                <div>
+                  <p class="starter-card__selected-title">{{ selectedTemplateOption.label }}</p>
+                  <p class="starter-card__selected-meta">
+                    {{ selectedTemplateOption.department || 'General' }}
+                    <span v-if="selectedTemplateOption.contractType"> | {{ selectedTemplateOption.contractType }}</span>
+                    <span v-if="selectedTemplateOption.updatedAt"> | {{ formatTemplateUpdatedAt(selectedTemplateOption.updatedAt) }}</span>
+                  </p>
+                </div>
+                <button type="button" class="starter-card__selected-action" @click="selectedTemplate = ''">Remove</button>
+              </div>
+
+              <div v-if="templatesLoading" class="starter-card__empty">
+                Loading templates...
+              </div>
+
+              <div v-else-if="!templates.length" class="starter-card__empty">
+                No templates found yet. You can continue without a template.
+              </div>
+
+              <div v-else-if="!filteredTemplates.length" class="starter-card__empty">
+                No templates match your search.
+              </div>
+
+              <template v-else>
+                <div v-if="recentTemplates.length" class="starter-card__section">
+                  <div class="starter-card__section-head">
+                    <span class="starter-card__section-title">Recent templates</span>
+                    <button type="button" class="starter-card__link" @click="openTemplateLibrary">View all</button>
+                  </div>
+
+                  <button
+                    v-for="template in recentTemplates"
+                    :key="`recent-${template.value}`"
+                    type="button"
+                    class="starter-card__template"
+                    :class="{ 'starter-card__template--active': selectedTemplate === template.value }"
+                    @click="selectTemplateOption(template)"
+                  >
+                    <span class="starter-card__template-badge"></span>
+                    <span class="starter-card__template-copy">
+                      <span class="starter-card__template-title">{{ template.label }}</span>
+                      <span class="starter-card__template-meta">
+                        {{ formatTemplateUpdatedAt(template.updatedAt) || 'Ready to use' }}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+
+                <div class="starter-card__section">
+                  <div class="starter-card__section-head">
+                    <span class="starter-card__section-title">All templates</span>
+                  </div>
+
+                  <button
+                    v-for="template in templatePreviewList"
+                    :key="template.value"
+                    type="button"
+                    class="starter-card__template"
+                    :class="{ 'starter-card__template--active': selectedTemplate === template.value }"
+                    @click="selectTemplateOption(template)"
+                  >
+                    <span class="starter-card__template-badge starter-card__template-badge--outline"></span>
+                    <span class="starter-card__template-copy">
+                      <span class="starter-card__template-title">{{ template.label }}</span>
+                      <span class="starter-card__template-meta">
+                        {{ template.department || 'General' }}
+                        <span v-if="template.updatedAt"> | {{ formatTemplateUpdatedAt(template.updatedAt) }}</span>
+                      </span>
+                    </span>
+                  </button>
+
+                  <button
+                    v-if="filteredTemplates.length > templatePreviewList.length"
+                    type="button"
+                    class="starter-card__browse"
+                    @click="openTemplateLibrary"
+                  >
+                    Browse all templates
+                  </button>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="starter-card__actions starter-card__actions--stack">
+            <button type="button" class="starter-card__next" @click="startWizard">{{ starterPrimaryLabel }}</button>
+            <button
+              v-if="selectedTemplateOption"
+              type="button"
+              class="starter-card__next starter-card__next--soft"
+              @click="useTemplateAndStart(selectedTemplateOption)"
+            >
+              Use template
+            </button>
+          </div>
+        </div>
 
         <button type="button" class="starter-card__scratch" @click="startWizard">
           {{ starterScratchLabel }}
         </button>
-
-        <div class="starter-card__actions">
-          <button type="button" class="starter-card__next" @click="startWizard">{{ starterPrimaryLabel }}</button>
-        </div>
       </section>
 
-      <template v-else>
+      <div v-if="showTemplateLibrary" class="template-library-modal">
+        <button type="button" class="template-library-modal__backdrop" @click="closeTemplateLibrary"></button>
+        <div class="template-library-modal__card">
+          <div class="template-library-modal__head">
+            <div>
+              <h2 class="template-library-modal__title">Browse all templates</h2>
+              <p class="template-library-modal__text">Choose a template to get started</p>
+            </div>
+            <button type="button" class="template-library-modal__close" @click="closeTemplateLibrary">x</button>
+          </div>
+
+          <div class="template-library-modal__search-shell">
+            <span class="starter-card__search-icon" aria-hidden="true"></span>
+            <input
+              v-model="templateSearchQuery"
+              type="text"
+              class="starter-card__search-input"
+              placeholder="Search templates by title, role or department..."
+            >
+          </div>
+
+          <div class="template-library-modal__list">
+            <button
+              v-for="template in filteredTemplates"
+              :key="`library-${template.value}`"
+              type="button"
+              class="template-library-modal__item"
+              :class="{ 'template-library-modal__item--active': selectedTemplate === template.value }"
+              @click="selectTemplateOption(template)"
+            >
+              <span class="template-library-modal__item-copy">
+                <span class="template-library-modal__item-title">{{ template.label }}</span>
+                <span class="template-library-modal__item-meta">
+                  {{ template.department || 'General' }}
+                  <span v-if="template.contractType">| {{ template.contractType }}</span>
+                  <span v-if="template.updatedAt">| {{ formatTemplateUpdatedAt(template.updatedAt) }}</span>
+                </span>
+              </span>
+              <span class="template-library-modal__item-action">Use template</span>
+            </button>
+
+            <div v-if="!filteredTemplates.length" class="starter-card__empty starter-card__empty--modal">
+              No templates match your search.
+            </div>
+          </div>
+
+          <div class="template-library-modal__footer">
+            <span class="template-library-modal__count">
+              Showing {{ filteredTemplates.length }} of {{ templates.length }} templates
+            </span>
+            <div class="template-library-modal__actions">
+              <button type="button" class="starter-card__next starter-card__next--soft" @click="closeTemplateLibrary">Close</button>
+              <button type="button" class="starter-card__next" @click="useTemplateAndStart(selectedTemplateOption)">
+                {{ selectedTemplateOption ? 'Use selected template' : 'Continue without template' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template v-if="showWizard">
         <nav v-if="!isStandaloneJobStagesMode" class="wizard-steps" aria-label="Job posting wizard">
           <button
             v-for="(step, index) in wizardSteps"
@@ -3383,6 +3750,7 @@ const handlePreviewAction = async (action) => {
                 :related-company="companyId"
                 :is-view-mode="isViewMode"
                 :standalone-mode="isStandaloneJobStagesMode"
+                :current-job-status="currentJobMeta.status"
                 @back="goBackStep"
                 @complete="completeJobStages"
               />
@@ -3538,17 +3906,26 @@ const handlePreviewAction = async (action) => {
   max-width: var(--wizard-shell-max);
   min-height: 148px;
   margin-top: 22px;
-  padding: 18px;
+  padding: 20px;
   background: #ffffff;
   border: 1px solid #ece3e7;
-  border-radius: 16px;
+  border-radius: 20px;
   box-shadow: 0 4px 10px rgba(83, 57, 69, 0.025);
+}
+
+.starter-card__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
 }
 
 .starter-card__field {
   min-width: 0;
-  max-width: 430px;
-  margin: 0 auto;
+}
+
+.starter-card__field--wide {
+  max-width: none;
 }
 
 .starter-card__label {
@@ -3558,42 +3935,371 @@ const handlePreviewAction = async (action) => {
   color: #17111b;
 }
 
-.starter-card__divider {
-  margin: var(--space-fields) 0;
+.starter-card__label-muted {
+  color: #a998a2;
+  font-weight: 400;
+}
+
+.starter-card__search-shell,
+.template-library-modal__search-shell {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid #ef9fc0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.template-library-modal__search-shell {
+  border-color: #ece1e6;
+}
+
+.starter-card__search-icon {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #b9a7b0;
+  border-radius: 999px;
+  position: relative;
+}
+
+.starter-card__search-icon::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 7px;
+  height: 2px;
+  border-radius: 999px;
+  background: #b9a7b0;
+  transform: rotate(45deg);
+}
+
+.starter-card__search-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  background: transparent;
+  box-shadow: none !important;
+  color: #4c3e46;
+  font-size: 14px;
+  line-height: 1.4 !important;
+  appearance: none;
+}
+
+.starter-card__search-clear {
+  color: #ea4f8d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.starter-card__library {
+  margin-top: 14px;
+  border: 1px solid #f1dfe7;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #fffafb 100%);
+  overflow: hidden;
+}
+
+.starter-card__selected {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f3e6eb;
+  background: #fff6fa;
+}
+
+.starter-card__selected-title,
+.starter-card__template-title {
+  display: block;
+  color: #241822;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.starter-card__selected-meta,
+.starter-card__template-meta {
+  display: block;
+  margin-top: 4px;
+  color: #9b8892;
+  font-size: 12px;
+}
+
+.starter-card__selected-action {
+  color: #ea4f8d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.starter-card__section + .starter-card__section {
+  border-top: 1px solid #f3e6eb;
+}
+
+.starter-card__section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 8px;
+}
+
+.starter-card__section-title {
+  color: #74626b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.starter-card__link {
+  color: #ea4f8d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.starter-card__template {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-top: 1px solid #f7edf1;
+  text-align: left;
+  transition: background-color 160ms ease;
+}
+
+.starter-card__template:first-of-type {
+  border-top: 0;
+}
+
+.starter-card__template:hover,
+.starter-card__template--active {
+  background: #fff4f8;
+}
+
+.starter-card__template-badge {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #ffddea 0%, #fff4f8 100%);
+  border: 1px solid #f6ccd9;
+}
+
+.starter-card__template-badge--outline {
+  background: #fff;
+}
+
+.starter-card__template-copy {
+  min-width: 0;
+}
+
+.starter-card__browse {
+  width: 100%;
+  padding: 13px 16px;
+  border-top: 1px solid #f3e6eb;
+  text-align: left;
+  color: #ea4f8d;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.starter-card__empty {
+  padding: 26px 16px;
+  color: #ab99a2;
+  font-size: 13px;
   text-align: center;
-  font-size: var(--font-small);
-  color: #d3c5cb;
 }
 
 .starter-card__scratch {
   display: block;
   width: 100%;
-  max-width: 430px;
-  height: var(--button-height);
-  margin: 0 auto;
-  border: 1px solid #efdde4;
-  border-radius: var(--button-radius);
+  max-width: 320px;
+  min-height: 58px;
+  margin: 22px auto 0;
+  padding: 0 28px;
+  border: 1px solid #f1bfd3;
+  border-radius: 18px;
   color: #ea4f8d;
-  background: #ffffff;
-  font-size: var(--font-button);
+  background: linear-gradient(180deg, #fff8fb 0%, #ffffff 100%);
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 14px 30px rgba(234, 79, 141, 0.08);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.starter-card__scratch:hover {
+  transform: translateY(-1px);
+  border-color: #ea9cbc;
+  box-shadow: 0 18px 34px rgba(234, 79, 141, 0.12);
 }
 
 .starter-card__actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 18px;
-  padding-right: 12px;
+}
+
+.starter-card__actions--stack {
+  flex-direction: column;
+  gap: 10px;
 }
 
 .starter-card__next {
-  min-width: 80px;
-  height: var(--ui-button-sm-height);
-  padding: 0 var(--button-padding-x);
+  min-width: 128px;
+  height: 44px;
+  padding: 0 18px;
   border-radius: var(--button-radius);
   background: #ea4f8d;
   color: #ffffff;
-  font-size: var(--ui-small-font);
+  font-size: 13px;
   font-weight: 600;
+}
+
+.starter-card__next--soft {
+  background: #fff3f8;
+  color: #ea4f8d;
+  border: 1px solid #f4c2d7;
+}
+
+.template-library-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.template-library-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 14, 19, 0.32);
+}
+
+.template-library-modal__card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 980px);
+  max-height: min(86vh, 760px);
+  display: flex;
+  flex-direction: column;
+  padding: 28px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(37, 20, 30, 0.18);
+}
+
+.template-library-modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.template-library-modal__title {
+  margin: 0;
+  color: #241822;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.template-library-modal__text {
+  margin: 6px 0 0;
+  color: #90808a;
+  font-size: 13px;
+}
+
+.template-library-modal__close {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  color: #7b6a73;
+  font-size: 18px;
+}
+
+.template-library-modal__list {
+  margin-top: 18px;
+  border: 1px solid #f0e4e8;
+  border-radius: 18px;
+  overflow: auto;
+}
+
+.template-library-modal__item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 20px;
+  border-top: 1px solid #f5ecf0;
+  text-align: left;
+}
+
+.template-library-modal__item:first-child {
+  border-top: 0;
+}
+
+.template-library-modal__item:hover,
+.template-library-modal__item--active {
+  background: #fff6fa;
+}
+
+.template-library-modal__item-copy {
+  min-width: 0;
+}
+
+.template-library-modal__item-title {
+  display: block;
+  color: #251b24;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.template-library-modal__item-meta {
+  display: block;
+  margin-top: 5px;
+  color: #91808a;
+  font-size: 13px;
+}
+
+.template-library-modal__item-action {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border: 1px solid #f3c4d8;
+  border-radius: 12px;
+  color: #ea4f8d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.template-library-modal__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.template-library-modal__count {
+  color: #8f7b85;
+  font-size: 13px;
+}
+
+.template-library-modal__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.starter-card__empty--modal {
+  border-top: 1px solid #f5ecf0;
 }
 
 .wizard-steps {
@@ -4118,6 +4824,22 @@ const handlePreviewAction = async (action) => {
     padding: 22px 20px 18px;
   }
 
+  .starter-card__main,
+  .template-library-modal__footer {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .starter-card__actions--stack,
+  .template-library-modal__actions {
+    width: 100%;
+  }
+
+  .starter-card__actions--stack .starter-card__next,
+  .template-library-modal__actions .starter-card__next {
+    width: 100%;
+  }
+
   .posting-tabs {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -4149,6 +4871,37 @@ const handlePreviewAction = async (action) => {
     min-height: 0;
     padding: 18px 14px 16px;
     border-radius: 16px;
+  }
+
+  .starter-card__search-shell,
+  .template-library-modal__search-shell {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .starter-card__search-clear {
+    display: none;
+  }
+
+  .starter-card__scratch {
+    max-width: none;
+  }
+
+  .template-library-modal {
+    padding: 12px;
+  }
+
+  .template-library-modal__card {
+    padding: 18px 14px;
+    border-radius: 18px;
+  }
+
+  .template-library-modal__item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .template-library-modal__item-action {
+    text-align: center;
   }
 
   .posting-tabs {
@@ -4216,3 +4969,4 @@ const handlePreviewAction = async (action) => {
   }
 }
 </style>
+

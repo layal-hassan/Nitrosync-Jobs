@@ -53,6 +53,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  currentJobStatus: {
+    type: String,
+    default: '',
+  },
 })
 
 const screen = ref(props.form.screen)
@@ -1376,6 +1380,7 @@ syncStageManagement(visibleStageRows.value)
           :related-company="companyId"
           :stage-rows="stageRows"
           :targeted-stage="props.form.targetedWorkflowStage || ''"
+          :current-job-status="props.currentJobStatus"
           @stage-rows-updated="syncStageRowsFromWorkflow"
         />
       </div>
@@ -1406,6 +1411,7 @@ syncStageManagement(visibleStageRows.value)
         :related-company="companyId"
         :stage-rows="stageRows"
         :targeted-stage="props.form.targetedWorkflowStage || ''"
+        :current-job-status="props.currentJobStatus"
         @stage-rows-updated="syncStageRowsFromWorkflow"
       />
     </div>

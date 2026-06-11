@@ -47,6 +47,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  currentJobStatus: {
+    type: String,
+    default: '',
+  },
 })
 const emit = defineEmits(['stage-rows-updated'])
 
@@ -84,7 +88,8 @@ const activeCandidateMenu = ref(null)
 const activeStageMenu = ref(null)
 const jobsGetAllEndpoint = buildNitroSyncEndpoint('/v1/jobs/get-all')
 const selectedCandidate = ref({ name: '', role: '', email: '' })
-const defaultTagColor = '#4f7dff'
+const defaultTagColor = '#ff4f93'
+const tagColorPalette = ['#ff4f93', '#4f7dff', '#b687ff', '#f5b31f', '#35d06a', '#ff87b2']
 const defaultCreatedTags = []
 const tagInput = ref('')
 const selectedTagColor = ref(defaultTagColor)
@@ -174,13 +179,20 @@ const notes = ref([])
 const listedTests = []
 
 const statusOptions = [
-  { label: 'Published', color: '#4f7dff' },
-  { label: 'Archived', color: '#6b21d8' },
-  { label: 'Closed', color: '#f4b21b' },
-  { label: 'Un-Published', color: '#41c86a' },
+  { label: 'Active', color: '#41c86a' },
+  { label: 'On Hold', color: '#f4b21b' },
+  { label: 'Closed', color: '#8e98aa' },
+  { label: 'Expired', color: '#f26c84' },
+  { label: 'Archived', color: '#6f7d90' },
 ]
 
-const selectedStatus = ref(statusOptions[0])
+const normalizeJobStatusValue = (value) => String(value || '').trim().toLowerCase().replace(/[_\s]+/g, ' ')
+const resolveStatusOption = (value) => {
+  const normalizedValue = normalizeJobStatusValue(value)
+  return statusOptions.find((option) => normalizeJobStatusValue(option.label) === normalizedValue) || statusOptions[0]
+}
+
+const selectedStatus = ref(resolveStatusOption(props.currentJobStatus))
 const stageSearchQuery = ref('')
 
 const candidateMenuItems = [
@@ -259,6 +271,9 @@ const getStageCardsForDisplay = (column) => {
   const visibleCards = getVisibleStageCards(column)
   return visibleCards
 }
+
+const getStageCandidateCount = (column) =>
+  Array.isArray(column?.cards) ? column.cards.length : 0
 
 const getCandidateInitials = (value) =>
   String(value || '')
@@ -1885,6 +1900,14 @@ watch(
 )
 
 watch(
+  () => props.currentJobStatus,
+  (value) => {
+    selectedStatus.value = resolveStatusOption(value)
+  },
+  { immediate: true },
+)
+
+watch(
   () => props.relatedCompany,
   (value, previousValue) => {
     if (!String(value || '').trim() || value === previousValue) return
@@ -2000,7 +2023,7 @@ watch(
     <p v-if="stageActionError" class="workflow-stage-feedback workflow-stage-feedback--error">{{ stageActionError }}</p>
 
     <div
-      v-for="column in filteredStageColumns"
+      v-for="(column, columnIndex) in filteredStageColumns"
       :key="column.jobStageUuid || column.title"
       class="workflow-stage"
       :class="{
@@ -2020,15 +2043,15 @@ watch(
             @dragstart="startWorkflowStageDrag(column)"
             @dragend="endWorkflowStageDrag"
           ></span>
-          <button
-            type="button"
+          <div
             class="workflow-stage__title-button"
             :style="{ color: column.color }"
-            @click.stop="toggleStageMenu(column.title)"
           >
             <span class="workflow-stage__dot" :style="{ backgroundColor: column.color }"></span>
+            <span class="workflow-stage__order">{{ columnIndex + 1 }}</span>
             <span>{{ column.displayTitle || column.title }}</span>
-          </button>
+            <span class="workflow-stage__count">{{ getStageCandidateCount(column) }} Candidates</span>
+          </div>
 
           <div
             v-if="activeStageMenu === column.title"
@@ -2049,15 +2072,25 @@ watch(
             </button>
           </div>
         </div>
-        <button
-          type="button"
-          class="workflow-stage__action"
-          :class="{ 'workflow-stage__action--collapsed': !column.isOpen }"
-          :aria-label="column.isOpen ? `Collapse ${column.displayTitle || column.title}` : `Expand ${column.displayTitle || column.title}`"
-          @click="toggleStage(column)"
-        >
-          <ChevronDown class="workflow-stage__action-icon" />
-        </button>
+        <div class="workflow-stage__actions">
+          <button
+            type="button"
+            class="workflow-stage__more"
+            :aria-label="`Stage actions for ${column.displayTitle || column.title}`"
+            @click.stop="toggleStageMenu(column.title)"
+          >
+            <span></span><span></span><span></span>
+          </button>
+          <button
+            type="button"
+            class="workflow-stage__action"
+            :class="{ 'workflow-stage__action--collapsed': !column.isOpen }"
+            :aria-label="column.isOpen ? `Collapse ${column.displayTitle || column.title}` : `Expand ${column.displayTitle || column.title}`"
+            @click="toggleStage(column)"
+          >
+            <ChevronDown class="workflow-stage__action-icon" />
+          </button>
+        </div>
       </div>
 
       <div v-if="column.isOpen" class="workflow-stage__lane">
@@ -2147,9 +2180,14 @@ watch(
     <div v-if="showAddStageModal" class="workflow-modal-overlay">
       <div class="workflow-modal workflow-modal--stage-form">
         <button type="button" class="workflow-modal__close" @click="closeAddStageModal">×</button>
-        <h4>Add stage</h4>
-        <label>stage Name</label>
-        <input v-model="newStageName" type="text" placeholder="Add a new stage" />
+        <h4>Add Stage</h4>
+        <label>Stage Name</label>
+        <input
+          v-model="newStageName"
+          class="workflow-modal__stage-input"
+          type="text"
+          placeholder="Add a new Stage"
+        />
         <button type="button" class="workflow-modal__submit" :disabled="stageActionLoading" @click="submitAddStage">
           {{ stageActionLoading ? 'Saving...' : 'Done' }}
         </button>
@@ -2296,14 +2334,14 @@ watch(
         <div class="workflow-simple__section">
           <label>Tag color</label>
           <div class="workflow-tag-colors">
-            <button type="button" class="workflow-tag-color" style="background:#ff5c8a" @click="selectedTagColor = '#ff5c8a'"></button>
-            <button type="button" class="workflow-tag-color" style="background:#4f7dff" @click="selectedTagColor = '#4f7dff'"></button>
-            <button type="button" class="workflow-tag-color" style="background:#6b21d8" @click="selectedTagColor = '#6b21d8'"></button>
-            <button type="button" class="workflow-tag-color" style="background:#f4b21b" @click="selectedTagColor = '#f4b21b'"></button>
-            <button type="button" class="workflow-tag-color" style="background:#35d06a" @click="selectedTagColor = '#35d06a'"></button>
-            <button type="button" class="workflow-tag-color" style="background:#ff6f9f" @click="selectedTagColor = '#ff6f9f'"></button>
-            <button type="button" class="workflow-tag-color" style="background:#4f7dff" @click="selectedTagColor = '#4f7dff'"></button>
-            <button type="button" class="workflow-tag-color" style="background:#6b21d8" @click="selectedTagColor = '#6b21d8'"></button>
+            <button
+              v-for="color in tagColorPalette"
+              :key="color"
+              type="button"
+              class="workflow-tag-color"
+              :style="{ background: color }"
+              @click="selectedTagColor = color"
+            ></button>
           </div>
         </div>
 
@@ -3566,14 +3604,32 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   line-height: 1.1;
   color: #69636a !important;
+}
+
+.workflow-stage__order {
+  color: #8b7f87;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.workflow-stage__count {
+  margin-left: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #fff4f8;
+  color: #a27287;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .workflow-stage__menu {
   position: absolute;
   top: calc(100% + 10px);
-  left: 0;
+  right: 0;
   width: 208px;
   padding: 12px 0;
   border: 1px solid #ece2e8;
@@ -3644,6 +3700,34 @@ watch(
   border-radius: 999px;
   flex: 0 0 auto;
 }
+
+.workflow-stage__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.workflow-stage__more {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid #f1dbe5;
+  background: #fff9fb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.workflow-stage__more span {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: #ea4f8d;
+}
+
 
 .workflow-stage__action {
   width: 28px;
@@ -4326,14 +4410,38 @@ watch(
   font-size: var(--ui-meta-font);
 }
 
-.workflow-modal--stage-form input {
+.workflow-modal--stage-form .workflow-modal__stage-input {
   box-sizing: border-box;
   height: 24px !important;
   min-height: 24px !important;
   max-height: 24px !important;
   padding: 0 10px !important;
   line-height: 24px;
-  font-size: 11px;
+  font-size: 10px !important;
+}
+
+.workflow-modal--stage-form .workflow-modal__stage-input:placeholder-shown {
+  font-size: 9px !important;
+}
+
+.workflow-modal--stage-form .workflow-modal__stage-input:focus,
+.workflow-modal--stage-form .workflow-modal__stage-input:not(:placeholder-shown) {
+  font-size: 10px !important;
+}
+
+.workflow-modal--stage-form h4 {
+  margin-bottom: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.workflow-modal--stage-form label {
+  margin-bottom: 5px;
+  font-size: 10px;
+}
+
+.workflow-modal--stage-form .workflow-modal__stage-input::placeholder {
+  font-size: 9px !important;
 }
 
 .workflow-modal__submit {

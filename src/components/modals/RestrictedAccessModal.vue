@@ -139,6 +139,10 @@ const hasAnySelection = computed(() =>
   ),
 )
 
+const canSave = computed(() =>
+  Boolean(String(localState.accessLevel || '').trim()) && hasAnySelection.value,
+)
+
 const toggleSection = (sectionKey) => {
   localState.enabledSections[sectionKey] = !localState.enabledSections[sectionKey]
 }
@@ -214,7 +218,7 @@ const save = () => {
       </div>
 
       <footer class="restricted-access-modal__footer">
-        <button type="button" class="restricted-access-modal__save" :disabled="!hasAnySelection" @click="save">save</button>
+        <button type="button" class="restricted-access-modal__save" :disabled="!canSave" @click="save">save</button>
       </footer>
     </section>
   </div>

@@ -1,18 +1,18 @@
 :root {
   font-family: "Segoe UI", "Trebuchet MS", Arial, sans-serif;
-  --bg: #f8f5f6;
+  --bg: #ffffff;
   --ink: #1f1624;
   --muted: #9a7d8c;
   --muted-strong: #7f6975;
   --muted-soft: #9a8791;
   --hint: #8f7b86;
   --hint-soft: #a3929b;
-  --pink: #ea4f8d;
-  --pink-strong: #dd397f;
-  --pink-soft: #f5d9e4;
-  --pink-line: #f0dde5;
-  --panel: #fff8fb;
-  --panel-line: #f3dfe8;
+  --pink: #ff4f93;
+  --pink-strong: #f03a83;
+  --pink-soft: #ffd8e7;
+  --pink-line: #f6dbe7;
+  --panel: #ffffff;
+  --panel-line: #f5dce8;
   --white: #ffffff;
   --container-max: 1240px;
   --page-pad-x: 24px;
@@ -91,7 +91,7 @@ a {
   width: 100%;
   min-height: 100vh;
   margin: 0;
-  background: var(--white);
+  background: #ffffff;
   padding: var(--page-pad-y) var(--page-pad-x) 32px;
 }
 
@@ -107,7 +107,7 @@ a {
   border: 1px solid #f1dfe7;
   border-radius: 20px;
   background: #ffffff;
-  box-shadow: 0 10px 26px rgba(217, 181, 198, 0.14);
+  box-shadow: 0 10px 26px rgba(217, 181, 198, 0.12);
 }
 
 .brand {
@@ -191,7 +191,7 @@ a {
   padding: 4px;
   border: 1px solid #f0dde5;
   border-radius: 18px;
-  background: #fffdfd;
+  background: #ffffff;
 }
 
 .nav-tabs__item {
@@ -213,9 +213,9 @@ a {
 }
 
 .nav-tabs__item--active {
-  background: linear-gradient(135deg, #f25c98, #e84486);
+  background: linear-gradient(135deg, #ff6aa2 0%, #ff4f93 55%, #ef3c82 100%);
   color: #fff;
-  box-shadow: 0 8px 18px rgba(234, 79, 141, 0.22);
+  box-shadow: 0 10px 22px rgba(255, 79, 147, 0.26);
 }
 
 .topbar-actions {
@@ -229,10 +229,10 @@ a {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border: 1px solid #f0dde5;
+  border: 1px solid #f4dbe7;
   border-radius: 18px;
-  background: #fff8fb;
-  box-shadow: 0 10px 22px rgba(232, 170, 196, 0.14);
+  background: linear-gradient(180deg, #fffefe 0%, #fff8fb 100%);
+  box-shadow: 0 10px 22px rgba(232, 170, 196, 0.12);
 }
 
 .quick-icons {
@@ -355,15 +355,22 @@ a {
 
 .jobs-page-container {
   width: min(100%, 1320px);
+  position: relative;
+}
+
+.jobs-page-container::before {
+  content: none;
 }
 
 .breadcrumb-row {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 8px;
   margin-left: 100px;
   margin-bottom: var(--space-sections);
-  color: #967f8c;
+  color: #ac7992;
   font-size: var(--font-small);
 }
 

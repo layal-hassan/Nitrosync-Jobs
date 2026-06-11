@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { UserPlus } from 'lucide-vue-next'
 import { getNitroSyncEmployees } from '../../composables/useNitroSyncEmployees'
 import AddEmployeeModal from './AddEmployeeModal.vue'
@@ -19,11 +19,18 @@ const emit = defineEmits(['close', 'next', 'back'])
 
 const isAddEmployeeOpen = ref(false)
 const employees = ref([])
+const selectedEmployeeIds = ref([])
 const employeesLoading = ref(false)
 const employeesError = ref('')
 const hasLoadedEmployees = ref(false)
 
 const accents = ['pink', 'blue', 'green']
+
+const selectedEmployees = computed(() =>
+  employees.value.filter((employee) => selectedEmployeeIds.value.includes(employee.id)),
+)
+
+const canProceed = computed(() => selectedEmployees.value.length > 0)
 
 const normalizeLabel = (value, fallback = '-') => {
   const normalized = String(value ?? '').trim()
@@ -56,6 +63,11 @@ const mapEmployeeRow = (employee, index) => {
     id: employee?.id ?? employee?._id ?? `${fullName || `${firstName}-${lastName}`}-${index}`,
     firstName: firstName || derivedFirstName || '-',
     lastName: lastName || derivedLastName || '-',
+    name: normalizeLabel(
+      fullName || [firstName, lastName].filter(Boolean).join(' '),
+      'Unknown employee',
+    ),
+    email: normalizeLabel(employee?.email ?? employee?.work_email ?? employee?.employee_email, ''),
     joiningDate: toDisplayDate(
       employee?.joining_date ?? employee?.joiningDate ?? employee?.created_at ?? employee?.createdAt,
     ),
@@ -71,8 +83,28 @@ const mapEmployeeRow = (employee, index) => {
     vacancyDeadline: toDisplayDate(
       employee?.vacancy_deadline ?? employee?.vacancyDeadline ?? employee?.deadline ?? employee?.due_date,
     ),
+    tags: normalizeLabel(employee?.status ?? employee?.department_name ?? employee?.departmentName, ''),
+    position: normalizeLabel(employee?.job_title ?? employee?.position ?? employee?.department_name, ''),
+    country: normalizeLabel(employee?.country ?? employee?.location ?? employee?.address, ''),
+    rating: normalizeLabel(employee?.rating ?? employee?.score, ''),
     accent: accents[index % accents.length],
   }
+}
+
+const handleNext = () => {
+  if (!canProceed.value) return
+  emit('next', selectedEmployees.value)
+}
+
+const isSelected = (employeeId) => selectedEmployeeIds.value.includes(employeeId)
+
+const toggleEmployeeSelection = (employeeId) => {
+  if (isSelected(employeeId)) {
+    selectedEmployeeIds.value = selectedEmployeeIds.value.filter((id) => id !== employeeId)
+    return
+  }
+
+  selectedEmployeeIds.value = [...selectedEmployeeIds.value, employeeId]
 }
 
 const fetchEmployees = async () => {
@@ -116,6 +148,11 @@ const addEmployee = (employee) => {
 watch(
   () => props.open,
   (isOpen) => {
+    if (!isOpen) {
+      selectedEmployeeIds.value = []
+      return
+    }
+
     if (isOpen && !hasLoadedEmployees.value) {
       fetchEmployees()
     }
@@ -149,7 +186,12 @@ watch(
 
       <div class="employee-modal__body">
         <div class="employee-modal__toolbar">
-          <h3 class="employee-modal__section-title">Employee List</h3>
+          <div>
+            <h3 class="employee-modal__section-title">Employee List</h3>
+            <p class="employee-modal__selection-copy">
+              Select one or more employees to continue.
+            </p>
+          </div>
           <button type="button" class="employee-modal__add" @click="isAddEmployeeOpen = true">Add Employee</button>
         </div>
 
@@ -180,8 +222,14 @@ watch(
             v-for="employee in employees"
             :key="employee.id"
             class="employee-modal__table employee-modal__table--row"
+            :class="{ 'employee-modal__table--row-selected': isSelected(employee.id) }"
+            role="button"
+            tabindex="0"
+            @click="toggleEmployeeSelection(employee.id)"
+            @keydown.enter.prevent="toggleEmployeeSelection(employee.id)"
+            @keydown.space.prevent="toggleEmployeeSelection(employee.id)"
           >
-            <div class="employee-modal__radio"></div>
+            <div class="employee-modal__radio" :class="{ 'employee-modal__radio--selected': isSelected(employee.id) }"></div>
 
             <div class="employee-chip employee-chip--name" :class="`employee-chip--${employee.accent}`">
               <span class="employee-chip__avatar"></span>
@@ -204,7 +252,15 @@ watch(
 
       <footer class="employee-modal__footer">
         <button type="button" class="employee-modal__back" @click="$emit('back')">Back</button>
-        <button type="button" class="employee-modal__next" @click="$emit('next')">Next</button>
+        <button
+          type="button"
+          class="employee-modal__next"
+          :disabled="!canProceed"
+          :class="{ 'employee-modal__next--disabled': !canProceed }"
+          @click="handleNext"
+        >
+          Next
+        </button>
       </footer>
     </section>
 
@@ -340,6 +396,12 @@ watch(
   color: var(--referral-ink);
 }
 
+.employee-modal__selection-copy {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #9f8e97;
+}
+
 .employee-modal__add {
   min-width: 134px;
   height: 36px;
@@ -402,6 +464,19 @@ watch(
   border: 1px solid #f4eaee;
   padding: 10px 14px;
   color: #272027;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.employee-modal__table--row:hover {
+  border-color: #eccfda;
+  box-shadow: 0 10px 22px rgba(217, 75, 125, 0.08);
+}
+
+.employee-modal__table--row-selected {
+  border-color: #e84d8a;
+  background: linear-gradient(180deg, #fff8fb 0%, #fff2f7 100%);
+  box-shadow: 0 12px 24px rgba(217, 75, 125, 0.12);
 }
 
 .employee-modal__radio {
@@ -409,6 +484,12 @@ watch(
   height: 20px;
   border-radius: 999px;
   background: linear-gradient(180deg, #f1eff2 0%, #ece8ec 100%);
+  border: 1px solid transparent;
+}
+
+.employee-modal__radio--selected {
+  background: radial-gradient(circle at center, #e84d8a 0 42%, #ffd5e4 43% 100%);
+  border-color: #e84d8a;
 }
 
 .employee-chip {
@@ -513,5 +594,11 @@ watch(
   background: #e84d8a;
   color: #ffffff;
   box-shadow: 0 12px 20px rgba(217, 75, 125, 0.18);
+}
+
+.employee-modal__next--disabled {
+  opacity: 0.55;
+  box-shadow: none;
+  cursor: not-allowed;
 }
 </style>

@@ -1,7 +1,16 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { LayoutGrid, LayoutList } from 'lucide-vue-next'
+import {
+  Building2,
+  LayoutGrid,
+  LayoutList,
+  LogIn,
+  LogOut,
+  ShieldCheck,
+  UserRound,
+  UserRoundCheck,
+} from 'lucide-vue-next'
 import AddEmployeeModal from '../../components/modals/AddEmployeeModal.vue'
 import AvailableEmployeesModal from '../../components/modals/AvailableEmployeesModal.vue'
 import EmployeeDeleteModal from '../../components/modals/EmployeeDeleteModal.vue'
@@ -181,6 +190,70 @@ const filteredEmployees = computed(() => {
 })
 
 const totalEmployeesLabel = computed(() => String(filteredEmployees.value.length).padStart(2, '0'))
+
+const employeeOverviewCards = computed(() => {
+  const total = employees.value.length
+  const loggedIn = employees.value.filter((employee) => employee.status === 'LoggedIn').length
+  const loggedOut = employees.value.filter((employee) => employee.status === 'LoggedOut').length
+  const verified = employees.value.filter((employee) => employee.status === 'Verified').length
+  const unverified = employees.value.filter((employee) => employee.status === 'UnVerified').length
+  const departments = new Set(
+    employees.value
+      .map((employee) => String(employee.department || employee.role || '').trim())
+      .filter(Boolean),
+  ).size
+
+  return [
+    {
+      key: 'total',
+      label: 'Total Employees',
+      value: total,
+      icon: UserRound,
+      iconClass: 'employee-overview__icon employee-overview__icon--total',
+      note: 'Full employee directory',
+    },
+    {
+      key: 'logged-in',
+      label: 'Logged In',
+      value: loggedIn,
+      icon: LogIn,
+      iconClass: 'employee-overview__icon employee-overview__icon--online',
+      note: 'Currently active',
+    },
+    {
+      key: 'logged-out',
+      label: 'Logged Out',
+      value: loggedOut,
+      icon: LogOut,
+      iconClass: 'employee-overview__icon employee-overview__icon--offline',
+      note: 'Offline accounts',
+    },
+    {
+      key: 'verified',
+      label: 'Verified',
+      value: verified,
+      icon: UserRoundCheck,
+      iconClass: 'employee-overview__icon employee-overview__icon--verified',
+      note: 'Approved profiles',
+    },
+    {
+      key: 'unverified',
+      label: 'UnVerified',
+      value: unverified,
+      icon: ShieldCheck,
+      iconClass: 'employee-overview__icon employee-overview__icon--pending',
+      note: 'Need review',
+    },
+    {
+      key: 'departments',
+      label: 'Departments',
+      value: departments,
+      icon: Building2,
+      iconClass: 'employee-overview__icon employee-overview__icon--departments',
+      note: 'Across teams',
+    },
+  ]
+})
 
 const formatEmployeeRowId = (employee, index) =>
   String(employee?.employeeNumber || employee?.id || '').replace(/\D/g, '').slice(-5) || String(10000 + index)
@@ -682,6 +755,23 @@ onBeforeUnmount(() => {
       <span class="breadcrumb-text">Employees</span>
     </div>
 
+    <section class="employee-overview" aria-label="Employee overview">
+      <article
+        v-for="card in employeeOverviewCards"
+        :key="card.key"
+        class="employee-overview__card"
+      >
+        <div :class="card.iconClass">
+          <component :is="card.icon" />
+        </div>
+        <div class="employee-overview__content">
+          <span class="employee-overview__label">{{ card.label }}</span>
+          <strong class="employee-overview__value">{{ card.value }}</strong>
+          <span class="employee-overview__note">{{ card.note }}</span>
+        </div>
+      </article>
+    </section>
+
     <section class="employee-shell">
       <header class="employee-toolbar">
         <div class="employee-toolbar__summary">
@@ -1018,6 +1108,105 @@ onBeforeUnmount(() => {
 .employee-page__breadcrumb {
   margin-left: 0;
   margin-bottom: 14px;
+}
+
+.employee-overview {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.employee-overview__card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 96px;
+  padding: 16px 18px;
+  border: 1px solid #f1e5ea;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 42%),
+    linear-gradient(180deg, #ffffff 0%, #fffafb 100%);
+  box-shadow: 0 10px 24px rgba(66, 39, 51, 0.05);
+}
+
+.employee-overview__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.employee-overview__icon :deep(svg) {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.1;
+}
+
+.employee-overview__icon--total {
+  background: radial-gradient(circle at 30% 28%, #fff7fb 0%, #ffd6e7 38%, #ffbfd7 100%);
+  color: #ff4f93;
+  box-shadow: 0 10px 18px rgba(255, 79, 147, 0.18);
+}
+
+.employee-overview__icon--online {
+  background: radial-gradient(circle at 30% 28%, #f4fff8 0%, #cff3dd 38%, #b8eccd 100%);
+  color: #1ebc65;
+  box-shadow: 0 10px 18px rgba(30, 188, 101, 0.16);
+}
+
+.employee-overview__icon--offline {
+  background: radial-gradient(circle at 30% 28%, #fffaf0 0%, #ffe8b7 38%, #ffd98f 100%);
+  color: #dd9300;
+  box-shadow: 0 10px 18px rgba(221, 147, 0, 0.14);
+}
+
+.employee-overview__icon--verified {
+  background: radial-gradient(circle at 30% 28%, #f8fbff 0%, #dde7f5 38%, #cfdbef 100%);
+  color: #6b7a96;
+  box-shadow: 0 10px 18px rgba(107, 122, 150, 0.14);
+}
+
+.employee-overview__icon--pending {
+  background: radial-gradient(circle at 30% 28%, #faf7ff 0%, #e5d8ff 40%, #d7c3ff 100%);
+  color: #8c5bf3;
+  box-shadow: 0 10px 18px rgba(140, 91, 243, 0.14);
+}
+
+.employee-overview__icon--departments {
+  background: radial-gradient(circle at 30% 28%, #fff8fa 0%, #ffd5df 38%, #ffc0ce 100%);
+  color: #f25467;
+  box-shadow: 0 10px 18px rgba(242, 84, 103, 0.14);
+}
+
+.employee-overview__content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.employee-overview__label {
+  color: #5d4652;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.employee-overview__value {
+  color: #21131d;
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.employee-overview__note {
+  color: #a18a97;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .employee-shell {
@@ -1725,12 +1914,20 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1400px) {
+  .employee-overview {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .employee-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1100px) {
+  .employee-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .employee-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -1767,6 +1964,10 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 760px) {
+  .employee-overview {
+    grid-template-columns: 1fr;
+  }
+
   .employee-shell {
     padding: 10px;
     border-radius: 18px;

@@ -183,6 +183,7 @@ const createForm = (suggestedEmployeeId = '') => ({
   healthPolicyNumber: '',
   healthCoverageLevel: '',
   healthStartDate: '',
+  healthEndDate: '',
   healthCoverageDetails: '',
   retirementPlan: '',
   retirementPlanType: '',
@@ -193,11 +194,20 @@ const createForm = (suggestedEmployeeId = '') => ({
   employerContributionType: '',
   employerContributionAmount: '',
   employerContributionCurrency: '',
+  otherBenefitsCoverageLevel: '',
+  lifeInsurance: '',
+  paidTimeOff: '',
+  wellnessPrograms: '',
+  details: '',
   otherBenefits: [createOtherBenefitEntry()],
   miscStartDate: '',
+  miscEndDate: '',
   employmentContracts: '',
   paymentMethod: '',
   performanceBonuses: '',
+  deductionName: '',
+  deductionAmount: '',
+  deductionCurrency: '',
   ndaFiles: [],
   employmentContractFiles: [],
   laborLawComplianceFiles: [],
@@ -538,6 +548,7 @@ const validateWorkInformation = () => {
   if (!form.manager) nextErrors.manager = 'Required'
   if (!form.supervisor) nextErrors.supervisor = 'Required'
   if (!form.workSchedule) nextErrors.workSchedule = 'Required'
+  if (!form.attachments.length) nextErrors.attachments = 'At least one employee file is required'
 
   Object.assign(errors.value, nextErrors)
   return Object.keys(nextErrors).length === 0
@@ -668,9 +679,9 @@ const validateBenefitsInformation = () => {
 
 const validateComplianceInformation = () => {
   const nextErrors = {}
-  const restrictedFieldsCount = countRestrictedFields(form.restrictedAccessSettings)
 
   if (!form.openAccess && !form.restrictedAccess) nextErrors.accessProfile = 'Choose open or restricted access'
+  if (form.openAccess && form.restrictedAccess) nextErrors.accessProfile = 'Choose only one access profile'
   if (form.restrictedAccess && !String(form.restrictedAccessSettings?.accessLevel || '').trim()) {
     nextErrors.restrictedAccessSettings = 'Configure restricted access level'
   }
@@ -697,6 +708,29 @@ const clearStepErrors = (keys) => {
   }
 }
 
+const scrollToFirstValidationError = async () => {
+  await nextTick()
+
+  const panel = panelRef.value
+  if (!panel) return
+
+  const errorTarget = panel.querySelector(
+    '.field__control--error, .field__error, .add-employee-modal__dropzone, .add-employee-modal__toggle-row',
+  )
+
+  if (!errorTarget) return
+
+  errorTarget.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+    inline: 'nearest',
+  })
+
+  if (typeof errorTarget.focus === 'function' && errorTarget.matches('input, button, [tabindex]')) {
+    errorTarget.focus({ preventScroll: true })
+  }
+}
+
 const goToNextStep = async () => {
   if (currentStepIndex.value === 0) {
     hasAttemptedStepSubmit.value = true
@@ -717,7 +751,10 @@ const goToNextStep = async () => {
       'personalEmail',
     ])
 
-    if (!validateBasicInformation()) return
+    if (!validateBasicInformation()) {
+      await scrollToFirstValidationError()
+      return
+    }
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 1
@@ -736,9 +773,13 @@ const goToNextStep = async () => {
       'manager',
       'supervisor',
       'workSchedule',
+      'attachments',
     ])
 
-    if (!validateWorkInformation()) return
+    if (!validateWorkInformation()) {
+      await scrollToFirstValidationError()
+      return
+    }
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 2
@@ -785,7 +826,10 @@ const goToNextStep = async () => {
       .filter((key) => key.startsWith('otherDeduction'))
       .forEach((key) => delete errors.value[key])
 
-    if (!validateEmploymentDetails()) return
+    if (!validateEmploymentDetails()) {
+      await scrollToFirstValidationError()
+      return
+    }
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 3
@@ -804,7 +848,10 @@ const goToNextStep = async () => {
       'localStateFederalTaxRates',
     ])
 
-    if (!validateTaxInformation()) return
+    if (!validateTaxInformation()) {
+      await scrollToFirstValidationError()
+      return
+    }
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 4
@@ -826,7 +873,10 @@ const goToNextStep = async () => {
       'swiftBicCode',
     ])
 
-    if (!validateBankInformation()) return
+    if (!validateBankInformation()) {
+      await scrollToFirstValidationError()
+      return
+    }
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 5
@@ -861,7 +911,10 @@ const goToNextStep = async () => {
       .filter((key) => key.startsWith('otherBenefit'))
       .forEach((key) => delete errors.value[key])
 
-    if (!validateBenefitsInformation()) return
+    if (!validateBenefitsInformation()) {
+      await scrollToFirstValidationError()
+      return
+    }
 
     hasAttemptedStepSubmit.value = false
     currentStepIndex.value = 6
@@ -878,7 +931,24 @@ const goToNextStep = async () => {
     'laborLawComplianceFiles',
   ])
 
-  if (!validateComplianceInformation()) return
+  if (!validateComplianceInformation()) {
+    await scrollToFirstValidationError()
+    return
+  }
+
+  const primaryDeduction = form.otherDeductions.find((deduction) =>
+    String(deduction?.name || deduction?.amount || deduction?.currency || '').trim(),
+  ) || createOtherDeductionEntry()
+  const primaryBenefit = form.otherBenefits.find((benefit) =>
+    String(
+      benefit?.coverageLevel ||
+      benefit?.lifeInsurance ||
+      benefit?.paidTimeOff ||
+      benefit?.wellnessPrograms ||
+      benefit?.details ||
+      '',
+    ).trim(),
+  ) || createOtherBenefitEntry()
 
   hasAttemptedStepSubmit.value = false
   emit('save', {
@@ -904,6 +974,21 @@ const goToNextStep = async () => {
       amount: String(deduction.amount || '').trim(),
       currency: deduction.currency,
     })),
+    deductionName: String(primaryDeduction.name || '').trim(),
+    deductionAmount: String(primaryDeduction.amount || '').trim(),
+    deductionCurrency: String(primaryDeduction.currency || '').trim(),
+    otherBenefits: form.otherBenefits.map((benefit) => ({
+      coverageLevel: String(benefit.coverageLevel || '').trim(),
+      lifeInsurance: String(benefit.lifeInsurance || '').trim(),
+      paidTimeOff: String(benefit.paidTimeOff || '').trim(),
+      wellnessPrograms: String(benefit.wellnessPrograms || '').trim(),
+      details: String(benefit.details || '').trim(),
+    })),
+    otherBenefitsCoverageLevel: String(primaryBenefit.coverageLevel || '').trim(),
+    lifeInsurance: String(primaryBenefit.lifeInsurance || '').trim(),
+    paidTimeOff: String(primaryBenefit.paidTimeOff || '').trim(),
+    wellnessPrograms: String(primaryBenefit.wellnessPrograms || '').trim(),
+    details: String(primaryBenefit.details || '').trim(),
     restrictedAccess: form.restrictedAccess,
     openAccess: form.openAccess,
     attachments: [...form.attachments],
@@ -964,17 +1049,46 @@ const handleRestrictedAccessChange = (event) => {
   form.restrictedAccess = checked
 
   if (checked) {
+    form.openAccess = false
+    delete errors.value.accessProfile
     isRestrictedAccessModalOpen.value = true
     return
   }
 
   form.restrictedAccessSettings = {}
+  delete errors.value.restrictedAccessSettings
+  delete errors.value.accessProfile
+}
+
+const handleRestrictedAccessClose = () => {
+  isRestrictedAccessModalOpen.value = false
+
+  if (!String(form.restrictedAccessSettings?.accessLevel || '').trim()) {
+    form.restrictedAccess = false
+    form.restrictedAccessSettings = {}
+  }
 }
 
 const handleSaveRestrictedAccess = (payload) => {
   form.restrictedAccess = true
   form.restrictedAccessSettings = payload
+  form.openAccess = false
+  delete errors.value.accessProfile
+  delete errors.value.restrictedAccessSettings
   isRestrictedAccessModalOpen.value = false
+}
+
+const handleOpenAccessChange = (event) => {
+  const checked = event.target.checked
+  form.openAccess = checked
+
+  if (checked) {
+    form.restrictedAccess = false
+    form.restrictedAccessSettings = {}
+  }
+
+  delete errors.value.accessProfile
+  delete errors.value.restrictedAccessSettings
 }
 </script>
 
@@ -1189,6 +1303,7 @@ const handleSaveRestrictedAccess = (payload) => {
                 <button type="button" class="add-employee-modal__attachment-remove" @click="removeAttachment(file.name)">Remove</button>
               </div>
             </div>
+            <span v-if="errors.attachments" class="field__error">{{ errors.attachments }}</span>
           </div>
         </div>
 
@@ -1922,7 +2037,7 @@ const handleSaveRestrictedAccess = (payload) => {
             </button>
             <span v-if="errors.restrictedAccessSettings" class="field__error">{{ errors.restrictedAccessSettings }}</span>
             <label class="add-employee-modal__toggle-row">
-              <input v-model="form.openAccess" type="checkbox" />
+              <input :checked="form.openAccess" type="checkbox" @change="handleOpenAccessChange" />
               <span class="add-employee-modal__toggle-box"></span>
               <span>Open</span>
             </label>
@@ -1941,7 +2056,7 @@ const handleSaveRestrictedAccess = (payload) => {
     <RestrictedAccessModal
       :open="isRestrictedAccessModalOpen"
       :model-value="form.restrictedAccessSettings"
-      @close="isRestrictedAccessModalOpen = false"
+      @close="handleRestrictedAccessClose"
       @save="handleSaveRestrictedAccess"
     />
   </div>

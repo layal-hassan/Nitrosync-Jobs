@@ -6,7 +6,6 @@ import {
   currencyOptions,
   degreeOptions,
   industryOptions,
-  salaryOptions,
 } from '../../data/jobPostingOptions'
 
 defineProps({
@@ -35,7 +34,7 @@ defineProps({
       <div class="step-form__field">
         <label class="step-form__label">Career Level</label>
         <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.careerLevel }">
-          <Dropdown v-model="form.careerLevel" :options="careerLevelOptions" placeholder="select one of the list..." />
+          <Dropdown v-model="form.careerLevel" :options="careerLevelOptions" placeholder="Select one of the list..." />
         </div>
         <p v-if="errors.careerLevel" class="step-form__error">{{ errors.careerLevel }}</p>
       </div>
@@ -43,7 +42,7 @@ defineProps({
       <div class="step-form__field">
         <label class="step-form__label">Industry</label>
         <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.industry }">
-          <Dropdown v-model="form.industry" :options="industryOptions" placeholder="select one of the list..." />
+          <Dropdown v-model="form.industry" :options="industryOptions" placeholder="Select one of the list..." />
         </div>
         <p v-if="errors.industry" class="step-form__error">{{ errors.industry }}</p>
       </div>
@@ -52,7 +51,7 @@ defineProps({
     <div class="step-form__field">
       <label class="step-form__label">Contract type</label>
       <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.contractType }">
-        <Dropdown v-model="form.contractType" :options="contractOptions" placeholder="select one of the list..." />
+        <Dropdown v-model="form.contractType" :options="contractOptions" placeholder="Select one of the list..." />
       </div>
       <p v-if="errors.contractType" class="step-form__error">{{ errors.contractType }}</p>
     </div>
@@ -60,7 +59,7 @@ defineProps({
     <div class="step-form__field">
       <label class="step-form__label">Currency</label>
       <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.currency }">
-        <Dropdown v-model="form.currency" :options="currencyOptions" placeholder="select one of the list..." />
+        <Dropdown v-model="form.currency" :options="currencyOptions" placeholder="Select one of the list..." />
       </div>
       <p v-if="errors.currency" class="step-form__error">{{ errors.currency }}</p>
     </div>
@@ -68,17 +67,27 @@ defineProps({
     <div class="step-form__grid step-form__grid--two">
       <div class="step-form__field">
         <label class="step-form__label">Start from</label>
-        <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.salaryFrom }">
-          <Dropdown v-model="form.salaryFrom" :options="salaryOptions" placeholder="$0" />
-        </div>
+        <input
+          v-model="form.salaryFrom"
+          class="step-form__input"
+          :class="{ 'step-form__input--error': errors.salaryFrom }"
+          type="text"
+          inputmode="numeric"
+          placeholder="$0"
+        />
         <p v-if="errors.salaryFrom" class="step-form__error">{{ errors.salaryFrom }}</p>
       </div>
 
       <div class="step-form__field">
-        <label class="step-form__label">to</label>
-        <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.salaryTo }">
-          <Dropdown v-model="form.salaryTo" :options="salaryOptions" placeholder="$0" />
-        </div>
+        <label class="step-form__label">To</label>
+        <input
+          v-model="form.salaryTo"
+          class="step-form__input"
+          :class="{ 'step-form__input--error': errors.salaryTo }"
+          type="text"
+          inputmode="numeric"
+          placeholder="$0"
+        />
         <p v-if="errors.salaryTo" class="step-form__error">{{ errors.salaryTo }}</p>
       </div>
     </div>

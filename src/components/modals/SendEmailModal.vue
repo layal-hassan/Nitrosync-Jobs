@@ -35,6 +35,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  candidates: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits(['close', 'back'])
@@ -52,7 +56,11 @@ const sendMessage = ref('')
 const sendError = ref('')
 const showSuccessState = ref(false)
 
-const allCandidates = []
+const allCandidates = computed(() =>
+  (Array.isArray(props.candidates) ? props.candidates : []).filter(
+    (candidate) => candidate && candidate.id != null,
+  ),
+)
 
 const emailTemplates = ['Custom Email', 'Referral Intro', 'Short Follow Up']
 const isCustomEmailSelected = computed(() => savedEmail.value === 'Custom Email')
@@ -85,9 +93,9 @@ const editor = useEditor({
   },
 })
 
-const suggestedCandidates = computed(() => allCandidates.slice(0, 2))
+const suggestedCandidates = computed(() => allCandidates.value.slice(0, 2))
 const availableCandidates = computed(() =>
-  allCandidates.filter(
+  allCandidates.value.filter(
     (candidate) => !selectedCandidates.value.some((item) => item.id === candidate.id),
   ),
 )
@@ -243,7 +251,7 @@ watch(
       return
     }
 
-    selectedCandidates.value = [allCandidates[0]]
+    selectedCandidates.value = allCandidates.value.length ? [allCandidates.value[0]] : []
     emailSubject.value = 'Job opportunity from NitroSync'
   },
   { immediate: true },

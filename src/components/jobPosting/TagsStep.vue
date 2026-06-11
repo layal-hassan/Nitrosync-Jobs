@@ -11,18 +11,18 @@ const props = defineProps({
 const emit = defineEmits(['update:selectedTags'])
 
 const tagOptions = [
-  { label: 'High Salary', color: '#ea4f8d' },
+  { label: 'High Salary', color: '#ff4f93' },
   { label: 'Finance', color: '#4f7dff' },
-  { label: 'Professional', color: '#f1b32a' },
-  { label: 'Senior', color: '#48d873' },
-  { label: 'Accounting', color: '#c4a1e8' },
-  { label: 'Remote', color: '#f08db2' },
+  { label: 'Professional', color: '#f5b31f' },
+  { label: 'Senior', color: '#35d06a' },
+  { label: 'Accounting', color: '#b687ff' },
+  { label: 'Remote', color: '#ff87b2' },
 ]
 
 const pendingTag = ref('')
 
 const selectedTagObjects = computed(() =>
-  props.selectedTags.map((label) => tagOptions.find((item) => item.label === label) ?? { label, color: '#ea4f8d' }),
+  props.selectedTags.map((label) => tagOptions.find((item) => item.label === label) ?? { label, color: '#ff4f93' }),
 )
 
 const availableTagOptions = computed(() =>
@@ -104,19 +104,20 @@ const addPendingTag = () => {
 .tags-step__hint {
   margin: 0 0 14px;
   font-size: var(--font-small);
-  color: #d2c4cb;
+  color: #ab93a1;
 }
 
 .tags-step__hint span {
-  color: #ff6a9d;
+  color: #ff4f93;
 }
 
 .tags-step__picker {
   min-height: 56px;
   padding: 10px;
-  border: 1px solid #ddd4d9;
-  border-radius: 6px;
-  background: #ffffff;
+  border: 1px solid #f1d9e4;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fffefe 0%, #fff8fb 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -133,26 +134,27 @@ const addPendingTag = () => {
   width: 100%;
   min-height: 42px;
   padding: 0 14px;
-  border: 1px solid #e7dde2;
-  border-radius: 10px;
-  background: #ffffff;
+  border: 1px solid #edd9e3;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #fffafc 100%);
   color: #40363c;
   font: inherit;
   font-size: var(--font-body);
 }
 
 .tags-step__input::placeholder {
-  color: #b8aab2;
+  color: #c3b1ba;
 }
 
 .tags-step__input-add {
   min-width: 96px;
   min-height: 42px;
   padding: 0 16px;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #ef5d97 0%, #e34789 100%);
+  border-radius: 14px;
+  background: linear-gradient(135deg, #ff6ca3 0%, #ff4f93 55%, #f03a83 100%);
   color: #ffffff;
   font-size: var(--font-small);
+  box-shadow: 0 12px 24px rgba(255, 79, 147, 0.22);
 }
 
 .tags-step__input-add:disabled {
@@ -171,8 +173,10 @@ const addPendingTag = () => {
 }
 
 .tags-step__picker-chip {
-  background: color-mix(in srgb, var(--chip-color) 20%, white);
-  color: #3a3136;
+  background: color-mix(in srgb, var(--chip-color) 16%, white);
+  border: 1px solid color-mix(in srgb, var(--chip-color) 28%, white);
+  color: color-mix(in srgb, var(--chip-color) 72%, #4a3c44);
+  box-shadow: 0 6px 14px rgba(255, 255, 255, 0.8);
 }
 
 .tags-step__icon-badge {
@@ -183,7 +187,7 @@ const addPendingTag = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.96);
   color: var(--chip-color);
   font-size: 0;
   line-height: 0;
@@ -233,9 +237,9 @@ const addPendingTag = () => {
 .tags-step__selected {
   min-height: var(--control-height);
   padding: 8px 12px;
-  border: 1px solid #e7dde2;
-  border-radius: 6px;
-  background: #faf9fa;
+  border: 1px solid #f0d8e3;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fffdfd 0%, #fff7fb 100%);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -249,8 +253,9 @@ const addPendingTag = () => {
 }
 
 .tags-step__chip {
-  background: var(--chip-color);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--chip-color) 92%, white), var(--chip-color));
   color: #ffffff;
+  box-shadow: 0 10px 18px color-mix(in srgb, var(--chip-color) 30%, transparent);
 }
 
 .tags-step__empty {
@@ -261,7 +266,7 @@ const addPendingTag = () => {
 .tags-step__count {
   margin: 6px 0 0;
   font-size: var(--font-small);
-  color: #ff6a9d;
+  color: #ff4f93;
 }
 
 @media (max-width: 700px) {

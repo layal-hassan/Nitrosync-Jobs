@@ -48,9 +48,14 @@ const viewMode = ref('list')
 const pageSize = ref(15)
 const currentPage = ref(1)
 const activeStatusFilter = ref('all')
+const selectedJobUuids = ref([])
+const bulkStatusAction = ref('')
+const bulkActionError = ref('')
 const deletingJobUuid = ref('')
 const duplicatingJobUuid = ref('')
 const changingStatusJobUuid = ref('')
+const bulkDeleting = ref(false)
+const bulkUpdatingStatus = ref(false)
 const deletedJobUuids = ref([])
 const statusOverrides = ref({})
 const viewingJobUuid = ref('')
@@ -103,6 +108,16 @@ const statusOptions = [
   { key: 'expired', label: 'Expired' },
   { key: 'archived', label: 'Archived' },
 ]
+const bulkStatusOptions = [
+  { key: 'active', label: 'Activate' },
+  { key: 'on_hold', label: 'Deactivate' },
+  { key: 'closed', label: 'Close' },
+  { key: 'archived', label: 'Archive' },
+]
+const bulkStatusDropdownOptions = bulkStatusOptions.map((option) => ({
+  label: option.label,
+  value: option.key,
+}))
 
 const normalizeString = (value) => String(value ?? '').trim().toLowerCase()
 const includesNormalized = (source, query) => normalizeString(source).includes(normalizeString(query))
@@ -111,39 +126,50 @@ const slugifyStage = (value) => normalizeString(value).replace(/[^a-z0-9]+/g, '_
 const uniqueValues = (values) => [...new Set(values.map((value) => String(value ?? '').trim()).filter(Boolean))]
 
 const tagTonePalette = [
-  { bg: '#efe6ff', color: '#7a4fe0' },
-  { bg: '#fff0d9', color: '#b97800' },
-  { bg: '#e4eeff', color: '#3f6fd9' },
-  { bg: '#dff4eb', color: '#22895e' },
-  { bg: '#fbe0ec', color: '#bc4f85' },
-  { bg: '#e3f6f4', color: '#2f8e88' },
+  { bg: '#eadcff', color: '#8346ff', border: '#d9bfff', glow: 'rgba(131, 70, 255, 0.24)' },
+  { bg: '#ffe8c2', color: '#d68800', border: '#ffd58a', glow: 'rgba(214, 136, 0, 0.22)' },
+  { bg: '#dbe8ff', color: '#2f72ff', border: '#c2d8ff', glow: 'rgba(47, 114, 255, 0.24)' },
+  { bg: '#d7f7e4', color: '#16b763', border: '#b5eccb', glow: 'rgba(22, 183, 99, 0.22)' },
+  { bg: '#ffdceb', color: '#e33d87', border: '#ffc1d9', glow: 'rgba(227, 61, 135, 0.24)' },
+  { bg: '#d8f5f2', color: '#129b92', border: '#b7e9e3', glow: 'rgba(18, 155, 146, 0.22)' },
 ]
 
 const getTagTone = (tag) => {
   const normalizedTag = normalizeString(tag)
 
   if (['node.js', 'nodejs', 'backend', 'ui/ux', 'qa', 'aws', 'b2b', 'sales'].some((item) => normalizedTag.includes(item))) {
-    return { bg: '#efe6ff', color: '#7a4fe0' }
+    return { bg: '#eadcff', color: '#8346ff', border: '#d9bfff', glow: 'rgba(131, 70, 255, 0.24)' }
   }
 
   if (['design', 'hr', 'site', 'management'].some((item) => normalizedTag.includes(item))) {
-    return { bg: '#fff0d9', color: '#b97800' }
+    return { bg: '#ffe8c2', color: '#d68800', border: '#ffd58a', glow: 'rgba(214, 136, 0, 0.22)' }
   }
 
   if (['testing', 'devops', 'recruitment', 'finance'].some((item) => normalizedTag.includes(item))) {
-    return { bg: '#e4eeff', color: '#3f6fd9' }
+    return { bg: '#dbe8ff', color: '#2f72ff', border: '#c2d8ff', glow: 'rgba(47, 114, 255, 0.24)' }
   }
 
   if (['campaign', 'product', 'engineering'].some((item) => normalizedTag.includes(item))) {
-    return { bg: '#dff4eb', color: '#22895e' }
+    return { bg: '#d7f7e4', color: '#16b763', border: '#b5eccb', glow: 'rgba(22, 183, 99, 0.22)' }
   }
 
   if (['marketing', 'high salary'].some((item) => normalizedTag.includes(item))) {
-    return { bg: '#fbe0ec', color: '#bc4f85' }
+    return { bg: '#ffdceb', color: '#e33d87', border: '#ffc1d9', glow: 'rgba(227, 61, 135, 0.24)' }
   }
 
   const hash = normalizedTag.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0)
   return tagTonePalette[hash % tagTonePalette.length]
+}
+
+const getTagStyle = (tag) => {
+  const tone = getTagTone(tag)
+
+  return {
+    backgroundColor: tone.bg,
+    color: tone.color,
+    borderColor: tone.border,
+    boxShadow: `0 8px 18px ${tone.glow}, inset 0 1px 0 rgba(255, 255, 255, 0.96)`,
+  }
 }
 
 const formatDate = (value) => {
@@ -170,6 +196,21 @@ const normalizeStatusKey = (value) => {
   if (['6', 'archived', 'archive'].includes(normalized)) return 'archived'
 
   return normalized || 'unknown'
+}
+
+const extractJobStatusValue = (value) => {
+  if (value && typeof value === 'object') {
+    return String(
+      value.key
+      ?? value.label
+      ?? value.status
+      ?? value.name
+      ?? value.value
+      ?? '',
+    ).trim()
+  }
+
+  return String(value ?? '').trim()
 }
 
 const statusPresentation = (value) => {
@@ -229,18 +270,19 @@ const getInitials = (name) => {
   )
 }
 
-const departmentPresentation = (value = '') => {
-  const normalized = value.toLowerCase()
+const departmentPresentation = (value = '', index = 0) => {
+  const variants = [
+    'department department--green',
+    'department department--blue',
+    'department department--indigo',
+    'department department--pink',
+    'department department--gold',
+  ]
 
-  if (normalized.includes('local')) {
-    return { label: value || 'Local Department', className: 'department department--pink' }
+  return {
+    label: value || '',
+    className: variants[index % variants.length],
   }
-
-  if (normalized.includes('private')) {
-    return { label: value || 'Private Department', className: 'department department--blue' }
-  }
-
-  return { label: value || '', className: 'department department--green' }
 }
 
 const recruiterPresentation = (index = 0) => {
@@ -407,7 +449,7 @@ const extractRecruiterValue = (source = {}) => {
 const normalizedJobs = computed(() =>
   (props.jobs || [])
     .map((job, index) => {
-    const department = departmentPresentation(extractDepartmentValue(job))
+    const department = departmentPresentation(extractDepartmentValue(job), index)
     const recruiterName = extractRecruiterValue(job)
     const recruiterUi = recruiterPresentation(index)
     const tags = toArray(job.tags).map((tag) =>
@@ -539,7 +581,6 @@ const statusCards = computed(() => {
     { key: 'on_hold', label: 'On Hold', count: totals.on_hold, iconClass: 'jobs-stat__icon jobs-stat__icon--hold', icon: CirclePause },
     { key: 'closed', label: 'Closed', count: totals.closed, iconClass: 'jobs-stat__icon jobs-stat__icon--closed', icon: CircleCheckBig },
     { key: 'expired', label: 'Expired', count: totals.expired, iconClass: 'jobs-stat__icon jobs-stat__icon--expired', icon: CalendarX },
-    { key: 'draft', label: 'Draft', count: totals.draft, iconClass: 'jobs-stat__icon jobs-stat__icon--draft', icon: FileText },
     { key: 'archived', label: 'Archived', count: totals.archived, iconClass: 'jobs-stat__icon jobs-stat__icon--archived', icon: Archive },
   ]
 })
@@ -639,6 +680,20 @@ const visibleJobs = computed(() => {
   return filteredJobs.value.slice(start, end)
 })
 
+const selectedJobs = computed(() => {
+  const selectedSet = new Set(selectedJobUuids.value)
+  return normalizedJobs.value.filter((job) =>
+    job.jobUuid
+    && selectedSet.has(job.jobUuid)
+    && !deletedJobUuids.value.includes(job.jobUuid),
+  )
+})
+
+const allVisibleJobsSelected = computed(() =>
+  visibleJobs.value.length > 0
+  && visibleJobs.value.every((job) => job.jobUuid && selectedJobUuids.value.includes(job.jobUuid)),
+)
+
 const paginationItems = computed(() => {
   const total = totalPages.value
   const page = currentPage.value
@@ -660,6 +715,42 @@ const paginationItems = computed(() => {
 
 const toggleMenu = (index) => {
   openMenuIndex.value = openMenuIndex.value === index ? null : index
+}
+
+const isJobSelected = (job) => Boolean(job?.jobUuid) && selectedJobUuids.value.includes(job.jobUuid)
+
+const toggleJobSelection = (job) => {
+  if (!job?.jobUuid) return
+
+  bulkActionError.value = ''
+
+  if (isJobSelected(job)) {
+    selectedJobUuids.value = selectedJobUuids.value.filter((jobUuid) => jobUuid !== job.jobUuid)
+    return
+  }
+
+  selectedJobUuids.value = [...selectedJobUuids.value, job.jobUuid]
+}
+
+const toggleVisibleJobsSelection = () => {
+  const visibleJobUuids = visibleJobs.value.map((job) => job.jobUuid).filter(Boolean)
+
+  if (!visibleJobUuids.length) return
+
+  bulkActionError.value = ''
+
+  if (allVisibleJobsSelected.value) {
+    selectedJobUuids.value = selectedJobUuids.value.filter((jobUuid) => !visibleJobUuids.includes(jobUuid))
+    return
+  }
+
+  selectedJobUuids.value = [...new Set([...selectedJobUuids.value, ...visibleJobUuids])]
+}
+
+const clearSelection = () => {
+  selectedJobUuids.value = []
+  bulkStatusAction.value = ''
+  bulkActionError.value = ''
 }
 
 const changeJobStatus = async (job, nextStatus) => {
@@ -710,42 +801,69 @@ const changeJobStatus = async (job, nextStatus) => {
   }
 }
 
-const openJobStages = (job, selectedStage = null) => {
-  const payload = {
-    job_uuid: job.jobUuid,
-    related_company: job.relatedCompany,
-    job_title: job.title === '--' ? '' : job.title,
-    job_code: job.jobCode,
-    department: job.department,
-    country: job.country,
-    city: job.city,
-    description: job.description,
-    industry: job.industry,
-    contract_type: job.contractType,
-    currency: job.currency,
-    start_from: job.startFrom,
-    end_to: job.endTo,
-    career_level: job.careerLevel,
-    degree_level: job.degreeLevel,
-    job_title_seo: job.jobTitleSeo,
-    job_description_seo: job.jobDescriptionSeo,
-    tags: [...job.tags],
-    recruiter: job.recruiter === '--' ? '' : job.recruiter,
+const openJobStages = async (job, selectedStage = null) => {
+  if (!job?.jobUuid) {
+    window.alert('This job is missing job_uuid, so job stages cannot be loaded.')
+    return
   }
 
-  sessionStorage.setItem('nitrosync-edit-job', JSON.stringify(payload))
-  openStageTooltip.value = ''
-  openMenuIndex.value = null
-  router.push({
-    path: '/jobs/post',
-    query: {
-      mode: 'edit',
-      job_uuid: job.jobUuid || '',
-      step: 'job-stages',
-      source: 'table-stages',
-      target_stage: selectedStage?.label || selectedStage?.key || '',
-    },
-  })
+  if (!job?.relatedCompany) {
+    window.alert('This job is missing related_company, so job stages cannot be loaded.')
+    return
+  }
+
+  try {
+    const response = await axios.post(
+      getOneJobEndpoint,
+      {
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: nitroSyncRequestTimeoutMs,
+      },
+    )
+
+    const details =
+      response?.data?.data?.job
+      ?? response?.data?.data
+      ?? response?.data?.job
+      ?? {}
+
+    const payload = buildStoredJobPayload(job, details)
+    sessionStorage.setItem('nitrosync-edit-job', JSON.stringify(payload))
+    openStageTooltip.value = ''
+    openMenuIndex.value = null
+    router.push({
+      path: '/jobs/post',
+      query: {
+        mode: 'edit',
+        job_uuid: payload.job_uuid || job.jobUuid || '',
+        step: 'job-stages',
+        source: 'table-stages',
+        target_stage: selectedStage?.label || selectedStage?.key || '',
+      },
+    })
+  } catch (error) {
+    console.error('Failed to get job details for job stages', {
+      endpoint: getOneJobEndpoint,
+      payload: {
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany,
+      },
+      error,
+    })
+
+    window.alert(
+      error?.response?.data?.message
+      || error?.response?.data?.detail
+      || error?.response?.data?.msg
+      || 'Failed to load job details.',
+    )
+  }
 }
 
 const handleDocumentClick = (event) => {
@@ -989,7 +1107,14 @@ const buildStoredJobPayload = (job, details = {}) => ({
   degree_level: details.degree_level ?? job.degreeLevel,
   job_title_seo: details.job_title_seo ?? job.jobTitleSeo,
   job_description_seo: details.job_description_seo ?? job.jobDescriptionSeo,
-  status: details.status ?? details.job_status ?? details.active_status ?? job.status?.key ?? '',
+  status: extractJobStatusValue(
+    details.status
+    ?? details.job_status
+    ?? details.active_status
+    ?? job.status?.key
+    ?? job.status?.label
+    ?? job.status,
+  ),
   published_at: details.published_at ?? details.publish_at ?? '',
   publish_at: details.publish_at ?? details.published_at ?? '',
   close_at: details.close_at ?? '',
@@ -1090,6 +1215,193 @@ const openViewJob = async (job) => {
   }
 }
 
+const deleteJobs = async (jobs) => {
+  const jobsList = toArray(jobs).filter(Boolean)
+
+  if (!jobsList.length) {
+    return
+  }
+
+  const invalidJob = jobsList.find((job) => !job?.jobUuid || !job?.relatedCompany)
+
+  if (invalidJob) {
+    const message = !invalidJob?.jobUuid
+      ? 'One of the selected jobs is missing job_uuid, so delete cannot be sent.'
+      : 'One of the selected jobs is missing related_company, so delete cannot be sent.'
+
+    if (jobsList.length === 1) {
+      deleteDialogError.value = message
+    } else {
+      bulkActionError.value = message
+    }
+    return
+  }
+
+  const firstJobUuid = jobsList[0]?.jobUuid ?? ''
+
+  if (jobsList.length === 1) {
+    deletingJobUuid.value = firstJobUuid
+    deleteDialogError.value = ''
+  } else {
+    bulkDeleting.value = true
+    bulkActionError.value = ''
+  }
+
+  try {
+    for (const job of jobsList) {
+      try {
+        const applicationForms = await fetchNitroSyncApplicationForms()
+        const matchingApplicationForm = applicationForms.find((item) => item.job_uuid === job.jobUuid)
+
+        if (matchingApplicationForm?.id) {
+          await deleteNitroSyncApplicationForm(matchingApplicationForm.id)
+        }
+      } catch (applicationFormError) {
+        console.error('Failed to delete application form before deleting job', {
+          jobUuid: job.jobUuid,
+          error: applicationFormError,
+        })
+      }
+
+      await axios.post(
+        deleteJobEndpoint,
+        {
+          job_uuid: job.jobUuid,
+          related_company: job.relatedCompany,
+        },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            timeout: nitroSyncRequestTimeoutMs,
+          },
+        )
+    }
+
+    deletedJobUuids.value = [...new Set([
+      ...deletedJobUuids.value,
+      ...jobsList.map((job) => job.jobUuid).filter(Boolean),
+    ])]
+    openMenuIndex.value = null
+    isDeleteDialogOpen.value = false
+    selectedDeleteJob.value = null
+    selectedJobUuids.value = selectedJobUuids.value.filter(
+      (jobUuid) => !jobsList.some((job) => job.jobUuid === jobUuid),
+    )
+  } catch (error) {
+    console.error('Failed to delete job', {
+      endpoint: deleteJobEndpoint,
+      payload: jobsList.map((job) => ({
+        job_uuid: job.jobUuid,
+        related_company: job.relatedCompany,
+      })),
+      error,
+    })
+
+    const message =
+      error?.response?.data?.message
+      || error?.response?.data?.detail
+      || error?.response?.data?.msg
+      || 'Failed to delete the job.'
+
+    if (jobsList.length === 1) {
+      deleteDialogError.value = message
+    } else {
+      bulkActionError.value = message
+    }
+  } finally {
+    deletingJobUuid.value = ''
+    bulkDeleting.value = false
+  }
+}
+
+const applyBulkStatusChange = async () => {
+  const nextStatus = String(bulkStatusAction.value || '').trim()
+
+  if (!selectedJobs.value.length) {
+    bulkActionError.value = 'Select at least one job first.'
+    return
+  }
+
+  if (!nextStatus) {
+    bulkActionError.value = 'Choose a bulk action first.'
+    return
+  }
+
+  const invalidJob = selectedJobs.value.find((job) => !job?.jobUuid || !job?.relatedCompany)
+  if (invalidJob) {
+    bulkActionError.value = 'One of the selected jobs is missing required identifiers.'
+    return
+  }
+
+  bulkUpdatingStatus.value = true
+  bulkActionError.value = ''
+
+  const failedJobs = []
+
+  for (const job of selectedJobs.value) {
+    if (job.status.key === nextStatus) {
+      continue
+    }
+
+    const previousStatus = statusOverrides.value[job.jobUuid] || job.status.key
+
+    statusOverrides.value = {
+      ...statusOverrides.value,
+      [job.jobUuid]: nextStatus,
+    }
+
+    try {
+      await changeNitroSyncJobStatus({
+        jobUuid: job.jobUuid,
+        relatedCompany: job.relatedCompany,
+        status: nextStatus,
+      })
+    } catch (error) {
+      const nextOverrides = { ...statusOverrides.value }
+
+      if (previousStatus) {
+        nextOverrides[job.jobUuid] = previousStatus
+      } else {
+        delete nextOverrides[job.jobUuid]
+      }
+
+      statusOverrides.value = nextOverrides
+      failedJobs.push(job.title || `#${job.id}`)
+    }
+  }
+
+  bulkUpdatingStatus.value = false
+
+  if (failedJobs.length) {
+    bulkActionError.value = `Failed to update ${failedJobs.length} job(s).`
+    return
+  }
+
+  clearSelection()
+}
+
+const deleteSelectedJobs = async () => {
+  if (!selectedJobs.value.length) {
+    bulkActionError.value = 'Select at least one job first.'
+    return
+  }
+
+  const confirmed = window.confirm(`Delete ${selectedJobs.value.length} selected job(s)?`)
+
+  if (!confirmed) {
+    return
+  }
+
+  await deleteJobs(selectedJobs.value)
+}
+
+const onBulkStatusChange = async () => {
+  if (!bulkStatusAction.value) return
+  await applyBulkStatusChange()
+  bulkStatusAction.value = ''
+}
+
 const deleteJob = async (job) => {
   if (!job.jobUuid) {
     deleteDialogError.value = 'This job is missing job_uuid, so delete cannot be sent.'
@@ -1101,60 +1413,7 @@ const deleteJob = async (job) => {
     return
   }
 
-  deletingJobUuid.value = job.jobUuid
-  deleteDialogError.value = ''
-
-  try {
-    try {
-      const applicationForms = await fetchNitroSyncApplicationForms()
-      const matchingApplicationForm = applicationForms.find((item) => item.job_uuid === job.jobUuid)
-
-      if (matchingApplicationForm?.id) {
-        await deleteNitroSyncApplicationForm(matchingApplicationForm.id)
-      }
-    } catch (applicationFormError) {
-      console.error('Failed to delete application form before deleting job', {
-        jobUuid: job.jobUuid,
-        error: applicationFormError,
-      })
-    }
-
-    await axios.post(
-      deleteJobEndpoint,
-      {
-        job_uuid: job.jobUuid,
-        related_company: job.relatedCompany,
-      },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: nitroSyncRequestTimeoutMs,
-        },
-      )
-
-    deletedJobUuids.value = [...deletedJobUuids.value, job.jobUuid]
-    openMenuIndex.value = null
-    isDeleteDialogOpen.value = false
-    selectedDeleteJob.value = null
-  } catch (error) {
-    console.error('Failed to delete job', {
-      endpoint: deleteJobEndpoint,
-      payload: {
-        job_uuid: job.jobUuid,
-        related_company: job.relatedCompany,
-      },
-      error,
-    })
-
-    deleteDialogError.value =
-      error?.response?.data?.message
-      || error?.response?.data?.detail
-      || error?.response?.data?.msg
-      || 'Failed to delete the job.'
-  } finally {
-    deletingJobUuid.value = ''
-  }
+  await deleteJobs([job])
 }
 
 const setViewMode = (mode) => {
@@ -1192,6 +1451,16 @@ watch(totalPages, (value) => {
   if (currentPage.value > value) {
     currentPage.value = value
   }
+})
+
+watch([normalizedJobs, deletedJobUuids], () => {
+  const availableJobUuids = new Set(
+    normalizedJobs.value
+      .map((job) => job.jobUuid)
+      .filter((jobUuid) => jobUuid && !deletedJobUuids.value.includes(jobUuid)),
+  )
+
+  selectedJobUuids.value = selectedJobUuids.value.filter((jobUuid) => availableJobUuids.has(jobUuid))
 })
 
 onMounted(() => {
@@ -1282,10 +1551,55 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <div v-if="selectedJobs.length" class="jobs-bulk">
+      <div class="jobs-bulk__summary">
+        <span class="jobs-bulk__count">{{ selectedJobs.length }} selected</span>
+        <button type="button" class="jobs-bulk__link" @click="toggleVisibleJobsSelection">
+          {{ allVisibleJobsSelected ? 'Unselect visible' : 'Select visible' }}
+        </button>
+        <button type="button" class="jobs-bulk__link" @click="clearSelection">Clear</button>
+      </div>
+
+      <div class="jobs-bulk__actions">
+        <div class="jobs-bulk__select-wrap">
+          <span>Bulk action</span>
+          <div class="jobs-bulk__select">
+            <Dropdown
+              v-model="bulkStatusAction"
+              :options="bulkStatusDropdownOptions"
+              placeholder="Choose action"
+              teleport
+              menu-size="small"
+              @update:model-value="onBulkStatusChange"
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="jobs-bulk__delete"
+          :disabled="bulkDeleting || bulkUpdatingStatus"
+          @click="deleteSelectedJobs"
+        >
+          {{ bulkDeleting ? 'Deleting...' : 'Delete selected' }}
+        </button>
+      </div>
+
+      <p v-if="bulkActionError" class="jobs-bulk__error">{{ bulkActionError }}</p>
+    </div>
+
     <div v-if="viewMode === 'list'" class="jobs-card">
       <div class="jobs-header jobs-row">
         <div class="jobs-col jobs-col--select">
-          <span class="jobs-radio jobs-radio--filled"></span>
+          <button
+            type="button"
+            class="jobs-check"
+            :class="{ 'jobs-check--selected': allVisibleJobsSelected }"
+            :aria-pressed="allVisibleJobsSelected"
+            @click="toggleVisibleJobsSelection"
+          >
+            <span class="jobs-check__mark"></span>
+          </button>
         </div>
         <div
           v-for="header in headers"
@@ -1304,7 +1618,15 @@ onBeforeUnmount(() => {
         class="jobs-row jobs-row--body"
       >
         <div class="jobs-col jobs-col--select">
-          <span class="jobs-radio"></span>
+          <button
+            type="button"
+            class="jobs-check"
+            :class="{ 'jobs-check--selected': isJobSelected(job) }"
+            :aria-pressed="isJobSelected(job)"
+            @click="toggleJobSelection(job)"
+          >
+            <span class="jobs-check__mark"></span>
+          </button>
         </div>
 
         <div class="jobs-col jobs-col--id">{{ job.id }}</div>
@@ -1388,7 +1710,7 @@ onBeforeUnmount(() => {
                 v-for="tag in job.tags.slice(0, 2)"
                 :key="tag"
                 class="jobs-tag"
-                :style="{ backgroundColor: getTagTone(tag).bg, color: getTagTone(tag).color }"
+                :style="getTagStyle(tag)"
               >
                 {{ tag }}
               </span>
@@ -1442,7 +1764,18 @@ onBeforeUnmount(() => {
         class="jobs-grid-card"
       >
         <div class="jobs-grid-card__top">
-          <span class="jobs-grid-card__id">#{{ job.id }}</span>
+          <div class="jobs-grid-card__top-left">
+            <button
+              type="button"
+              class="jobs-check"
+              :class="{ 'jobs-check--selected': isJobSelected(job) }"
+              :aria-pressed="isJobSelected(job)"
+              @click="toggleJobSelection(job)"
+            >
+              <span class="jobs-check__mark"></span>
+            </button>
+            <span class="jobs-grid-card__id">#{{ job.id }}</span>
+          </div>
           <div class="jobs-action">
             <button type="button" class="jobs-action__trigger" @click.stop="toggleMenu(index)" aria-label="Open actions">
               <span></span><span></span><span></span>
@@ -1561,7 +1894,7 @@ onBeforeUnmount(() => {
                 v-for="tag in job.tags.slice(0, 3)"
                 :key="`grid-tag-${job.id}-${tag}`"
                 class="jobs-tag"
-                :style="{ backgroundColor: getTagTone(tag).bg, color: getTagTone(tag).color }"
+                :style="getTagStyle(tag)"
               >
                 {{ tag }}
               </span>
@@ -1644,6 +1977,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .jobs-section {
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .jobs-overview {
@@ -1651,6 +1986,10 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(7, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 14px;
+  max-width: 1590px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 96px;
 }
 
 .jobs-stat {
@@ -1660,8 +1999,17 @@ onBeforeUnmount(() => {
   padding: 14px 16px;
   border: 1px solid #f1e5ea;
   border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 8px 22px rgba(66, 39, 51, 0.04);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 42%),
+    linear-gradient(180deg, #ffffff 0%, #fffafb 100%);
+  box-shadow: 0 10px 24px rgba(66, 39, 51, 0.05);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.jobs-stat:hover {
+  transform: translateY(-1px);
+  border-color: #efc7d7;
+  box-shadow: 0 16px 30px rgba(255, 95, 150, 0.1);
 }
 
 .jobs-stat__icon {
@@ -1680,13 +2028,47 @@ onBeforeUnmount(() => {
   stroke-width: 2;
 }
 
-.jobs-stat__icon--all { background: #ffeaf2; color: #ea4f8d; }
-.jobs-stat__icon--active { background: #e4f8ec; color: #22b368; }
-.jobs-stat__icon--hold { background: #fff1d1; color: #d28a00; }
-.jobs-stat__icon--closed { background: #edf0f6; color: #70788a; }
-.jobs-stat__icon--expired { background: #ffe6ea; color: #f25467; }
-.jobs-stat__icon--draft { background: #efe6ff; color: #8c5bf3; }
-.jobs-stat__icon--archived { background: #edf1f5; color: #5f697b; }
+.jobs-stat__icon--all {
+  background: radial-gradient(circle at 30% 28%, #fff7fb 0%, #ffd6e7 38%, #ffbfd7 100%);
+  color: #ff4f93;
+  box-shadow: 0 10px 18px rgba(255, 79, 147, 0.18);
+}
+
+.jobs-stat__icon--active {
+  background: radial-gradient(circle at 30% 28%, #f4fff8 0%, #cff3dd 38%, #b8eccd 100%);
+  color: #1ebc65;
+  box-shadow: 0 10px 18px rgba(30, 188, 101, 0.16);
+}
+
+.jobs-stat__icon--hold {
+  background: radial-gradient(circle at 30% 28%, #fffaf0 0%, #ffe8b7 38%, #ffd98f 100%);
+  color: #dd9300;
+  box-shadow: 0 10px 18px rgba(221, 147, 0, 0.14);
+}
+
+.jobs-stat__icon--closed {
+  background: radial-gradient(circle at 30% 28%, #f8fbff 0%, #dde7f5 38%, #cfdbef 100%);
+  color: #6b7a96;
+  box-shadow: 0 10px 18px rgba(107, 122, 150, 0.14);
+}
+
+.jobs-stat__icon--expired {
+  background: radial-gradient(circle at 30% 28%, #fff8fa 0%, #ffd5df 38%, #ffc0ce 100%);
+  color: #f25467;
+  box-shadow: 0 10px 18px rgba(242, 84, 103, 0.14);
+}
+
+.jobs-stat__icon--draft {
+  background: radial-gradient(circle at 30% 28%, #faf7ff 0%, #e5d8ff 40%, #d7c3ff 100%);
+  color: #8c5bf3;
+  box-shadow: 0 10px 18px rgba(140, 91, 243, 0.14);
+}
+
+.jobs-stat__icon--archived {
+  background: radial-gradient(circle at 30% 28%, #fafcff 0%, #dfe7f1 38%, #d1dae7 100%);
+  color: #5f697b;
+  box-shadow: 0 10px 18px rgba(95, 105, 123, 0.14);
+}
 
 .jobs-stat__content {
   display: flex;
@@ -1696,14 +2078,16 @@ onBeforeUnmount(() => {
 
 .jobs-stat__label {
   font-size: 12px;
-  color: #51414a;
-  font-weight: 600;
+  color: #614855;
+  font-weight: 700;
 }
 
 .jobs-stat__value {
   font-size: 20px;
   line-height: 1;
-  color: #17111b;
+  color: #21131d;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .jobs-dialog {
@@ -1823,10 +2207,10 @@ onBeforeUnmount(() => {
 
 .jobs-section__title {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
   letter-spacing: 0;
-  color: #111827;
+  color: #1f1720;
   flex: 0 0 auto;
   white-space: nowrap;
 }
@@ -1852,18 +2236,19 @@ onBeforeUnmount(() => {
   border: 1px solid #f0e3e9;
   border-radius: 999px;
   background: #ffffff;
-  color: #5f5360;
+  color: #6a5662;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
   flex: 0 0 auto;
+  box-shadow: 0 8px 20px rgba(255, 95, 150, 0.05);
 }
 
 .jobs-status-tabs__item.is-active {
-  border-color: #ea4f8d;
-  background: linear-gradient(135deg, #f24d91, #ea5f98);
+  border-color: #ff4f93;
+  background: linear-gradient(135deg, #ff74a9 0%, #ff4f93 58%, #f03a83 100%);
   color: #ffffff;
-  box-shadow: 0 8px 18px rgba(234, 79, 141, 0.18);
+  box-shadow: 0 12px 24px rgba(255, 79, 147, 0.24);
 }
 
 .jobs-controls {
@@ -1888,6 +2273,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  box-shadow: 0 10px 22px rgba(255, 95, 150, 0.07);
 }
 
 .jobs-search input {
@@ -1897,7 +2283,7 @@ onBeforeUnmount(() => {
   border: 0;
   outline: none;
   background: transparent;
-  color: #4b5563;
+  color: #57464f;
   font-size: 10.5px;
   line-height: 1;
   padding: 0;
@@ -1905,7 +2291,7 @@ onBeforeUnmount(() => {
 
 .jobs-search input::placeholder {
   font-size: 10.5px;
-  color: #9a8791;
+  color: #b08c9f;
 }
 
 .jobs-search__icon {
@@ -1979,8 +2365,8 @@ onBeforeUnmount(() => {
   height: 32px;
   padding: 0 22px 0 9px;
   border: 1px solid #f0d9e3;
-  background: #fff0f6;
-  color: #ee5a96;
+  background: #ffffff;
+  color: #ff4f93;
   border-radius: 10px;
   box-shadow: none;
 }
@@ -2005,7 +2391,7 @@ onBeforeUnmount(() => {
   min-width: 72px;
   height: 32px;
   padding: 3px;
-  background: #fff0f6;
+  background: #ffffff;
   border: 1px solid #f0d9e3;
   border-radius: 10px;
   display: flex;
@@ -2021,13 +2407,13 @@ onBeforeUnmount(() => {
   background: transparent;
   display: grid;
   place-items: center;
-  color: #ea4f8d;
+  color: #ff4f93;
   transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .jobs-controls__view-btn.is-active {
-  background: #f7bfd2;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  background: linear-gradient(135deg, #ff72a8 0%, #ff4f93 100%);
+  box-shadow: 0 10px 18px rgba(255, 79, 147, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.35);
   color: #fff;
 }
 
@@ -2041,8 +2427,8 @@ onBeforeUnmount(() => {
   height: 32px;
   padding: 0 11px;
   border: 1px solid #eeb1c7;
-  background: #ffdfe9;
-  color: #ea4f8d;
+  background: #ffffff;
+  color: #ff4f93;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -2056,7 +2442,7 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   border: 0;
   background: transparent;
-  color: #ea4f8d;
+  color: #ff4f93;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -2073,24 +2459,130 @@ onBeforeUnmount(() => {
   height: 32px;
   padding: 0 12px;
   border: 1px solid #ee78a6;
-  background: #fff8fb;
-  color: #ee5a96;
+  background: #ffffff;
+  color: #ff4f93;
   font-size: 11px;
   border-radius: 11px;
   line-height: 1;
   white-space: nowrap;
+  box-shadow: none;
+}
+
+.jobs-bulk {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid #f1dbe5;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(66, 39, 51, 0.04);
+}
+
+.jobs-bulk__summary,
+.jobs-bulk__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.jobs-bulk__count {
+  color: #3d2c34;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.jobs-bulk__link {
+  border: 0;
+  background: transparent;
+  color: #ea4f8d;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+}
+
+.jobs-bulk__select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8d6977;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.jobs-bulk__select {
+  width: 170px;
+  min-width: 170px;
+}
+
+.jobs-bulk__select :deep(.dropdown) {
+  width: 100%;
+  --control-height: 40px;
+  --control-padding-x: 12px;
+  --control-radius: 14px;
+  --font-body: 11px;
+}
+
+.jobs-bulk__select :deep(.dropdown__trigger) {
+  border-color: #ecd8e1;
+  color: #5f5360;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.jobs-bulk__select :deep(.dropdown__trigger:hover) {
+  border-color: #e4c7d5;
+}
+
+.jobs-bulk__select :deep(.dropdown__menu) {
+  border: 1px solid #ecd8e1;
+  border-radius: 14px;
+  box-shadow: 0 18px 32px rgba(83, 52, 67, 0.14);
+  padding: 8px;
+}
+
+.jobs-bulk__select :deep(.dropdown__option) {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.jobs-bulk__select :deep(.dropdown__option--selected) {
+  background: linear-gradient(135deg, #fff0f6, #ffe6ef);
+  color: #df4e87;
+}
+
+.jobs-bulk__delete {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid #f2b7ca;
+  border-radius: 12px;
+  background: #fff1f5;
+  color: #d94a82;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.jobs-bulk__error {
+  margin: 0;
+  color: #cf4f80;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .jobs-card {
-  background:
-    radial-gradient(circle at top left, rgba(255, 132, 184, 0.08), transparent 26%),
-    radial-gradient(circle at top right, rgba(120, 146, 255, 0.08), transparent 22%),
-    #fbfbfe;
+  background: #ffffff;
   border-radius: 20px;
   padding: 10px 10px 4px;
   box-shadow: 0 18px 34px rgba(56, 36, 47, 0.06);
   overflow-x: auto;
   overflow-y: visible;
+  border: 1px solid #f1e3ea;
 }
 
 .jobs-grid {
@@ -2118,6 +2610,12 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 2px;
+}
+
+.jobs-grid-card__top-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .jobs-grid-card__id {
@@ -2254,18 +2752,17 @@ onBeforeUnmount(() => {
 }
 
 .jobs-header {
-  background:
-    linear-gradient(180deg, #fdfcff 0%, #f6f7fb 100%);
+  background: #ffffff;
   border-radius: var(--surface-radius);
   padding: 14px 18px;
   font-weight: 500;
   margin-bottom: 6px;
   position: relative;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98);
 }
 
 .jobs-header__cell {
-  color: #6b7280;
+  color: #756471;
   font-size: 10px;
   display: flex;
   align-items: center;
@@ -2276,18 +2773,16 @@ onBeforeUnmount(() => {
 
 .jobs-row--body {
   padding: 14px 18px;
-  border-bottom: 1px solid #f3e8ee;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 251, 253, 0.98) 100%);
+  border-bottom: 1px solid #f3dde6;
+  background: #ffffff;
   transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
   font-size: 11px;
   position: relative;
 }
 
 .jobs-row--body:hover {
-  background:
-    linear-gradient(180deg, #fff8fb 0%, #fffdfd 100%);
-  box-shadow: inset 3px 0 0 #ef5b96;
+  background: #ffffff;
+  box-shadow: inset 4px 0 0 #ff4f93;
 }
 
 .jobs-row--body:last-child {
@@ -2351,17 +2846,35 @@ onBeforeUnmount(() => {
   width: 72px;
 }
 
-.jobs-radio {
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
+.jobs-check {
+  width: 16px;
+  height: 16px;
   border: 1px solid #efadc4;
-  display: inline-block;
+  border-radius: 5px;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
-.jobs-radio--filled {
-  background: #ea6f9b;
-  border-color: #ea6f9b;
+.jobs-check__mark {
+  width: 8px;
+  height: 5px;
+  border-left: 1.6px solid transparent;
+  border-bottom: 1.6px solid transparent;
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+.jobs-check--selected {
+  background: #ea4f8d;
+  border-color: #ea4f8d;
+  box-shadow: 0 8px 18px rgba(234, 79, 141, 0.18);
+}
+
+.jobs-check--selected .jobs-check__mark {
+  border-color: #ffffff;
 }
 
 .jobs-sort {
@@ -2524,47 +3037,73 @@ onBeforeUnmount(() => {
 }
 
 .jobs-tag {
-  background: #f3e3ea;
-  padding: 5px 10px;
+  background: #ffffff;
+  padding: 6px 11px;
   border-radius: 20px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: #654b59;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  border: 1px solid transparent;
+  letter-spacing: 0.01em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .jobs-tag--count {
-  background: #e9e1ff;
-  color: #6a43e6;
+  background: #f2e8ff;
+  color: #7e4eff;
+  border-color: #dfccff;
+  box-shadow: 0 8px 18px rgba(126, 78, 255, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.96);
 }
 
 .jobs-tag--empty {
-  background: #edf1f7;
+  background: #f2f5fb;
   color: #71809b;
+  border-color: #e0e7f2;
 }
 
 :deep(.department) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #eef1f5;
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+  letter-spacing: 0.01em;
+  box-shadow: 0 8px 18px rgba(76, 59, 69, 0.06);
 }
 
-:deep(.department--pink) { color: #eb2f84; }
-:deep(.department--blue) { color: #244fe5; }
-:deep(.department--indigo) { color: #5929df; }
-:deep(.department--gold) { color: #b87700; }
-:deep(.department--green) { color: #08915b; }
+:deep(.department)::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 12%, white);
+}
+
+:deep(.department--pink) { color: #ff4f93; }
+:deep(.department--blue) { color: #2f72ff; }
+:deep(.department--indigo) { color: #8a4dff; }
+:deep(.department--gold) { color: #d68800; }
+:deep(.department--green) { color: #16b763; }
 
 :deep(.recruiter) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #eef1f5;
+  background: #ffffff;
   border-radius: 20px;
   padding: 5px 10px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   white-space: nowrap;
+  border: 1px solid transparent;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
@@ -2582,25 +3121,26 @@ onBeforeUnmount(() => {
   padding: 0 14px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   white-space: nowrap;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  border: 1px solid transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
-:deep(.job-status--active) { color: #0d8a57; background: #c9f0dc; }
-:deep(.job-status--hold) { color: #ae6c00; background: #ffe3a8; }
-:deep(.job-status--closed) { color: #4d5c72; background: #dde6f2; }
-:deep(.job-status--draft) { color: #6338dc; background: #dfd3ff; }
-:deep(.job-status--expired) { color: #dd3954; background: #ffcfd8; }
-:deep(.job-status--archived) { color: #41536c; background: #dce3ee; }
-:deep(.job-status--pending) { color: #3530c9; background: #d6e0ff; }
+:deep(.job-status--active) { color: #009f55; background: #d7f7e4 !important; border-color: #b6eccb; box-shadow: 0 8px 18px rgba(0, 159, 85, 0.12); }
+:deep(.job-status--hold) { color: #d68800; background: #ffe8c2 !important; border-color: #ffd58a; box-shadow: 0 8px 18px rgba(214, 136, 0, 0.12); }
+:deep(.job-status--closed) { color: #587096; background: #dfe8f7 !important; border-color: #c6d3e7; box-shadow: 0 8px 18px rgba(88, 112, 150, 0.12); }
+:deep(.job-status--draft) { color: #6a2cff; background: #eadcff !important; border-color: #d9bfff; box-shadow: 0 8px 18px rgba(106, 44, 255, 0.12); }
+:deep(.job-status--expired) { color: #ef3f63; background: #ffdbe4 !important; border-color: #ffc0cd; box-shadow: 0 8px 18px rgba(239, 63, 99, 0.12); }
+:deep(.job-status--archived) { color: #4e6789; background: #dee7f3 !important; border-color: #c8d4e4; box-shadow: 0 8px 18px rgba(78, 103, 137, 0.12); }
+:deep(.job-status--pending) { color: #3258e6; background: #dbe8ff !important; border-color: #c2d8ff; box-shadow: 0 8px 18px rgba(50, 88, 230, 0.12); }
 
-:deep(.recruiter--pink) { color: #c92c73; background: #f6d7e5; }
-:deep(.recruiter--blue) { color: #274ee0; background: #dbe6ff; }
-:deep(.recruiter--purple) { color: #552fd6; background: #e4dafd; }
-:deep(.recruiter--gold) { color: #af7400; background: #ffe7ac; }
-:deep(.recruiter--green) { color: #148f4d; background: #d6f2df; }
-:deep(.recruiter--cyan) { color: #0088a8; background: #d7f0f5; }
+:deep(.recruiter--pink) { color: #ff2f86; background: #ffdceb; border-color: #ffc1d9; box-shadow: 0 8px 18px rgba(255, 47, 134, 0.1); }
+:deep(.recruiter--blue) { color: #175cff; background: #dbe8ff; border-color: #c2d8ff; box-shadow: 0 8px 18px rgba(23, 92, 255, 0.1); }
+:deep(.recruiter--purple) { color: #6a2cff; background: #eadcff; border-color: #d9bfff; box-shadow: 0 8px 18px rgba(106, 44, 255, 0.1); }
+:deep(.recruiter--gold) { color: #d98a00; background: #ffe8c2; border-color: #ffd58a; box-shadow: 0 8px 18px rgba(217, 138, 0, 0.1); }
+:deep(.recruiter--green) { color: #00a85a; background: #d7f7e4; border-color: #b5eccb; box-shadow: 0 8px 18px rgba(0, 168, 90, 0.1); }
+:deep(.recruiter--cyan) { color: #0098b8; background: #d8f5f2; border-color: #b7e9e3; box-shadow: 0 8px 18px rgba(0, 152, 184, 0.1); }
 
 :deep(.avatar) {
   width: 18px;
@@ -2927,6 +3467,26 @@ onBeforeUnmount(() => {
     border-radius: 18px;
   }
 
+  .jobs-bulk {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .jobs-bulk__summary,
+  .jobs-bulk__actions {
+    justify-content: space-between;
+  }
+
+  .jobs-bulk__select-wrap {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .jobs-bulk__select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .jobs-header {
     display: none;
   }
@@ -2954,7 +3514,9 @@ onBeforeUnmount(() => {
   }
 
   .jobs-col--select {
-    display: none;
+    display: flex;
+    grid-column: 1 / -1;
+    justify-content: flex-end;
   }
 
   .jobs-col--id,
@@ -3055,6 +3617,16 @@ onBeforeUnmount(() => {
 
   .jobs-controls {
     grid-template-columns: 1fr;
+  }
+
+  .jobs-bulk__summary,
+  .jobs-bulk__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .jobs-bulk__delete {
+    width: 100%;
   }
 
   .jobs-row--body {

@@ -105,7 +105,7 @@ const generateDescriptionWithAi = async () => {
       <div class="step-form__field">
         <label class="step-form__label">Department</label>
         <div class="step-form__dropdown" :class="{ 'step-form__dropdown--error': errors.department }">
-          <Dropdown v-model="selectedDepartmentValue" :options="departmentOptions" placeholder="select one of the list..." />
+          <Dropdown v-model="selectedDepartmentValue" :options="departmentOptions" placeholder="Select one of the list..." />
         </div>
         <p v-if="errors.department" class="step-form__error">{{ errors.department }}</p>
       </div>
